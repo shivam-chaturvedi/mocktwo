@@ -1,0 +1,33 @@
+- generic [ref=e491]:
+  - banner [ref=e492]:
+    - generic [ref=e493]:
+      - generic [ref=e494]: Marcus Sterling
+      - generic [ref=e495]: • Escalated Guest
+    - generic [ref=e496]: 0:12 / 1:00
+    - generic [ref=e498]:
+      - generic [ref=e499]: Live Dialogue
+      - button "Toggle Fullscreen" [ref=e502] [cursor=pointer]
+  - generic [ref=e508]:
+    - generic [ref=e510]:
+      - img "Marcus Sterling" [ref=e512]
+      - generic [ref=e513]:
+        - heading "Marcus Sterling" [level=2] [ref=e514]
+        - generic [ref=e515]: Guest Speaking
+    - generic [ref=e557]:
+      - generic [ref=e558]:
+        - generic [ref=e559]: Session Objectives
+        - button "Hide" [ref=e560] [cursor=pointer]
+      - generic [ref=e561]:
+        - generic [ref=e562]: De-escalate verbal frustration without taking remarks personally
+        - generic [ref=e568]: Offer immediate private hospitality lounge sanctuary and refreshments
+        - generic [ref=e574]: Propose an equivalent luxury alternative with proactive compensation
+    - generic [ref=e526]:
+      - generic [ref=e527]: EV
+      - generic [ref=e528]: You (Elena Vance)
+  - contentinfo [ref=e529]:
+    - generic [ref=e530]:
+      - button "Objectives" [active] [ref=e531] [cursor=pointer]
+      - button "Mute Microphone" [ref=e537] [cursor=pointer]
+      - button "Turn Camera Off" [ref=e541] [cursor=pointer]
+      - button "Audio Volume" [ref=e545] [cursor=pointer]
+      - button "End Session" [ref=e551] [cursor=pointer]

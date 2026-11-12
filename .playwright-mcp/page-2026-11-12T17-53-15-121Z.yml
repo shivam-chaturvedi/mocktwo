@@ -1,0 +1,79 @@
+- generic [ref=e3]:
+  - banner [ref=e43]:
+    - generic [ref=e44]:
+      - generic [ref=e45]: Live Guest Simulation Session
+      - generic [ref=e46]: "|"
+      - generic [ref=e47]: The Grand Palais, Geneva
+    - generic [ref=e52]:
+      - generic [ref=e53]: Local Simulation Sandbox
+      - generic [ref=e58]: 4 Day Practice Streak
+      - button "Notifications" [ref=e63] [cursor=pointer]
+  - generic [ref=e67]:
+    - complementary [ref=e68]:
+      - generic [ref=e69]:
+        - generic [ref=e70]:
+          - generic [ref=e76]:
+            - heading "Hotel Coach" [level=1] [ref=e77]
+            - paragraph [ref=e78]: Desktop Training Suite
+          - button "Collapse sidebar" [ref=e79] [cursor=pointer]
+        - navigation [ref=e82]:
+          - paragraph [ref=e83]: Training Modules
+          - list [ref=e84]:
+            - listitem [ref=e85]:
+              - button "Overview" [ref=e86] [cursor=pointer]
+            - listitem [ref=e94]:
+              - button "Practice" [ref=e95] [cursor=pointer]
+            - listitem [ref=e101]:
+              - button "My Performance" [ref=e102] [cursor=pointer]
+            - listitem [ref=e108]:
+              - button "Session History" [ref=e109] [cursor=pointer]
+      - generic [ref=e116]:
+        - list [ref=e117]:
+          - listitem [ref=e118]:
+            - button "Preferences" [ref=e119] [cursor=pointer]
+          - listitem [ref=e124]:
+            - button "Sign Out" [ref=e125] [cursor=pointer]
+        - generic [ref=e130]:
+          - generic [ref=e131]: EV
+          - generic [ref=e132]:
+            - paragraph [ref=e133]: Elena Vance
+            - paragraph [ref=e134]: Front Office Concierge
+    - main [ref=e135]:
+      - generic [ref=e644]:
+        - generic [ref=e645]:
+          - generic [ref=e648]:
+            - generic [ref=e649]: "Escalated Guest: Marcus Sterling"
+            - generic [ref=e650]: Suite 1408 • Escalation Management
+          - generic [ref=e651]:
+            - generic [ref=e652]: 0:35 / 1:00
+            - generic [ref=e653]: Simulated Practice
+          - generic [ref=e654]:
+            - generic [ref=e655]: HD Simulation Stream (60 fps)
+            - button "Coaching Hints" [ref=e660] [cursor=pointer]
+        - generic [ref=e667]:
+          - generic [ref=e668]:
+            - img "Marcus Sterling" [ref=e670]
+            - generic [ref=e671]:
+              - heading "Marcus Sterling" [level=2] [ref=e672]
+              - generic [ref=e673]: Guest is listening to you...
+          - generic [ref=e686]:
+            - generic [ref=e687]: EV
+            - generic [ref=e688]: You (Elena Vance)
+            - generic [ref=e689]: Active
+          - generic [ref=e694]:
+            - generic [ref=e695]: Hospitality Real-time Prompts
+            - list [ref=e699]:
+              - listitem [ref=e700]:
+                - strong [ref=e701]: "Empathy:"
+                - text: Acknowledge the long flight before explaining room options.
+              - listitem [ref=e702]:
+                - strong [ref=e703]: "Private Salon:"
+                - text: Invite guest to Executive Lounge for complimentary refreshment.
+              - listitem [ref=e704]:
+                - strong [ref=e705]: "Resolution:"
+                - text: Offer priority room inspection and breakfast voucher.
+        - generic [ref=e706]:
+          - button "Mute Microphone" [ref=e707] [cursor=pointer]
+          - button "Disable Camera" [ref=e711] [cursor=pointer]
+          - button "Audio Output Level" [ref=e715] [cursor=pointer]
+          - button "Complete Practice Session" [ref=e720] [cursor=pointer]

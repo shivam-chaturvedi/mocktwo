@@ -1,0 +1,126 @@
+- generic [ref=f1e3]:
+  - banner [ref=f1e581]:
+    - generic [ref=f1e587]:
+      - generic [ref=f1e588]: Hotel Coach
+      - generic [ref=f1e589]: The Grand Palais, Geneva
+    - navigation [ref=f1e590]:
+      - button "Today" [ref=f1e591] [cursor=pointer]
+      - button "Scenarios" [ref=f1e592] [cursor=pointer]
+      - button "Recordings" [ref=f1e593] [cursor=pointer]
+      - button "Progress" [ref=f1e594] [cursor=pointer]
+    - generic [ref=f1e595]:
+      - button "New creation menu" [ref=f1e597] [cursor=pointer]:
+        - generic [ref=f1e599]: New
+      - button "Quick Practice" [ref=f1e602] [cursor=pointer]
+      - button "Search scenarios" [ref=f1e606] [cursor=pointer]:
+        - generic [ref=f1e610]: ⌘K
+      - button "Account menu" [ref=f1e611] [cursor=pointer]: EV
+  - main [ref=f1e612]:
+    - generic [ref=f1e637]:
+      - generic [ref=f1e638]:
+        - generic [ref=f1e639]:
+          - button "All Recordings" [ref=f1e640] [cursor=pointer]
+          - generic "Click to rename" [ref=f1e645] [cursor=pointer]:
+            - generic [ref=f1e646]: Diplomatic Arrival Protocol
+            - generic [ref=f1e647]: ✎
+          - generic [ref=f1e648]: • Countess Sophie Von Berg
+        - generic [ref=f1e649]:
+          - button "Practice Again" [ref=f1e650] [cursor=pointer]
+          - button "Done" [ref=f1e651] [cursor=pointer]
+      - generic [ref=f1e652]:
+        - generic [ref=f1e653]:
+          - generic [ref=f1e654]:
+            - generic [ref=f1e655]:
+              - generic [ref=f1e656]:
+                - img "Countess Sophie Von Berg" [ref=f1e658]
+                - generic [ref=f1e659]:
+                  - generic [ref=f1e660]: Countess Sophie Von Berg
+                  - generic [ref=f1e661]: Recorded Dialogue Session
+              - generic [ref=f1e662]: 0:00 / 0:53
+            - generic [ref=f1e663]:
+              - slider [ref=f1e664] [cursor=pointer]: "0"
+              - generic [ref=f1e665]:
+                - generic [ref=f1e666]:
+                  - button [ref=f1e667] [cursor=pointer]
+                  - button "Rewind 5s (←)" [ref=f1e670] [cursor=pointer]
+                  - button "Forward 5s (→)" [ref=f1e674] [cursor=pointer]
+                  - generic [ref=f1e678]: 0:00 / 0:53
+                - generic [ref=f1e679]:
+                  - generic [ref=f1e680]:
+                    - button "0.5x" [ref=f1e681] [cursor=pointer]
+                    - button "1x" [ref=f1e682] [cursor=pointer]
+                    - button "1.25x" [ref=f1e683] [cursor=pointer]
+                    - button "1.5x" [ref=f1e684] [cursor=pointer]
+                    - button "2x" [ref=f1e685] [cursor=pointer]
+                  - button [ref=f1e686] [cursor=pointer]
+          - generic [ref=f1e691]:
+            - generic [ref=f1e692]:
+              - generic [ref=f1e693]: Timestamped Transcript
+              - button "Copy transcript" [ref=f1e697] [cursor=pointer]
+            - generic [ref=f1e702]:
+              - generic [ref=f1e703] [cursor=pointer]:
+                - generic [ref=f1e704]:
+                  - generic [ref=f1e705]: Countess Sophie Von Berg
+                  - generic [ref=f1e706]: 0:03
+                - generic [ref=f1e707]: Countess Sophie is arriving for the annual Geneva diplomatic summit. She requires quiet, expedited private lounge check-in with zero public lobby exposure.
+              - generic [ref=f1e708] [cursor=pointer]:
+                - generic [ref=f1e709]:
+                  - generic [ref=f1e710]: You (Elena Vance)
+                  - generic [ref=f1e711]: 0:12
+                - generic [ref=f1e712]: Welcome back to Geneva, Countess. Your private salon is fully prepared.
+              - generic [ref=f1e713] [cursor=pointer]:
+                - generic [ref=f1e714]:
+                  - generic [ref=f1e715]: Countess Sophie Von Berg
+                  - generic [ref=f1e716]: 0:24
+                - generic [ref=f1e717]: Thank you, that is exactly what I was hoping to hear.
+            - generic [ref=f1e718]:
+              - textbox "Add a practice note at 0:00…" [ref=f1e719]
+              - button "Add Note" [disabled] [ref=f1e720]
+        - generic [ref=f1e721]:
+          - generic [ref=f1e723]:
+            - button "Coaching" [ref=f1e724] [cursor=pointer]
+            - button "Analytics" [ref=f1e725] [cursor=pointer]
+          - generic [ref=f1e728]:
+            - generic [ref=f1e729]:
+              - generic [ref=f1e730]: 84%
+              - generic [ref=f1e736]:
+                - generic [ref=f1e737]: "Overall Rating: 84%"
+                - generic [ref=f1e738]: Outstanding Luxury Distinction
+            - generic [ref=f1e739]:
+              - generic [ref=f1e740]: What Went Well
+              - generic [ref=f1e745]:
+                - generic [ref=f1e746]:
+                  - generic [ref=f1e747]:
+                    - generic [ref=f1e748]: Diplomatic Poise & Attentive Tone
+                    - button "0:12" [ref=f1e749] [cursor=pointer]
+                  - generic [ref=f1e750]: Maintained steady luxury posture throughout conversation without showing hesitation.
+                - generic [ref=f1e751]:
+                  - generic [ref=f1e752]:
+                    - generic [ref=f1e753]: Clear Proactive Resolution
+                    - button "0:20" [ref=f1e754] [cursor=pointer]
+                  - generic [ref=f1e755]: Formulated swift alternative accommodations aligned with five-star SOP.
+            - generic [ref=f1e756]:
+              - generic [ref=f1e757]: What Could Be Better
+              - generic [ref=f1e762]:
+                - generic [ref=f1e763]:
+                  - generic [ref=f1e764]: Elevate Courtesy Closing
+                  - button "0:24" [ref=f1e765] [cursor=pointer]
+                - generic [ref=f1e766]: Inquire about additional private dining or luggage preferences prior to concluding.
+            - generic [ref=f1e767]:
+              - generic [ref=f1e768]: Competency Breakdown
+              - generic [ref=f1e769]:
+                - generic [ref=f1e770]:
+                  - generic [ref=f1e771]: Empathy & Validation
+                  - generic [ref=f1e772]: 92%
+                - generic [ref=f1e773]:
+                  - generic [ref=f1e774]: Professional Poise & Etiquette
+                  - generic [ref=f1e775]: 94%
+                - generic [ref=f1e776]:
+                  - generic [ref=f1e777]: Active Listening
+                  - generic [ref=f1e778]: 88%
+                - generic [ref=f1e779]:
+                  - generic [ref=f1e780]: Decisive Problem Solving
+                  - generic [ref=f1e781]: 90%
+                - generic [ref=f1e782]:
+                  - generic [ref=f1e783]: Response Quality & Articulation
+                  - generic [ref=f1e784]: 91%

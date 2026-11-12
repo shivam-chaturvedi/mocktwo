@@ -1,0 +1,71 @@
+- generic [ref=e3]:
+  - banner [ref=e43]:
+    - generic [ref=e44]:
+      - generic [ref=e45]: Application Preferences
+      - generic [ref=e46]: "|"
+      - generic [ref=e47]: The Grand Palais, Geneva
+    - generic [ref=e52]:
+      - generic [ref=e53]: Local Simulation Sandbox
+      - generic [ref=e58]: 4 Day Practice Streak
+      - button "Notifications" [ref=e63] [cursor=pointer]
+  - generic [ref=e67]:
+    - complementary [ref=e68]:
+      - generic [ref=e69]:
+        - generic [ref=e70]:
+          - generic [ref=e76]:
+            - heading "Hotel Coach" [level=1] [ref=e77]
+            - paragraph [ref=e78]: Desktop Training Suite
+          - button "Collapse sidebar" [ref=e79] [cursor=pointer]
+        - navigation [ref=e82]:
+          - paragraph [ref=e83]: Training Modules
+          - list [ref=e84]:
+            - listitem [ref=e85]:
+              - button "Overview" [ref=e86] [cursor=pointer]
+            - listitem [ref=e94]:
+              - button "Practice" [ref=e95] [cursor=pointer]
+            - listitem [ref=e101]:
+              - button "My Performance" [ref=e102] [cursor=pointer]
+            - listitem [ref=e108]:
+              - button "Session History" [ref=e109] [cursor=pointer]
+      - generic [ref=e116]:
+        - list [ref=e117]:
+          - listitem [ref=e118]:
+            - button "Preferences" [active] [ref=e119] [cursor=pointer]
+          - listitem [ref=e124]:
+            - button "Sign Out" [ref=e125] [cursor=pointer]
+        - generic [ref=e130]:
+          - generic [ref=e131]: EV
+          - generic [ref=e132]:
+            - paragraph [ref=e133]: Elena Vance
+            - paragraph [ref=e134]: Front Office Concierge
+    - main [ref=e135]:
+      - generic [ref=e1070]:
+        - generic [ref=e1071]:
+          - heading "Application Preferences" [level=1] [ref=e1072]
+          - paragraph [ref=e1073]: Configure employee profile, audio/video simulation peripherals, and macOS desktop appearance.
+        - generic [ref=e1074]:
+          - button "Profile & Property" [ref=e1075] [cursor=pointer]
+          - button "Audio & Video Devices" [ref=e1080] [cursor=pointer]
+          - button "Appearance" [ref=e1085] [cursor=pointer]
+          - button "About Hotel Coach" [ref=e1089] [cursor=pointer]
+        - generic [ref=e1093]:
+          - heading "Employee Identification" [level=3] [ref=e1094]
+          - paragraph [ref=e1095]: Information associated with your training sessions, certificates, and supervisory reports.
+          - generic [ref=e1096]:
+            - generic [ref=e1097]:
+              - generic [ref=e1098]:
+                - generic [ref=e1099]: Full Name
+                - textbox [ref=e1100]: Elena Vance
+              - generic [ref=e1101]:
+                - generic [ref=e1102]: Staff Work Email
+                - textbox [disabled] [ref=e1103]: elena.vance@grandpalais.luxury
+            - generic [ref=e1104]:
+              - generic [ref=e1105]:
+                - generic [ref=e1106]: Hospitality Role
+                - textbox [ref=e1107]: Front Office Concierge
+              - generic [ref=e1108]:
+                - generic [ref=e1109]: Assigned Property
+                - textbox [ref=e1110]: The Grand Palais, Geneva
+            - generic [ref=e1111]:
+              - generic [ref=e1112]: "ID: GP-8402 • Synced locally"
+              - button "Save Changes" [ref=e1113] [cursor=pointer]

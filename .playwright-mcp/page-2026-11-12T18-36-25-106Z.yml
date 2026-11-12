@@ -1,0 +1,63 @@
+- generic [ref=e3]:
+  - banner [ref=e27]:
+    - generic [ref=e28]: Session Preparation
+    - generic [ref=e30]: The Grand Palais, Geneva
+  - generic [ref=e37]:
+    - complementary [ref=e38]:
+      - generic [ref=e39]:
+        - generic [ref=e40]:
+          - generic [ref=e41]: Hotel Coach
+          - button "Collapse sidebar" [ref=e46] [cursor=pointer]
+        - navigation [ref=e49]:
+          - list [ref=e50]:
+            - listitem [ref=e51]:
+              - button "Overview" [ref=e52] [cursor=pointer]
+            - listitem [ref=e60]:
+              - button "Practice" [ref=e61] [cursor=pointer]
+            - listitem [ref=e68]:
+              - button "My Performance" [ref=e69] [cursor=pointer]
+            - listitem [ref=e73]:
+              - button "Session History" [ref=e74] [cursor=pointer]
+      - generic [ref=e81]:
+        - list [ref=e82]:
+          - listitem [ref=e83]:
+            - button "Preferences" [ref=e84] [cursor=pointer]
+          - listitem [ref=e89]:
+            - button "Sign Out" [ref=e90] [cursor=pointer]
+        - generic [ref=e95]:
+          - generic [ref=e96]: EV
+          - generic [ref=e97]:
+            - paragraph [ref=e98]: Elena Vance
+            - paragraph [ref=e99]: Front Office Concierge
+    - main [ref=e100]:
+      - generic [ref=e493]:
+        - button "Back to scenarios" [ref=e495] [cursor=pointer]
+        - generic [ref=e499]:
+          - heading "Escalated Guest" [level=1] [ref=e500]
+          - paragraph [ref=e501]: "Guest: Marcus Sterling (Suite 1408) • Escalation Management"
+        - generic [ref=e502]:
+          - generic [ref=e503]:
+            - generic [ref=e504]:
+              - heading "Situation Context" [level=3] [ref=e505]
+              - paragraph [ref=e506]: Mr. Sterling is exhausted, visibly frustrated, and demanding immediate access or severe compensation while other guests are nearby in the lobby.
+            - generic [ref=e507]:
+              - heading "Key Objectives" [level=3] [ref=e508]
+              - list [ref=e509]:
+                - listitem [ref=e510]:
+                  - generic [ref=e511]: •
+                  - generic [ref=e512]: De-escalate verbal frustration without taking remarks personally
+                - listitem [ref=e513]:
+                  - generic [ref=e514]: •
+                  - generic [ref=e515]: Offer immediate private hospitality lounge sanctuary and refreshments
+                - listitem [ref=e516]:
+                  - generic [ref=e517]: •
+                  - generic [ref=e518]: Propose an equivalent luxury alternative with proactive compensation
+          - generic [ref=e520]:
+            - heading "Camera & Microphone Preview" [level=3] [ref=e521]
+            - generic [ref=e522]:
+              - generic [ref=e523]: EV
+              - generic [ref=e524]: Elena Vance
+            - generic [ref=e535]:
+              - button "Mute Mic" [ref=e536] [cursor=pointer]
+              - button "Turn Video Off" [ref=e541] [cursor=pointer]
+            - button "Start Simulation" [ref=e546] [cursor=pointer]

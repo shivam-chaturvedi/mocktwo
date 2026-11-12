@@ -1,0 +1,136 @@
+- generic [ref=e3]:
+  - banner [ref=e43]:
+    - generic [ref=e44]:
+      - generic [ref=e45]: Session History & Transcripts
+      - generic [ref=e46]: "|"
+      - generic [ref=e47]: The Grand Palais, Geneva
+    - generic [ref=e52]:
+      - generic [ref=e53]: Local Simulation Sandbox
+      - generic [ref=e58]: 4 Day Practice Streak
+      - button "Notifications" [ref=e63] [cursor=pointer]
+  - generic [ref=e67]:
+    - complementary [ref=e68]:
+      - generic [ref=e69]:
+        - generic [ref=e70]:
+          - generic [ref=e76]:
+            - heading "Hotel Coach" [level=1] [ref=e77]
+            - paragraph [ref=e78]: Desktop Training Suite
+          - button "Collapse sidebar" [ref=e79] [cursor=pointer]
+        - navigation [ref=e82]:
+          - paragraph [ref=e83]: Training Modules
+          - list [ref=e84]:
+            - listitem [ref=e85]:
+              - button "Overview" [ref=e86] [cursor=pointer]
+            - listitem [ref=e94]:
+              - button "Practice" [ref=e95] [cursor=pointer]
+            - listitem [ref=e101]:
+              - button "My Performance" [ref=e102] [cursor=pointer]
+            - listitem [ref=e108]:
+              - button "Session History" [active] [ref=e109] [cursor=pointer]
+      - generic [ref=e116]:
+        - list [ref=e117]:
+          - listitem [ref=e118]:
+            - button "Preferences" [ref=e119] [cursor=pointer]
+          - listitem [ref=e124]:
+            - button "Sign Out" [ref=e125] [cursor=pointer]
+        - generic [ref=e130]:
+          - generic [ref=e131]: EV
+          - generic [ref=e132]:
+            - paragraph [ref=e133]: Elena Vance
+            - paragraph [ref=e134]: Front Office Concierge
+    - main [ref=e135]:
+      - generic [ref=e906]:
+        - generic [ref=e907]:
+          - generic [ref=e908]:
+            - heading "Session History & Past Reports" [level=1] [ref=e909]
+            - paragraph [ref=e910]: Review previous practice sessions, competency scores, and longitudinal progress debriefs.
+          - button "Start New Practice" [ref=e911] [cursor=pointer]
+        - generic [ref=e912]:
+          - textbox "Search by scenario or guest name..." [ref=e917]
+          - generic [ref=e918]:
+            - button "All" [ref=e919] [cursor=pointer]
+            - button "Escalation Management" [ref=e920] [cursor=pointer]
+            - button "Concierge" [ref=e921] [cursor=pointer]
+            - button "Front Desk" [ref=e922] [cursor=pointer]
+            - button "Guest Services" [ref=e923] [cursor=pointer]
+        - generic [ref=e924]:
+          - generic [ref=e925] [cursor=pointer]:
+            - generic [ref=e931]:
+              - generic [ref=e932]:
+                - heading "Escalated Guest" [level=3] [ref=e933]
+                - generic [ref=e934]: Escalation Management
+              - generic [ref=e935]:
+                - generic [ref=e936]: "Guest: Marcus Sterling"
+                - generic [ref=e937]: •
+                - generic [ref=e938]: Just now
+                - generic [ref=e941]: •
+                - generic [ref=e942]: 1m 00s
+            - generic [ref=e946]:
+              - generic [ref=e947]:
+                - generic [ref=e948]: 93%
+                - generic [ref=e949]: Overall Rating
+              - generic [ref=e950]: View Report
+          - generic [ref=e954] [cursor=pointer]:
+            - generic [ref=e960]:
+              - generic [ref=e961]:
+                - heading "Escalated Guest" [level=3] [ref=e962]
+                - generic [ref=e963]: Escalation Management
+              - generic [ref=e964]:
+                - generic [ref=e965]: "Guest: Marcus Sterling"
+                - generic [ref=e966]: •
+                - generic [ref=e967]: Today, 14:20
+                - generic [ref=e970]: •
+                - generic [ref=e971]: 2m 48s
+            - generic [ref=e975]:
+              - generic [ref=e976]:
+                - generic [ref=e977]: 92%
+                - generic [ref=e978]: Overall Rating
+              - generic [ref=e979]: View Report
+          - generic [ref=e983] [cursor=pointer]:
+            - generic [ref=e989]:
+              - generic [ref=e990]:
+                - heading "Friendly Guest" [level=3] [ref=e991]
+                - generic [ref=e992]: Concierge
+              - generic [ref=e993]:
+                - generic [ref=e994]: "Guest: Claire & Thomas Laurent"
+                - generic [ref=e995]: •
+                - generic [ref=e996]: Yesterday, 16:45
+                - generic [ref=e999]: •
+                - generic [ref=e1000]: 3m 00s
+            - generic [ref=e1004]:
+              - generic [ref=e1005]:
+                - generic [ref=e1006]: 95%
+                - generic [ref=e1007]: Overall Rating
+              - generic [ref=e1008]: View Report
+          - generic [ref=e1012] [cursor=pointer]:
+            - generic [ref=e1018]:
+              - generic [ref=e1019]:
+                - heading "Demanding Guest" [level=3] [ref=e1020]
+                - generic [ref=e1021]: Front Desk
+              - generic [ref=e1022]:
+                - generic [ref=e1023]: "Guest: Julian Vance-Croft"
+                - generic [ref=e1024]: •
+                - generic [ref=e1025]: 10 Nov 2026, 11:15
+                - generic [ref=e1028]: •
+                - generic [ref=e1029]: 2m 34s
+            - generic [ref=e1033]:
+              - generic [ref=e1034]:
+                - generic [ref=e1035]: 86%
+                - generic [ref=e1036]: Overall Rating
+              - generic [ref=e1037]: View Report
+          - generic [ref=e1041] [cursor=pointer]:
+            - generic [ref=e1047]:
+              - generic [ref=e1048]:
+                - heading "Complaint Resolution" [level=3] [ref=e1049]
+                - generic [ref=e1050]: Guest Services
+              - generic [ref=e1051]:
+                - generic [ref=e1052]: "Guest: Amira Al-Mansoor"
+                - generic [ref=e1053]: •
+                - generic [ref=e1054]: 08 Nov 2026, 09:30
+                - generic [ref=e1057]: •
+                - generic [ref=e1058]: 2m 52s
+            - generic [ref=e1062]:
+              - generic [ref=e1063]:
+                - generic [ref=e1064]: 89%
+                - generic [ref=e1065]: Overall Rating
+              - generic [ref=e1066]: View Report

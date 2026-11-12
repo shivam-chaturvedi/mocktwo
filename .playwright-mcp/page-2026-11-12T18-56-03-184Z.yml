@@ -1,0 +1,123 @@
+- generic [ref=e3]:
+  - banner [ref=e27]:
+    - generic [ref=e28]: Performance Report
+    - generic [ref=e30]: The Grand Palais, Geneva
+  - generic [ref=e37]:
+    - complementary [ref=e38]:
+      - generic [ref=e39]:
+        - generic [ref=e40]:
+          - generic [ref=e41]: Hotel Coach
+          - button "Collapse sidebar" [ref=e47] [cursor=pointer]
+        - navigation [ref=e51]:
+          - generic [ref=e52]: Navigation
+          - list [ref=e53]:
+            - listitem [ref=e54]:
+              - button "Overview" [ref=e55] [cursor=pointer]
+            - listitem [ref=e63]:
+              - button "Practice Scenarios" [ref=e64] [cursor=pointer]
+            - listitem [ref=e71]:
+              - button "My Performance" [ref=e72] [cursor=pointer]
+            - listitem [ref=e76]:
+              - button "Session History" [ref=e77] [cursor=pointer]
+      - generic [ref=e84]:
+        - generic [ref=e85]: Account
+        - list [ref=e86]:
+          - listitem [ref=e87]:
+            - button "Preferences" [ref=e88] [cursor=pointer]
+          - listitem [ref=e93]:
+            - button "Sign Out" [ref=e94] [cursor=pointer]
+        - generic [ref=e99]:
+          - generic [ref=e100]: EV
+          - generic [ref=e101]:
+            - paragraph [ref=e102]: Elena Vance
+            - paragraph [ref=e103]: Front Office Concierge
+    - main [ref=e104]:
+      - generic [ref=e865]:
+        - generic [ref=e866]:
+          - generic [ref=e867]:
+            - generic [ref=e868]: "Just now • Duration: 0m 28s • Guest: Marcus Sterling"
+            - heading "Escalated Guest — Debrief" [level=1] [ref=e870]
+          - generic [ref=e871]:
+            - button "Practice Again" [ref=e872] [cursor=pointer]
+            - button "Done" [ref=e877] [cursor=pointer]
+        - generic [ref=e879]:
+          - generic [ref=e880]:
+            - generic [ref=e881]: 93%
+            - generic [ref=e882]: Overall Score
+          - generic [ref=e883]:
+            - heading "Communication Summary" [level=3] [ref=e884]
+            - paragraph [ref=e885]: Simulation successfully completed. The guest acknowledged the staff's professionalism and accepted the proposed resolution pathway.
+        - generic [ref=e886]:
+          - heading "Communication Competencies" [level=2] [ref=e887]
+          - generic [ref=e888]:
+            - generic [ref=e889]:
+              - generic [ref=e891]:
+                - generic [ref=e892]: Empathy & Validation
+                - generic [ref=e893]: 95%
+              - paragraph [ref=e896]: Promptly validated the guest's situation with authentic care and attentiveness.
+            - generic [ref=e897]:
+              - generic [ref=e899]:
+                - generic [ref=e900]: Professional Poise & Etiquette
+                - generic [ref=e901]: 96%
+              - paragraph [ref=e904]: Adhered strictly to five-star luxury service protocol and diplomatic demeanor.
+            - generic [ref=e905]:
+              - generic [ref=e907]:
+                - generic [ref=e908]: Active Listening
+                - generic [ref=e909]: 91%
+              - paragraph [ref=e912]: Listened thoroughly before outlining resolution pathways.
+            - generic [ref=e913]:
+              - generic [ref=e915]:
+                - generic [ref=e916]: Decisive Problem Solving
+                - generic [ref=e917]: 94%
+              - paragraph [ref=e920]: Presented balanced options that protected hotel standards while delighting the guest.
+            - generic [ref=e921]:
+              - generic [ref=e923]:
+                - generic [ref=e924]: Response Quality & Articulation
+                - generic [ref=e925]: 93%
+              - paragraph [ref=e928]: Articulated clearly with warm cadence and sophisticated polish.
+          - generic [ref=e929]:
+            - generic [ref=e930]:
+              - heading "Observed Strengths" [level=4] [ref=e931]
+              - list [ref=e932]:
+                - listitem [ref=e933]:
+                  - generic [ref=e936]: Exemplary adherence to luxury guest greeting and recognition standards
+                - listitem [ref=e937]:
+                  - generic [ref=e940]: Effective emotional containment during the opening 30 seconds
+                - listitem [ref=e941]:
+                  - generic [ref=e944]: Demonstrated proactive solutions matched to Diamond Ambassador tier expectations
+            - generic [ref=e945]:
+              - heading "Growth Opportunities" [level=4] [ref=e946]
+              - list [ref=e947]:
+                - listitem [ref=e948]:
+                  - generic [ref=e949]: •
+                  - generic [ref=e950]: Consider asking open-ended clarifying questions earlier in the dialogue
+                - listitem [ref=e951]:
+                  - generic [ref=e952]: •
+                  - generic [ref=e953]: Reinforce specific follow-up arrival or delivery timelines before closing
+        - generic [ref=e954]:
+          - heading "Hardware Sensor Diagnostics (Demonstration Data)" [level=2] [ref=e955]
+          - generic [ref=e956]:
+            - generic [ref=e957]: "Demonstration data only: These mock hardware metrics simulate sensor signal stability and pulse rate consistency. They are NOT direct evidence of nervousness, anxiety, fear, or emotional states."
+            - generic [ref=e961]:
+              - generic [ref=e962]:
+                - generic [ref=e963]: Signal Quality
+                - text: Optimal (99.1%)
+              - generic [ref=e964]:
+                - generic [ref=e965]: Pulse Reading (Simulated)
+                - generic [ref=e966]: 76 bpm
+              - generic [ref=e967]:
+                - generic [ref=e968]: Signal-to-Noise Ratio
+                - text: High SNR (30 dB)
+        - generic [ref=e969]:
+          - heading "Self-Reported Confidence & Reflection" [level=2] [ref=e970]
+          - generic [ref=e971]:
+            - generic [ref=e972]:
+              - generic [ref=e973]: How confident did you feel handling this guest's concerns?
+              - generic [ref=e974]:
+                - button "1. Needs Practice" [ref=e975] [cursor=pointer]
+                - button "2. Hesitant" [ref=e977] [cursor=pointer]
+                - button "3. Moderate" [ref=e979] [cursor=pointer]
+                - button "4. Confident" [ref=e981] [cursor=pointer]
+                - button "5. Very Confident" [ref=e983] [cursor=pointer]
+            - textbox "Add optional notes for your personal practice review..." [ref=e986]
+            - button "Save Reflection" [ref=e988] [cursor=pointer]

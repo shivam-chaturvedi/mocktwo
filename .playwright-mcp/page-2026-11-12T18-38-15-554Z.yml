@@ -1,0 +1,59 @@
+- generic [ref=e3]:
+  - banner [ref=e27]:
+    - generic [ref=e28]: Preferences
+    - generic [ref=e30]: The Grand Palais, Geneva
+  - generic [ref=e37]:
+    - complementary [ref=e38]:
+      - generic [ref=e39]:
+        - generic [ref=e40]:
+          - generic [ref=e41]: Hotel Coach
+          - button "Collapse sidebar" [ref=e46] [cursor=pointer]
+        - navigation [ref=e49]:
+          - list [ref=e50]:
+            - listitem [ref=e51]:
+              - button "Overview" [ref=e52] [cursor=pointer]
+            - listitem [ref=e60]:
+              - button "Practice" [ref=e61] [cursor=pointer]
+            - listitem [ref=e68]:
+              - button "My Performance" [ref=e69] [cursor=pointer]
+            - listitem [ref=e73]:
+              - button "Session History" [ref=e74] [cursor=pointer]
+      - generic [ref=e81]:
+        - list [ref=e82]:
+          - listitem [ref=e83]:
+            - button "Preferences" [active] [ref=e84] [cursor=pointer]
+          - listitem [ref=e89]:
+            - button "Sign Out" [ref=e90] [cursor=pointer]
+        - generic [ref=e95]:
+          - generic [ref=e96]: EV
+          - generic [ref=e97]:
+            - paragraph [ref=e98]: Elena Vance
+            - paragraph [ref=e99]: Front Office Concierge
+    - main [ref=e100]:
+      - generic [ref=e849]:
+        - generic [ref=e850]:
+          - heading "Preferences" [level=1] [ref=e851]
+          - paragraph [ref=e852]: Manage your account, devices, and workspace appearance.
+        - generic [ref=e853]:
+          - button "Profile" [ref=e854] [cursor=pointer]
+          - button "Audio & Video" [ref=e859] [cursor=pointer]
+          - button "Appearance" [ref=e864] [cursor=pointer]
+          - button "About" [ref=e868] [cursor=pointer]
+        - generic [ref=e873]:
+          - generic [ref=e874]:
+            - generic [ref=e875]:
+              - generic [ref=e876]: Full Name
+              - textbox [ref=e877]: Elena Vance
+            - generic [ref=e878]:
+              - generic [ref=e879]: Work Email
+              - textbox [disabled] [ref=e880]: elena.vance@grandpalais.luxury
+          - generic [ref=e881]:
+            - generic [ref=e882]:
+              - generic [ref=e883]: Role
+              - textbox [ref=e884]: Front Office Concierge
+            - generic [ref=e885]:
+              - generic [ref=e886]: Property Location
+              - textbox [ref=e887]: The Grand Palais, Geneva
+          - generic [ref=e888]:
+            - generic [ref=e889]: "Employee ID: GP-8402"
+            - button "Save Changes" [ref=e890] [cursor=pointer]

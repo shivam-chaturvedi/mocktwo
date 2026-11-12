@@ -1,0 +1,55 @@
+- generic [ref=e3]:
+  - banner [ref=e27]:
+    - generic [ref=e28]: Live Simulation
+    - generic [ref=e30]: The Grand Palais, Geneva
+  - generic [ref=e37]:
+    - complementary [ref=e38]:
+      - generic [ref=e39]:
+        - generic [ref=e40]:
+          - generic [ref=e41]: Hotel Coach
+          - button "Collapse sidebar" [ref=e47] [cursor=pointer]
+        - navigation [ref=e51]:
+          - generic [ref=e52]: Navigation
+          - list [ref=e53]:
+            - listitem [ref=e54]:
+              - button "Overview" [ref=e55] [cursor=pointer]
+            - listitem [ref=e63]:
+              - button "Practice Scenarios" [ref=e64] [cursor=pointer]
+            - listitem [ref=e71]:
+              - button "My Performance" [ref=e72] [cursor=pointer]
+            - listitem [ref=e76]:
+              - button "Session History" [ref=e77] [cursor=pointer]
+      - generic [ref=e84]:
+        - generic [ref=e85]: Account
+        - list [ref=e86]:
+          - listitem [ref=e87]:
+            - button "Preferences" [ref=e88] [cursor=pointer]
+          - listitem [ref=e93]:
+            - button "Sign Out" [ref=e94] [cursor=pointer]
+        - generic [ref=e99]:
+          - generic [ref=e100]: EV
+          - generic [ref=e101]:
+            - paragraph [ref=e102]: Elena Vance
+            - paragraph [ref=e103]: Front Office Concierge
+    - main [ref=e104]:
+      - generic [ref=e770]:
+        - generic [ref=e771]:
+          - generic [ref=e772]:
+            - generic [ref=e776]: Marcus Sterling
+            - generic [ref=e777]: • Escalated Guest
+          - generic [ref=e778]: 0:08 / 1:00
+          - generic [ref=e780]: Live Feed
+        - generic [ref=e783]:
+          - generic [ref=e784]:
+            - img "Marcus Sterling" [ref=e786]
+            - generic [ref=e787]:
+              - heading "Marcus Sterling" [level=2] [ref=e788]
+              - generic [ref=e789]: Listening
+          - generic [ref=e800]:
+            - generic [ref=e801]: EV
+            - generic [ref=e802]: You
+        - generic [ref=e804]:
+          - button "Mute Microphone" [ref=e805] [cursor=pointer]
+          - button "Turn Video Off" [ref=e809] [cursor=pointer]
+          - button "Audio Volume" [ref=e813] [cursor=pointer]
+          - button "End Session" [ref=e819] [cursor=pointer]

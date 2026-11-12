@@ -1,0 +1,89 @@
+- generic [ref=e3]:
+  - banner [ref=e27]:
+    - generic [ref=e28]: Session History
+    - generic [ref=e30]: The Grand Palais, Geneva
+  - generic [ref=e37]:
+    - complementary [ref=e38]:
+      - generic [ref=e39]:
+        - generic [ref=e40]:
+          - generic [ref=e41]: Hotel Coach
+          - button "Collapse sidebar" [ref=e46] [cursor=pointer]
+        - navigation [ref=e49]:
+          - list [ref=e50]:
+            - listitem [ref=e51]:
+              - button "Overview" [ref=e52] [cursor=pointer]
+            - listitem [ref=e60]:
+              - button "Practice" [ref=e61] [cursor=pointer]
+            - listitem [ref=e68]:
+              - button "My Performance" [ref=e69] [cursor=pointer]
+            - listitem [ref=e73]:
+              - button "Session History" [active] [ref=e74] [cursor=pointer]
+      - generic [ref=e81]:
+        - list [ref=e82]:
+          - listitem [ref=e83]:
+            - button "Preferences" [ref=e84] [cursor=pointer]
+          - listitem [ref=e89]:
+            - button "Sign Out" [ref=e90] [cursor=pointer]
+        - generic [ref=e95]:
+          - generic [ref=e96]: EV
+          - generic [ref=e97]:
+            - paragraph [ref=e98]: Elena Vance
+            - paragraph [ref=e99]: Front Office Concierge
+    - main [ref=e100]:
+      - generic [ref=e766]:
+        - generic [ref=e767]:
+          - generic [ref=e768]:
+            - heading "Session History" [level=1] [ref=e769]
+            - paragraph [ref=e770]: Review previous practice sessions and detailed debriefs.
+          - button "New Practice" [ref=e771] [cursor=pointer]
+        - generic [ref=e775]:
+          - textbox "Filter sessions..." [ref=e780]
+          - generic [ref=e781]:
+            - button "All" [ref=e782] [cursor=pointer]
+            - button "Escalation Management" [ref=e783] [cursor=pointer]
+            - button "Concierge" [ref=e784] [cursor=pointer]
+            - button "Front Desk" [ref=e785] [cursor=pointer]
+            - button "Guest Services" [ref=e786] [cursor=pointer]
+        - generic [ref=e788]:
+          - generic [ref=e789] [cursor=pointer]:
+            - generic [ref=e790]:
+              - generic [ref=e791]:
+                - generic [ref=e792]: Escalated Guest
+                - generic [ref=e793]: • Marcus Sterling
+              - generic [ref=e794]: "Just now • Duration: 0m 47s • Escalation Management"
+            - generic [ref=e795]: 96%
+          - generic [ref=e799] [cursor=pointer]:
+            - generic [ref=e800]:
+              - generic [ref=e801]:
+                - generic [ref=e802]: Escalated Guest
+                - generic [ref=e803]: • Marcus Sterling
+              - generic [ref=e804]: "Just now • Duration: 0m 15s • Escalation Management"
+            - generic [ref=e805]: 91%
+          - generic [ref=e809] [cursor=pointer]:
+            - generic [ref=e810]:
+              - generic [ref=e811]:
+                - generic [ref=e812]: Escalated Guest
+                - generic [ref=e813]: • Marcus Sterling
+              - generic [ref=e814]: "Today, 14:20 • Duration: 2m 48s • Escalation Management"
+            - generic [ref=e815]: 92%
+          - generic [ref=e819] [cursor=pointer]:
+            - generic [ref=e820]:
+              - generic [ref=e821]:
+                - generic [ref=e822]: Friendly Guest
+                - generic [ref=e823]: • Claire & Thomas Laurent
+              - generic [ref=e824]: "Yesterday, 16:45 • Duration: 3m 00s • Concierge"
+            - generic [ref=e825]: 95%
+          - generic [ref=e829] [cursor=pointer]:
+            - generic [ref=e830]:
+              - generic [ref=e831]:
+                - generic [ref=e832]: Demanding Guest
+                - generic [ref=e833]: • Julian Vance-Croft
+              - generic [ref=e834]: "10 Nov 2026, 11:15 • Duration: 2m 34s • Front Desk"
+            - generic [ref=e835]: 86%
+          - generic [ref=e839] [cursor=pointer]:
+            - generic [ref=e840]:
+              - generic [ref=e841]:
+                - generic [ref=e842]: Complaint Resolution
+                - generic [ref=e843]: • Amira Al-Mansoor
+              - generic [ref=e844]: "08 Nov 2026, 09:30 • Duration: 2m 52s • Guest Services"
+            - generic [ref=e845]: 89%

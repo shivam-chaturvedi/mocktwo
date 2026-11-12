@@ -1,0 +1,101 @@
+- generic [ref=e3]:
+  - banner [ref=e43]:
+    - generic [ref=e44]:
+      - generic [ref=e45]: Simulation Preparation & Audio/Video Check
+      - generic [ref=e46]: "|"
+      - generic [ref=e47]: The Grand Palais, Geneva
+    - generic [ref=e52]:
+      - generic [ref=e53]: Local Simulation Sandbox
+      - generic [ref=e58]: 4 Day Practice Streak
+      - button "Notifications" [ref=e63] [cursor=pointer]
+  - generic [ref=e67]:
+    - complementary [ref=e68]:
+      - generic [ref=e69]:
+        - generic [ref=e70]:
+          - generic [ref=e76]:
+            - heading "Hotel Coach" [level=1] [ref=e77]
+            - paragraph [ref=e78]: Desktop Training Suite
+          - button "Collapse sidebar" [ref=e79] [cursor=pointer]
+        - navigation [ref=e82]:
+          - paragraph [ref=e83]: Training Modules
+          - list [ref=e84]:
+            - listitem [ref=e85]:
+              - button "Overview" [ref=e86] [cursor=pointer]
+            - listitem [ref=e94]:
+              - button "Practice" [ref=e95] [cursor=pointer]
+            - listitem [ref=e101]:
+              - button "My Performance" [ref=e102] [cursor=pointer]
+            - listitem [ref=e108]:
+              - button "Session History" [ref=e109] [cursor=pointer]
+      - generic [ref=e116]:
+        - list [ref=e117]:
+          - listitem [ref=e118]:
+            - button "Preferences" [ref=e119] [cursor=pointer]
+          - listitem [ref=e124]:
+            - button "Sign Out" [ref=e125] [cursor=pointer]
+        - generic [ref=e130]:
+          - generic [ref=e131]: EV
+          - generic [ref=e132]:
+            - paragraph [ref=e133]: Elena Vance
+            - paragraph [ref=e134]: Front Office Concierge
+    - main [ref=e135]:
+      - generic [ref=e511]:
+        - button "Back to scenario list" [ref=e513] [cursor=pointer]
+        - generic [ref=e517]:
+          - generic [ref=e518]:
+            - generic [ref=e519]:
+              - generic [ref=e520]: Escalation Management
+              - generic [ref=e521]: Estimated ~3 min
+            - 'heading "Scenario Briefing: Escalated Guest" [level=1] [ref=e522]'
+            - paragraph [ref=e523]: Review guest context, check your audio-video devices, and establish simulation connection.
+          - button "Connect to Simulation" [ref=e524] [cursor=pointer]
+        - generic [ref=e528]:
+          - generic [ref=e530]:
+            - generic [ref=e531]:
+              - img "Marcus Sterling" [ref=e533]
+              - generic [ref=e534]:
+                - generic [ref=e535]:
+                  - heading "Marcus Sterling" [level=3] [ref=e536]
+                  - generic [ref=e537]: Diamond Ambassador
+                - paragraph [ref=e538]:
+                  - text: "Assigned: Suite 1408 • Current Mood:"
+                  - strong [ref=e539]: Agitated & Impatient
+            - generic [ref=e540]:
+              - generic [ref=e541]: Situation Context
+              - paragraph [ref=e542]: Mr. Sterling is exhausted, visibly frustrated, and demanding immediate access or severe compensation while other guests are nearby in the lobby.
+            - generic [ref=e543]:
+              - generic [ref=e544]: Key Evaluation Objectives
+              - list [ref=e548]:
+                - listitem [ref=e549]:
+                  - generic [ref=e553]: De-escalate verbal frustration without taking remarks personally
+                - listitem [ref=e554]:
+                  - generic [ref=e558]: Offer immediate private hospitality lounge sanctuary and refreshments
+                - listitem [ref=e559]:
+                  - generic [ref=e563]: Propose an equivalent luxury alternative with proactive compensation
+            - generic [ref=e564]:
+              - generic [ref=e565]: Suggested De-escalation / Luxury Phrasing
+              - generic [ref=e566]:
+                - generic [ref=e567]: "\"I completely understand your frustration after such an exhaustive journey, Mr. Sterling.\""
+                - generic [ref=e568]: "\"May I invite you into our Private Executive Salon while I resolve this personally for you?\""
+                - generic [ref=e569]: "\"Here is what I have authorized right now to ensure your comfort...\""
+          - generic [ref=e570]:
+            - generic [ref=e571]:
+              - heading "Hardware & Environment Check" [level=3] [ref=e572]
+              - generic [ref=e577]:
+                - generic [ref=e578]: EV
+                - generic [ref=e579]: Elena Vance (Preview Mirror)
+                - generic [ref=e580]: HD 1080p • Lighting Adequate
+              - generic [ref=e598]:
+                - button "Microphone Active" [ref=e599] [cursor=pointer]
+                - button "Camera Active" [ref=e604] [cursor=pointer]
+              - generic [ref=e609]:
+                - generic [ref=e610]: Microphone input gain calibrated
+                - generic [ref=e615]: Face framing and eye-contact angle verified
+                - generic [ref=e620]: Background ambient noise suppression active
+            - generic [ref=e626]:
+              - generic [ref=e627]: Simulation Engine Online
+              - paragraph [ref=e633]:
+                - text: Click below to initialize the live interactive session. You will be greeted directly by
+                - strong [ref=e634]: Marcus Sterling
+                - text: .
+              - button "Enter Live Simulation" [ref=e635] [cursor=pointer]

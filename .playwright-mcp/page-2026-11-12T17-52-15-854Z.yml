@@ -1,0 +1,190 @@
+- generic [ref=e3]:
+  - banner [ref=e43]:
+    - generic [ref=e44]:
+      - generic [ref=e45]: Guest Interaction Scenarios
+      - generic [ref=e46]: "|"
+      - generic [ref=e47]: The Grand Palais, Geneva
+    - generic [ref=e52]:
+      - generic [ref=e53]: Local Simulation Sandbox
+      - generic [ref=e58]: 4 Day Practice Streak
+      - button "Notifications" [ref=e63] [cursor=pointer]
+  - generic [ref=e67]:
+    - complementary [ref=e68]:
+      - generic [ref=e69]:
+        - generic [ref=e70]:
+          - generic [ref=e76]:
+            - heading "Hotel Coach" [level=1] [ref=e77]
+            - paragraph [ref=e78]: Desktop Training Suite
+          - button "Collapse sidebar" [ref=e79] [cursor=pointer]
+        - navigation [ref=e82]:
+          - paragraph [ref=e83]: Training Modules
+          - list [ref=e84]:
+            - listitem [ref=e85]:
+              - button "Overview" [ref=e86] [cursor=pointer]
+            - listitem [ref=e94]:
+              - button "Practice" [active] [ref=e95] [cursor=pointer]
+            - listitem [ref=e101]:
+              - button "My Performance" [ref=e102] [cursor=pointer]
+            - listitem [ref=e108]:
+              - button "Session History" [ref=e109] [cursor=pointer]
+      - generic [ref=e116]:
+        - list [ref=e117]:
+          - listitem [ref=e118]:
+            - button "Preferences" [ref=e119] [cursor=pointer]
+          - listitem [ref=e124]:
+            - button "Sign Out" [ref=e125] [cursor=pointer]
+        - generic [ref=e130]:
+          - generic [ref=e131]: EV
+          - generic [ref=e132]:
+            - paragraph [ref=e133]: Elena Vance
+            - paragraph [ref=e134]: Front Office Concierge
+    - main [ref=e135]:
+      - generic [ref=e302]:
+        - generic [ref=e303]:
+          - generic [ref=e304]:
+            - heading "Guest Interaction Scenarios" [level=1] [ref=e305]
+            - paragraph [ref=e306]: Realistic interactive simulations covering escalated conflicts, VIP protocol, and luxury guest recovery.
+          - generic [ref=e307]: Showing 5 of 5 scenarios
+        - generic [ref=e308]:
+          - button "All" [ref=e311] [cursor=pointer]
+          - button "Escalation Management" [ref=e312] [cursor=pointer]
+          - button "Concierge" [ref=e313] [cursor=pointer]
+          - button "Executive Lounge" [ref=e314] [cursor=pointer]
+          - button "Front Desk" [ref=e315] [cursor=pointer]
+          - button "Guest Services" [ref=e316] [cursor=pointer]
+        - generic [ref=e317]:
+          - generic [ref=e318] [cursor=pointer]:
+            - generic [ref=e319]:
+              - generic [ref=e320]:
+                - generic [ref=e325]:
+                  - heading "Escalated Guest" [level=3] [ref=e326]
+                  - text: Escalation Management
+                - generic [ref=e327]: Advanced
+              - generic [ref=e328]:
+                - img "Marcus Sterling" [ref=e330]
+                - generic [ref=e331]:
+                  - generic [ref=e332]:
+                    - generic [ref=e333]: Marcus Sterling
+                    - generic [ref=e334]: Diamond Ambassador
+                  - generic [ref=e335]: "Suite 1408 • Mood: Agitated & Impatient"
+              - paragraph [ref=e336]: A high-tier guest arrived after a 12-hour delayed flight only to find his reserved presidential suite undergoing unexpected HVAC repair.
+              - generic [ref=e337]:
+                - generic [ref=e338]: Target Objectives
+                - list [ref=e339]:
+                  - listitem [ref=e340]:
+                    - generic [ref=e341]: •
+                    - generic [ref=e342]: De-escalate verbal frustration without taking remarks personally
+                  - listitem [ref=e343]:
+                    - generic [ref=e344]: •
+                    - generic [ref=e345]: Offer immediate private hospitality lounge sanctuary and refreshments
+            - generic [ref=e346]:
+              - generic [ref=e347]: ~3 min
+              - button "Begin Practice" [ref=e352]
+          - generic [ref=e356] [cursor=pointer]:
+            - generic [ref=e357]:
+              - generic [ref=e358]:
+                - generic [ref=e363]:
+                  - heading "Friendly Guest" [level=3] [ref=e364]
+                  - text: Concierge
+                - generic [ref=e365]: Foundational
+              - generic [ref=e366]:
+                - img "Claire & Thomas Laurent" [ref=e368]
+                - generic [ref=e369]:
+                  - generic [ref=e370]:
+                    - generic [ref=e371]: Claire & Thomas Laurent
+                    - generic [ref=e372]: Gold Elite
+                  - generic [ref=e373]: "Room 724 • Mood: Enthusiastic & Receptive"
+              - paragraph [ref=e374]: A joyful couple celebrating their 10th wedding anniversary requesting bespoke recommendations for an unforgettable evening.
+              - generic [ref=e375]:
+                - generic [ref=e376]: Target Objectives
+                - list [ref=e377]:
+                  - listitem [ref=e378]:
+                    - generic [ref=e379]: •
+                    - generic [ref=e380]: Demonstrate warmth, active inquiry, and authentic hospitality
+                  - listitem [ref=e381]:
+                    - generic [ref=e382]: •
+                    - generic [ref=e383]: Identify unspoken celebration preferences and tailor romantic suggestions
+            - generic [ref=e384]:
+              - generic [ref=e385]: ~3 min
+              - button "Begin Practice" [ref=e390]
+          - generic [ref=e394] [cursor=pointer]:
+            - generic [ref=e395]:
+              - generic [ref=e396]:
+                - generic [ref=e401]:
+                  - heading "Premium VIP Guest" [level=3] [ref=e402]
+                  - text: Executive Lounge
+                - generic [ref=e403]: Advanced
+              - generic [ref=e404]:
+                - img "Countess Sophie Von Berg" [ref=e406]
+                - generic [ref=e407]:
+                  - generic [ref=e408]:
+                    - generic [ref=e409]: Countess Sophie Von Berg
+                    - generic [ref=e410]: Diamond Ambassador
+                  - generic [ref=e411]: "Royal Penthouse B • Mood: Reserved & Particular"
+              - paragraph [ref=e412]: A discerning international patron with strict privacy protocols and bespoke dietary preferences checking in for a diplomatic gala.
+              - generic [ref=e413]:
+                - generic [ref=e414]: Target Objectives
+                - list [ref=e415]:
+                  - listitem [ref=e416]:
+                    - generic [ref=e417]: •
+                    - generic [ref=e418]: Uphold classical luxury service standards and refined cadence
+                  - listitem [ref=e419]:
+                    - generic [ref=e420]: •
+                    - generic [ref=e421]: Clarify dietary and security preferences with utmost tact
+            - generic [ref=e422]:
+              - generic [ref=e423]: ~4 min
+              - button "Begin Practice" [ref=e428]
+          - generic [ref=e432] [cursor=pointer]:
+            - generic [ref=e433]:
+              - generic [ref=e434]:
+                - generic [ref=e441]:
+                  - heading "Demanding Guest" [level=3] [ref=e442]
+                  - text: Front Desk
+                - generic [ref=e443]: Intermediate
+              - generic [ref=e444]:
+                - img "Julian Vance-Croft" [ref=e446]
+                - generic [ref=e447]:
+                  - generic [ref=e448]:
+                    - generic [ref=e449]: Julian Vance-Croft
+                    - generic [ref=e450]: Platinum Premier
+                  - generic [ref=e451]: "Deluxe King 512 • Mood: Firm & Assertive"
+              - paragraph [ref=e452]: A frequent corporate traveler insisting on a complimentary presidential upgrade on a night when standard suites are completely sold out.
+              - generic [ref=e453]:
+                - generic [ref=e454]: Target Objectives
+                - list [ref=e455]:
+                  - listitem [ref=e456]:
+                    - generic [ref=e457]: •
+                    - generic [ref=e458]: Set polite, firm boundaries without sounding dismissive or robotic
+                  - listitem [ref=e459]:
+                    - generic [ref=e460]: •
+                    - generic [ref=e461]: Acknowledge loyalty value while clearly conveying physical inventory constraints
+            - generic [ref=e462]:
+              - generic [ref=e463]: ~3 min
+              - button "Begin Practice" [ref=e468]
+          - generic [ref=e472] [cursor=pointer]:
+            - generic [ref=e473]:
+              - generic [ref=e474]:
+                - generic [ref=e480]:
+                  - heading "Complaint Resolution" [level=3] [ref=e481]
+                  - text: Guest Services
+                - generic [ref=e482]: Intermediate
+              - generic [ref=e483]:
+                - img "Amira Al-Mansoor" [ref=e485]
+                - generic [ref=e486]:
+                  - generic [ref=e487]:
+                    - generic [ref=e488]: Amira Al-Mansoor
+                    - generic [ref=e489]: Platinum Premier
+                  - generic [ref=e490]: "Junior Suite 904 • Mood: Disappointed & Stressed"
+              - paragraph [ref=e491]: A tired guest whose luggage transfer from the airport was delayed, causing her to miss an important pre-booked dining reservation.
+              - generic [ref=e492]:
+                - generic [ref=e493]: Target Objectives
+                - list [ref=e494]:
+                  - listitem [ref=e495]:
+                    - generic [ref=e496]: •
+                    - generic [ref=e497]: Offer sincere empathy without shifting blame to third-party couriers
+                  - listitem [ref=e498]:
+                    - generic [ref=e499]: •
+                    - generic [ref=e500]: Take personal ownership of bag tracking and status updates
+            - generic [ref=e501]:
+              - generic [ref=e502]: ~3 min
+              - button "Begin Practice" [ref=e507]

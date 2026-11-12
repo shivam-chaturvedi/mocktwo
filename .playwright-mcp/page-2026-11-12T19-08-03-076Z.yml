@@ -1,0 +1,184 @@
+- generic [ref=e3]:
+  - banner [ref=e32]:
+    - generic [ref=e38]:
+      - generic [ref=e39]: Hotel Coach
+      - generic [ref=e40]: The Grand Palais, Geneva
+    - navigation [ref=e41]:
+      - button "Today" [ref=e42] [cursor=pointer]
+      - button "Scenarios" [ref=e43] [cursor=pointer]
+      - button "Progress" [ref=e44] [cursor=pointer]
+    - generic [ref=e45]:
+      - button "Search scenarios" [ref=e46] [cursor=pointer]:
+        - generic [ref=e50]: ⌘K
+      - button "Account menu" [ref=e51] [cursor=pointer]: EV
+  - main [ref=e52]:
+    - generic [ref=e196]:
+      - generic [ref=e197]:
+        - heading "Good morning, Elena" [level=1] [ref=e198]
+        - paragraph [ref=e199]: Your next recommended coaching session is ready.
+      - generic [ref=e202]:
+        - generic [ref=e203]:
+          - generic [ref=e204]:
+            - generic [ref=e208]: Recommended Focus
+            - generic [ref=e209]: ~3 min
+          - heading "Escalated Guest" [level=2] [ref=e210]
+          - generic [ref=e211]: Marcus Sterling • Suite Suite 1408 (Diamond Ambassador)
+          - paragraph [ref=e212]: A high-tier guest arrived after a 12-hour delayed flight only to find his reserved presidential suite undergoing unexpected HVAC repair.
+        - generic [ref=e213]:
+          - button "Begin Session" [ref=e214] [cursor=pointer]
+          - generic [ref=e218]: Press Return to start
+      - generic [ref=e219]:
+        - generic [ref=e220]:
+          - generic [ref=e221]: 91%
+          - generic [ref=e227]:
+            - generic [ref=e228]: Overall Communication Rating
+            - generic [ref=e229]: Based on 18 evaluated dialogue sessions
+        - generic [ref=e230]:
+          - generic [ref=e236]:
+            - generic [ref=e237]: "18"
+            - text: Sessions
+          - generic [ref=e242]:
+            - generic [ref=e243]: 4 days
+            - text: Streak
+          - generic [ref=e249]:
+            - generic [ref=e250]: Poise
+            - text: Top Skill
+          - button "View Progress" [ref=e251] [cursor=pointer]
+      - generic [ref=e255]:
+        - generic [ref=e256]:
+          - generic [ref=e257]:
+            - heading "Continue Practicing" [level=3] [ref=e258]
+            - text: Recent interactions ready for targeted re-assessment
+          - button "Browse Library" [ref=e259] [cursor=pointer]
+        - generic [ref=e263]:
+          - generic [ref=e264] [cursor=pointer]:
+            - generic [ref=e265]:
+              - generic [ref=e266]: "Last: 92%"
+              - heading "Escalated Guest" [level=4] [ref=e271]
+              - generic [ref=e272]: Marcus Sterling
+              - paragraph [ref=e273]: A high-tier guest arrived after a 12-hour delayed flight only to find his reserved presidential suite undergoing unexpected HVAC repair.
+            - generic [ref=e274]:
+              - generic [ref=e275]: "Mood: Agitated & Impatient"
+              - generic [ref=e276]: ~3m
+          - generic [ref=e279] [cursor=pointer]:
+            - generic [ref=e280]:
+              - generic [ref=e281]: "Last: 95%"
+              - heading "Friendly Guest" [level=4] [ref=e287]
+              - generic [ref=e288]: Claire & Thomas Laurent
+              - paragraph [ref=e289]: A joyful couple celebrating their 10th wedding anniversary requesting bespoke recommendations for an unforgettable evening.
+            - generic [ref=e290]:
+              - generic [ref=e291]: "Mood: Enthusiastic & Receptive"
+              - generic [ref=e292]: ~3m
+          - generic [ref=e295] [cursor=pointer]:
+            - generic [ref=e296]:
+              - generic [ref=e297]: "Last: 92%"
+              - heading "Premium VIP Guest" [level=4] [ref=e302]
+              - generic [ref=e303]: Countess Sophie Von Berg
+              - paragraph [ref=e304]: A discerning international patron with strict privacy protocols and bespoke dietary preferences checking in for a diplomatic gala.
+            - generic [ref=e305]:
+              - generic [ref=e306]: "Mood: Reserved & Particular"
+              - generic [ref=e307]: ~4m
+          - generic [ref=e310] [cursor=pointer]:
+            - generic [ref=e311]:
+              - generic [ref=e312]: "Last: 86%"
+              - heading "Demanding Guest" [level=4] [ref=e318]
+              - generic [ref=e319]: Julian Vance-Croft
+              - paragraph [ref=e320]: A frequent corporate traveler insisting on a complimentary presidential upgrade on a night when standard suites are completely sold out.
+            - generic [ref=e321]:
+              - generic [ref=e322]: "Mood: Firm & Assertive"
+              - generic [ref=e323]: ~3m
+      - generic [ref=e326]:
+        - generic [ref=e327]:
+          - generic [ref=e328]:
+            - heading "VIP & Concierge Protocols" [level=3] [ref=e329]
+            - text: High-touch discretion and elevated service standards
+          - button "See all 5" [ref=e330] [cursor=pointer]
+        - generic [ref=e334]:
+          - generic [ref=e335] [cursor=pointer]:
+            - generic [ref=e336]:
+              - generic [ref=e337]: Foundational
+              - heading "Friendly Guest" [level=4] [ref=e343]
+              - generic [ref=e344]: Claire & Thomas Laurent (Gold Elite)
+              - paragraph [ref=e345]: A joyful couple celebrating their 10th wedding anniversary requesting bespoke recommendations for an unforgettable evening.
+            - generic [ref=e346]:
+              - generic [ref=e347]: Room Room 724
+              - generic [ref=e348]: ~3m
+          - generic [ref=e351] [cursor=pointer]:
+            - generic [ref=e352]:
+              - generic [ref=e353]: Advanced
+              - heading "Premium VIP Guest" [level=4] [ref=e358]
+              - generic [ref=e359]: Countess Sophie Von Berg (Diamond Ambassador)
+              - paragraph [ref=e360]: A discerning international patron with strict privacy protocols and bespoke dietary preferences checking in for a diplomatic gala.
+            - generic [ref=e361]:
+              - generic [ref=e362]: Room Royal Penthouse B
+              - generic [ref=e363]: ~4m
+          - generic [ref=e366] [cursor=pointer]:
+            - generic [ref=e367]:
+              - generic [ref=e368]: Intermediate
+              - heading "Demanding Guest" [level=4] [ref=e374]
+              - generic [ref=e375]: Julian Vance-Croft (Platinum Premier)
+              - paragraph [ref=e376]: A frequent corporate traveler insisting on a complimentary presidential upgrade on a night when standard suites are completely sold out.
+            - generic [ref=e377]:
+              - generic [ref=e378]: Room Deluxe King 512
+              - generic [ref=e379]: ~3m
+          - generic [ref=e382] [cursor=pointer]:
+            - generic [ref=e383]:
+              - generic [ref=e384]: Intermediate
+              - heading "Complaint Resolution" [level=4] [ref=e389]
+              - generic [ref=e390]: Amira Al-Mansoor (Platinum Premier)
+              - paragraph [ref=e391]: A tired guest whose luggage transfer from the airport was delayed, causing her to miss an important pre-booked dining reservation.
+            - generic [ref=e392]:
+              - generic [ref=e393]: Room Junior Suite 904
+              - generic [ref=e394]: ~3m
+  - dialog [ref=e398]:
+    - generic [ref=e488]:
+      - generic [ref=e489]: "3"
+      - generic [ref=e490]: Connecting live feed with Marcus Sterling…
+    - generic [ref=e399]:
+      - generic [ref=e400]:
+        - generic [ref=e404]: Session Briefing
+        - generic [ref=e405]: Escalation Management
+      - button "Close" [ref=e406] [cursor=pointer]
+    - generic [ref=e410]:
+      - generic [ref=e411]:
+        - generic [ref=e412]:
+          - img "Marcus Sterling" [ref=e414]
+          - generic [ref=e415]:
+            - heading "Marcus Sterling" [level=3] [ref=e416]
+            - generic [ref=e417]: Room Suite 1408 • Diamond Ambassador
+            - generic [ref=e418]: "Mood: Agitated & Impatient"
+        - generic [ref=e419]:
+          - heading "Situation Context" [level=4] [ref=e420]
+          - paragraph [ref=e421]: Mr. Sterling is exhausted, visibly frustrated, and demanding immediate access or severe compensation while other guests are nearby in the lobby.
+        - generic [ref=e422]:
+          - heading "Key Objectives" [level=4] [ref=e423]
+          - generic [ref=e424]:
+            - generic [ref=e425]: De-escalate verbal frustration without taking remarks personally
+            - generic [ref=e432]: Offer immediate private hospitality lounge sanctuary and refreshments
+            - generic [ref=e439]: Propose an equivalent luxury alternative with proactive compensation
+      - generic [ref=e447]:
+        - heading "Hardware & Camera Check" [level=4] [ref=e448]
+        - generic [ref=e449]:
+          - generic [ref=e450]: EV
+          - generic [ref=e451]: Mirror Preview
+        - generic [ref=e462]:
+          - generic [ref=e463]:
+            - generic [ref=e464]: Camera Source
+            - combobox [ref=e465]:
+              - option "FaceTime HD Camera (Built-in)" [selected]
+              - option "Studio Display Camera"
+              - option "External Webcam"
+          - generic [ref=e466]:
+            - generic [ref=e467]: Microphone Input
+            - combobox [ref=e468]:
+              - option "MacBook Studio Microphone (Built-in)" [selected]
+              - option "AirPods Pro"
+              - option "External USB Microphone"
+        - generic [ref=e469]:
+          - button "Mute Mic" [ref=e470] [cursor=pointer]
+          - button "Video Off" [ref=e475] [cursor=pointer]
+    - generic [ref=e480]:
+      - generic [ref=e481]: "Session length: ~3 minutes"
+      - generic [ref=e482]:
+        - button "Cancel" [ref=e483] [cursor=pointer]
+        - button "Start Session" [active] [ref=e484] [cursor=pointer]

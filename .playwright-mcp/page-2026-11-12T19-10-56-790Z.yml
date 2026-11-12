@@ -1,0 +1,73 @@
+- generic [ref=f1e3]:
+  - banner [ref=f1e32]:
+    - generic [ref=f1e38]:
+      - generic [ref=f1e39]: Hotel Coach
+      - generic [ref=f1e40]: The Grand Palais, Geneva
+    - navigation [ref=f1e41]:
+      - button "Today" [ref=f1e42] [cursor=pointer]
+      - button "Scenarios" [ref=f1e43] [cursor=pointer]
+      - button "Progress" [ref=f1e44] [cursor=pointer]
+    - generic [ref=f1e45]:
+      - button "Search scenarios" [ref=f1e46] [cursor=pointer]:
+        - generic [ref=f1e50]: ⌘K
+      - button "Account menu" [ref=f1e51] [cursor=pointer]: EV
+  - main [ref=f1e52]:
+    - generic [ref=f1e446]:
+      - generic [ref=f1e447]:
+        - generic [ref=f1e448]:
+          - generic [ref=f1e449]: "Today, 14:20 • Duration: 2m 48s • Guest: Marcus Sterling"
+          - heading "Escalated Guest — Debrief" [level=1] [ref=f1e450]
+        - generic [ref=f1e451]:
+          - button "Practice Again" [ref=f1e452] [cursor=pointer]
+          - button "Done" [ref=f1e457] [cursor=pointer]
+      - generic [ref=f1e458]:
+        - generic [ref=f1e459]:
+          - generic [ref=f1e460]: 92%
+          - generic [ref=f1e466]: Strong Luxury Protocol
+        - generic [ref=f1e467]:
+          - heading "Executive Coaching Debrief" [level=3] [ref=f1e472]
+          - paragraph [ref=f1e473]: Guest transition from hostile agitation to collaborative appreciation. Accepted the executive lounge sanctuary and temporary suite upgrade with positive acknowledgment of staff poise.
+      - generic [ref=f1e474]:
+        - button "Competency Analysis" [ref=f1e475] [cursor=pointer]
+        - button "Dialogue Transcript" [ref=f1e476] [cursor=pointer]
+      - generic [ref=f1e589]:
+        - heading "Live Dialogue Transcript" [level=3] [ref=f1e593]
+        - generic [ref=f1e594]:
+          - generic [ref=f1e595]:
+            - generic [ref=f1e596]: Marcus Sterling
+            - paragraph [ref=f1e597]: "\"I've been traveling for 14 hours, my suite isn't ready because of an air-conditioning breakdown, and I have a board dinner in two hours. What exactly are you going to do about this?\""
+          - generic [ref=f1e598]:
+            - generic [ref=f1e599]: Elena Vance (You)
+            - paragraph [ref=f1e600]: "\"Mr. Sterling, welcome to the Grand Palais. I completely understand your frustration after such an arduous journey, especially with your dinner this evening. Let us take care of your luggage immediately, and allow me to escort you to our Executive Diplomatic Suite while our engineering team inspects your reserved quarters.\""
+          - generic [ref=f1e601]:
+            - generic [ref=f1e602]: Marcus Sterling
+            - paragraph [ref=f1e603]: "\"Thank you, Elena. That sounds like a proper solution. Please have the pressing service attend to my suit immediately.\""
+  - dialog [ref=f1e737]:
+    - generic [ref=f1e738]:
+      - button "Close" [ref=f1e739] [cursor=pointer]
+      - generic [ref=f1e743]: Preferences
+      - generic [ref=f1e744]:
+        - button "General" [ref=f1e745] [cursor=pointer]
+        - button "Audio & Video" [ref=f1e748] [cursor=pointer]
+        - button "Notifications" [ref=f1e753] [cursor=pointer]
+        - button "Account" [ref=f1e758] [cursor=pointer]
+    - generic [ref=f1e764]:
+      - generic [ref=f1e765]:
+        - heading "macOS Appearance" [level=4] [ref=f1e766]
+        - paragraph [ref=f1e767]: Select the visual theme for windows, toolbars, and cards.
+        - generic [ref=f1e768]:
+          - generic [ref=f1e769] [cursor=pointer]:
+            - generic [ref=f1e770]: Dark (Xcode)
+            - paragraph [ref=f1e774]: Warm graphite surface
+          - generic [ref=f1e775] [cursor=pointer]:
+            - generic [ref=f1e776]: Light
+            - paragraph [ref=f1e778]: Daylight macOS surface
+          - generic [ref=f1e779] [cursor=pointer]:
+            - generic [ref=f1e780]: System
+            - paragraph [ref=f1e782]: Matches macOS settings
+      - generic [ref=f1e784]:
+        - generic [ref=f1e785]:
+          - generic [ref=f1e786]: Haptic Audio Cues
+          - text: Subtle audio feedback when transitioning between dialogue turns.
+        - checkbox [checked] [ref=f1e787] [cursor=pointer]
+    - button "Done" [ref=f1e789] [cursor=pointer]

@@ -1,0 +1,18 @@
+- generic [ref=e3]:
+  - generic [ref=e4]: Hotel Coach • Secure Employee Portal
+  - main [ref=e6]:
+    - generic [ref=e7]:
+      - generic [ref=e12]:
+        - heading "Hotel Coach" [level=1] [ref=e13]
+        - paragraph [ref=e14]: Sign in to your training workspace
+      - generic [ref=e15]:
+        - generic [ref=e16]:
+          - generic [ref=e17]:
+            - generic [ref=e18]: Work Email
+            - textbox "Work Email" [active] [ref=e19]:
+              - /placeholder: name@property.luxury
+              - text: elena.vance@grandpalais.luxury
+          - button "Continue" [ref=e20] [cursor=pointer]
+        - generic [ref=e24]:
+          - generic [ref=e25]: "Demo Profile:"
+          - button "Elena Vance (Concierge)" [ref=e26] [cursor=pointer]

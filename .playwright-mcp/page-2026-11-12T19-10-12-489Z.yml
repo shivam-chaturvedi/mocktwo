@@ -1,0 +1,85 @@
+- generic [ref=f1e3]:
+  - banner [ref=f1e32]:
+    - generic [ref=f1e38]:
+      - generic [ref=f1e39]: Hotel Coach
+      - generic [ref=f1e40]: The Grand Palais, Geneva
+    - navigation [ref=f1e41]:
+      - button "Today" [ref=f1e42] [cursor=pointer]
+      - button "Scenarios" [ref=f1e43] [cursor=pointer]
+      - button "Progress" [ref=f1e44] [cursor=pointer]
+    - generic [ref=f1e45]:
+      - button "Search scenarios" [ref=f1e46] [cursor=pointer]:
+        - generic [ref=f1e50]: ⌘K
+      - button "Account menu" [ref=f1e51] [cursor=pointer]: EV
+  - main [ref=f1e52]:
+    - generic [ref=f1e446]:
+      - generic [ref=f1e447]:
+        - generic [ref=f1e448]:
+          - generic [ref=f1e449]: "Today, 14:20 • Duration: 2m 48s • Guest: Marcus Sterling"
+          - heading "Escalated Guest — Debrief" [level=1] [ref=f1e450]
+        - generic [ref=f1e451]:
+          - button "Practice Again" [ref=f1e452] [cursor=pointer]
+          - button "Done" [ref=f1e457] [cursor=pointer]
+      - generic [ref=f1e458]:
+        - generic [ref=f1e459]:
+          - generic [ref=f1e460]: 88%
+          - generic [ref=f1e466]: Strong Luxury Protocol
+        - generic [ref=f1e467]:
+          - heading "Executive Coaching Debrief" [level=3] [ref=f1e472]
+          - paragraph [ref=f1e473]: Guest transition from hostile agitation to collaborative appreciation. Accepted the executive lounge sanctuary and temporary suite upgrade with positive acknowledgment of staff poise.
+      - generic [ref=f1e474]:
+        - button "Competency Analysis" [ref=f1e475] [cursor=pointer]
+        - button "Dialogue Transcript" [ref=f1e476] [cursor=pointer]
+      - generic [ref=f1e477]:
+        - generic [ref=f1e478]:
+          - heading "Core Communication Competencies" [level=3] [ref=f1e479]
+          - generic [ref=f1e480]:
+            - generic [ref=f1e482]:
+              - generic [ref=f1e483]:
+                - generic [ref=f1e484]: Empathy & Validation
+                - generic [ref=f1e485]: 90%
+              - paragraph [ref=f1e491]: Acknowledged the guest's exhaustion and frustration immediately without defensive posturing.
+            - generic [ref=f1e493]:
+              - generic [ref=f1e494]:
+                - generic [ref=f1e495]: Professional Poise & Etiquette
+                - generic [ref=f1e496]: 92%
+              - paragraph [ref=f1e502]: Maintained classical luxury hospitality standards despite intense verbal pressure.
+            - generic [ref=f1e504]:
+              - generic [ref=f1e505]:
+                - generic [ref=f1e506]: Active Listening
+                - generic [ref=f1e507]: 85%
+              - paragraph [ref=f1e513]: Allowed the guest to complete his full grievance without premature interruption.
+            - generic [ref=f1e515]:
+              - generic [ref=f1e516]:
+                - generic [ref=f1e517]: Decisive Problem Solving
+                - generic [ref=f1e518]: 86%
+              - paragraph [ref=f1e524]: Formulated an immediate two-step resolution with proactive executive amenities.
+            - generic [ref=f1e526]:
+              - generic [ref=f1e527]:
+                - generic [ref=f1e528]: Response Quality & Articulation
+                - generic [ref=f1e529]: 88%
+              - paragraph [ref=f1e535]: Spoke with clarity, conviction, and polished phrasing suitable for high-end luxury.
+        - generic [ref=f1e536]:
+          - generic [ref=f1e537]:
+            - heading "Observed Strengths" [level=4] [ref=f1e538]
+            - generic [ref=f1e539]:
+              - generic [ref=f1e540]: Immediate empathetic acknowledgment of travel fatigue
+              - generic [ref=f1e545]: Rapid pivot to private executive sanctuary to preserve lobby atmosphere
+              - generic [ref=f1e550]: Transparent and decisive communication regarding suite maintenance timeline
+          - generic [ref=f1e555]:
+            - heading "Growth Opportunities" [level=4] [ref=f1e556]
+            - generic [ref=f1e557]:
+              - generic [ref=f1e558]: Could have proactively confirmed dietary requirements before ordering arrival refreshments
+              - generic [ref=f1e564]: Could have clarified the luggage delivery ETA earlier in the interaction
+        - generic [ref=f1e570]:
+          - heading "Personal Confidence & Reflection" [level=4] [ref=f1e571]
+          - generic [ref=f1e572]:
+            - generic [ref=f1e573]: How confident did you feel handling this guest's inquiry?
+            - generic [ref=f1e574]:
+              - button "1. Needs Practice" [ref=f1e575] [cursor=pointer]
+              - button "2. Hesitant" [ref=f1e576] [cursor=pointer]
+              - button "3. Moderate" [ref=f1e577] [cursor=pointer]
+              - button "4. Confident" [ref=f1e578] [cursor=pointer]
+              - button "5. Very Confident" [ref=f1e579] [cursor=pointer]
+          - textbox "Add optional notes for your personal practice review…" [ref=f1e581]: Felt confident after inviting Mr. Sterling into the salon. Initially felt tense when he mentioned his tier status, but remembering the recovery protocol kept me centered.
+          - button "Save Reflection" [ref=f1e583] [cursor=pointer]

@@ -1,0 +1,111 @@
+- generic [ref=e3]:
+  - banner [ref=e27]:
+    - generic [ref=e28]: Practice Scenarios
+    - generic [ref=e30]: The Grand Palais, Geneva
+  - generic [ref=e37]:
+    - complementary [ref=e38]:
+      - generic [ref=e39]:
+        - generic [ref=e40]:
+          - generic [ref=e41]: Hotel Coach
+          - button "Collapse sidebar" [ref=e47] [cursor=pointer]
+        - navigation [ref=e51]:
+          - generic [ref=e52]: Navigation
+          - list [ref=e53]:
+            - listitem [ref=e54]:
+              - button "Overview" [ref=e55] [cursor=pointer]
+            - listitem [ref=e63]:
+              - button "Practice Scenarios" [active] [ref=e64] [cursor=pointer]
+            - listitem [ref=e71]:
+              - button "My Performance" [ref=e72] [cursor=pointer]
+            - listitem [ref=e76]:
+              - button "Session History" [ref=e77] [cursor=pointer]
+      - generic [ref=e84]:
+        - generic [ref=e85]: Account
+        - list [ref=e86]:
+          - listitem [ref=e87]:
+            - button "Preferences" [ref=e88] [cursor=pointer]
+          - listitem [ref=e93]:
+            - button "Sign Out" [ref=e94] [cursor=pointer]
+        - generic [ref=e99]:
+          - generic [ref=e100]: EV
+          - generic [ref=e101]:
+            - paragraph [ref=e102]: Elena Vance
+            - paragraph [ref=e103]: Front Office Concierge
+    - main [ref=e104]:
+      - generic [ref=e234]:
+        - generic [ref=e235]:
+          - heading "Practice Scenarios" [level=1] [ref=e236]
+          - paragraph [ref=e237]: Select an interactive guest scenario to refine your communication skills.
+        - generic [ref=e238]:
+          - button "All" [ref=e239] [cursor=pointer]
+          - button "Escalation Management" [ref=e240] [cursor=pointer]
+          - button "Concierge" [ref=e241] [cursor=pointer]
+          - button "Executive Lounge" [ref=e242] [cursor=pointer]
+          - button "Front Desk" [ref=e243] [cursor=pointer]
+          - button "Guest Services" [ref=e244] [cursor=pointer]
+        - generic [ref=e245]:
+          - generic [ref=e246] [cursor=pointer]:
+            - generic [ref=e247]:
+              - generic [ref=e248]:
+                - generic [ref=e249]: Escalation Management
+                - generic [ref=e254]: ~3 min
+              - heading "Escalated Guest" [level=3] [ref=e255]
+              - generic [ref=e256]: "Guest: Marcus Sterling (Suite 1408) • Diamond Ambassador"
+              - paragraph [ref=e257]: A high-tier guest arrived after a 12-hour delayed flight only to find his reserved presidential suite undergoing unexpected HVAC repair.
+            - generic [ref=e258]:
+              - generic [ref=e259]:
+                - text: "Mood:"
+                - strong [ref=e260]: Agitated & Impatient
+              - button "Start Practice" [ref=e261]
+          - generic [ref=e265] [cursor=pointer]:
+            - generic [ref=e266]:
+              - generic [ref=e267]:
+                - generic [ref=e268]: Concierge
+                - generic [ref=e274]: ~3 min
+              - heading "Friendly Guest" [level=3] [ref=e275]
+              - generic [ref=e276]: "Guest: Claire & Thomas Laurent (Room 724) • Gold Elite"
+              - paragraph [ref=e277]: A joyful couple celebrating their 10th wedding anniversary requesting bespoke recommendations for an unforgettable evening.
+            - generic [ref=e278]:
+              - generic [ref=e279]:
+                - text: "Mood:"
+                - strong [ref=e280]: Enthusiastic & Receptive
+              - button "Start Practice" [ref=e281]
+          - generic [ref=e285] [cursor=pointer]:
+            - generic [ref=e286]:
+              - generic [ref=e287]:
+                - generic [ref=e288]: Executive Lounge
+                - generic [ref=e293]: ~4 min
+              - heading "Premium VIP Guest" [level=3] [ref=e294]
+              - generic [ref=e295]: "Guest: Countess Sophie Von Berg (Royal Penthouse B) • Diamond Ambassador"
+              - paragraph [ref=e296]: A discerning international patron with strict privacy protocols and bespoke dietary preferences checking in for a diplomatic gala.
+            - generic [ref=e297]:
+              - generic [ref=e298]:
+                - text: "Mood:"
+                - strong [ref=e299]: Reserved & Particular
+              - button "Start Practice" [ref=e300]
+          - generic [ref=e304] [cursor=pointer]:
+            - generic [ref=e305]:
+              - generic [ref=e306]:
+                - generic [ref=e307]: Front Desk
+                - generic [ref=e313]: ~3 min
+              - heading "Demanding Guest" [level=3] [ref=e314]
+              - generic [ref=e315]: "Guest: Julian Vance-Croft (Deluxe King 512) • Platinum Premier"
+              - paragraph [ref=e316]: A frequent corporate traveler insisting on a complimentary presidential upgrade on a night when standard suites are completely sold out.
+            - generic [ref=e317]:
+              - generic [ref=e318]:
+                - text: "Mood:"
+                - strong [ref=e319]: Firm & Assertive
+              - button "Start Practice" [ref=e320]
+          - generic [ref=e324] [cursor=pointer]:
+            - generic [ref=e325]:
+              - generic [ref=e326]:
+                - generic [ref=e327]: Guest Services
+                - generic [ref=e332]: ~3 min
+              - heading "Complaint Resolution" [level=3] [ref=e333]
+              - generic [ref=e334]: "Guest: Amira Al-Mansoor (Junior Suite 904) • Platinum Premier"
+              - paragraph [ref=e335]: A tired guest whose luggage transfer from the airport was delayed, causing her to miss an important pre-booked dining reservation.
+            - generic [ref=e336]:
+              - generic [ref=e337]:
+                - text: "Mood:"
+                - strong [ref=e338]: Disappointed & Stressed
+              - button "Start Practice" [ref=e339]

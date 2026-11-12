@@ -1,0 +1,63 @@
+- generic [ref=e3]:
+  - banner [ref=e43]:
+    - generic [ref=e44]:
+      - generic [ref=e45]: Application Preferences
+      - generic [ref=e46]: "|"
+      - generic [ref=e47]: The Grand Palais, Geneva
+    - generic [ref=e52]:
+      - generic [ref=e53]: Local Simulation Sandbox
+      - generic [ref=e58]: 4 Day Practice Streak
+      - button "Notifications" [ref=e63] [cursor=pointer]
+  - generic [ref=e67]:
+    - complementary [ref=e68]:
+      - generic [ref=e69]:
+        - generic [ref=e70]:
+          - generic [ref=e76]:
+            - heading "Hotel Coach" [level=1] [ref=e77]
+            - paragraph [ref=e78]: Desktop Training Suite
+          - button "Collapse sidebar" [ref=e79] [cursor=pointer]
+        - navigation [ref=e82]:
+          - paragraph [ref=e83]: Training Modules
+          - list [ref=e84]:
+            - listitem [ref=e85]:
+              - button "Overview" [ref=e86] [cursor=pointer]
+            - listitem [ref=e94]:
+              - button "Practice" [ref=e95] [cursor=pointer]
+            - listitem [ref=e101]:
+              - button "My Performance" [ref=e102] [cursor=pointer]
+            - listitem [ref=e108]:
+              - button "Session History" [ref=e109] [cursor=pointer]
+      - generic [ref=e116]:
+        - list [ref=e117]:
+          - listitem [ref=e118]:
+            - button "Preferences" [ref=e119] [cursor=pointer]
+          - listitem [ref=e124]:
+            - button "Sign Out" [ref=e125] [cursor=pointer]
+        - generic [ref=e130]:
+          - generic [ref=e131]: EV
+          - generic [ref=e132]:
+            - paragraph [ref=e133]: Elena Vance
+            - paragraph [ref=e134]: Front Office Concierge
+    - main [ref=e135]:
+      - generic [ref=e1070]:
+        - generic [ref=e1071]:
+          - heading "Application Preferences" [level=1] [ref=e1072]
+          - paragraph [ref=e1073]: Configure employee profile, audio/video simulation peripherals, and macOS desktop appearance.
+        - generic [ref=e1074]:
+          - button "Profile & Property" [ref=e1075] [cursor=pointer]
+          - button "Audio & Video Devices" [ref=e1080] [cursor=pointer]
+          - button "Appearance" [active] [ref=e1085] [cursor=pointer]
+          - button "About Hotel Coach" [ref=e1089] [cursor=pointer]
+        - generic [ref=e1119]:
+          - heading "macOS Desktop Theme" [level=3] [ref=e1120]
+          - paragraph [ref=e1121]: Choose your preferred workspace aesthetic. Respects macOS system appearance conventions.
+          - generic [ref=e1122]:
+            - generic [ref=e1123] [cursor=pointer]:
+              - heading "Obsidian Slate" [level=4] [ref=e1130]
+              - paragraph [ref=e1131]: Refined dark mode for low-light hotel environments
+            - generic [ref=e1132] [cursor=pointer]:
+              - heading "Crisp Marble" [level=4] [ref=e1141]
+              - paragraph [ref=e1142]: Clean, high-contrast daylight appearance
+            - generic [ref=e1143] [cursor=pointer]:
+              - heading "macOS Dynamic" [level=4] [ref=e1148]
+              - paragraph [ref=e1149]: Synchronize automatically with macOS system theme

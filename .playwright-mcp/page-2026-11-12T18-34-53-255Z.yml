@@ -1,0 +1,111 @@
+- generic [ref=e3]:
+  - banner [ref=e27]:
+    - generic [ref=e28]: Overview
+    - generic [ref=e30]: The Grand Palais, Geneva
+  - generic [ref=e37]:
+    - complementary [ref=e38]:
+      - generic [ref=e39]:
+        - generic [ref=e40]:
+          - generic [ref=e41]: Hotel Coach
+          - button "Collapse sidebar" [ref=e46] [cursor=pointer]
+        - navigation [ref=e49]:
+          - list [ref=e50]:
+            - listitem [ref=e51]:
+              - button "Overview" [active] [ref=e52] [cursor=pointer]
+            - listitem [ref=e60]:
+              - button "Practice" [ref=e61] [cursor=pointer]
+            - listitem [ref=e68]:
+              - button "My Performance" [ref=e69] [cursor=pointer]
+            - listitem [ref=e73]:
+              - button "Session History" [ref=e74] [cursor=pointer]
+      - generic [ref=e81]:
+        - list [ref=e82]:
+          - listitem [ref=e83]:
+            - button "Preferences" [ref=e84] [cursor=pointer]
+          - listitem [ref=e89]:
+            - button "Sign Out" [ref=e90] [cursor=pointer]
+        - generic [ref=e95]:
+          - generic [ref=e96]: EV
+          - generic [ref=e97]:
+            - paragraph [ref=e98]: Elena Vance
+            - paragraph [ref=e99]: Front Office Concierge
+    - main [ref=e100]:
+      - generic [ref=e203]:
+        - generic [ref=e204]:
+          - heading "Good morning, Elena" [level=1] [ref=e205]
+          - paragraph [ref=e206]: Select a guest scenario to start practicing.
+        - generic [ref=e208]:
+          - generic [ref=e209]:
+            - generic [ref=e210]:
+              - generic [ref=e211]: Recommended
+              - generic [ref=e212]: Escalation Management • ~3 min
+            - heading "Escalated Guest — Marcus Sterling" [level=2] [ref=e213]
+            - paragraph [ref=e214]: A high-tier guest arrived after a 12-hour delayed flight only to find his reserved presidential suite undergoing unexpected HVAC repair.
+          - button "Start Practice" [ref=e215] [cursor=pointer]
+        - generic [ref=e219]:
+          - generic [ref=e220]:
+            - generic [ref=e221]:
+              - heading "Performance Rating" [level=3] [ref=e222]
+              - button "Report" [ref=e223] [cursor=pointer]
+            - generic [ref=e226]:
+              - generic [ref=e227]: 91%
+              - generic [ref=e228]: overall communication rating
+            - generic [ref=e229]:
+              - generic [ref=e230]:
+                - generic [ref=e231]: Sessions
+                - text: "18"
+              - generic [ref=e232]:
+                - generic [ref=e233]: Streak
+                - generic [ref=e234]: 4 days
+              - generic [ref=e235]:
+                - generic [ref=e236]: Top Skill
+                - text: Poise
+          - generic [ref=e237]:
+            - generic [ref=e238]:
+              - heading "Recent Practice" [level=3] [ref=e239]
+              - button "All history" [ref=e240] [cursor=pointer]
+            - generic [ref=e243]:
+              - generic [ref=e244] [cursor=pointer]:
+                - generic [ref=e245]: Escalated GuestMarcus Sterling
+                - generic [ref=e246]: 92%
+              - generic [ref=e250] [cursor=pointer]:
+                - generic [ref=e251]: Friendly GuestClaire & Thomas Laurent
+                - generic [ref=e252]: 95%
+              - generic [ref=e256] [cursor=pointer]:
+                - generic [ref=e257]: Demanding GuestJulian Vance-Croft
+                - generic [ref=e258]: 86%
+        - generic [ref=e262]:
+          - generic [ref=e263]:
+            - heading "Available Scenarios" [level=3] [ref=e264]
+            - button "View all 5" [ref=e265] [cursor=pointer]
+          - generic [ref=e268]:
+            - generic [ref=e269] [cursor=pointer]:
+              - generic [ref=e270]:
+                - generic [ref=e271]:
+                  - generic [ref=e272]: Escalation Management
+                  - generic [ref=e273]: 3 min
+                - heading "Escalated Guest" [level=4] [ref=e274]
+                - paragraph [ref=e275]: A high-tier guest arrived after a 12-hour delayed flight only to find his reserved presidential suite undergoing unexpected HVAC repair.
+              - generic [ref=e276]:
+                - generic [ref=e277]: Marcus Sterling
+                - generic [ref=e278]: Start
+            - generic [ref=e281] [cursor=pointer]:
+              - generic [ref=e282]:
+                - generic [ref=e283]:
+                  - generic [ref=e284]: Concierge
+                  - generic [ref=e285]: 3 min
+                - heading "Friendly Guest" [level=4] [ref=e286]
+                - paragraph [ref=e287]: A joyful couple celebrating their 10th wedding anniversary requesting bespoke recommendations for an unforgettable evening.
+              - generic [ref=e288]:
+                - generic [ref=e289]: Claire & Thomas Laurent
+                - generic [ref=e290]: Start
+            - generic [ref=e293] [cursor=pointer]:
+              - generic [ref=e294]:
+                - generic [ref=e295]:
+                  - generic [ref=e296]: Executive Lounge
+                  - generic [ref=e297]: 4 min
+                - heading "Premium VIP Guest" [level=4] [ref=e298]
+                - paragraph [ref=e299]: A discerning international patron with strict privacy protocols and bespoke dietary preferences checking in for a diplomatic gala.
+              - generic [ref=e300]:
+                - generic [ref=e301]: Countess Sophie Von Berg
+                - generic [ref=e302]: Start

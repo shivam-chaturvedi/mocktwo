@@ -1,0 +1,27 @@
+- generic [ref=f1e3]:
+  - banner [ref=f1e581]:
+    - generic [ref=f1e587]:
+      - generic [ref=f1e588]: Hotel Coach
+      - generic [ref=f1e589]: The Grand Palais, Geneva
+    - navigation [ref=f1e590]:
+      - button "Today" [ref=f1e591] [cursor=pointer]
+      - button "Scenarios" [ref=f1e592] [cursor=pointer]
+      - button "Recordings" [ref=f1e593] [cursor=pointer]
+      - button "Progress" [ref=f1e594] [cursor=pointer]
+    - generic [ref=f1e595]:
+      - button "New creation menu" [ref=f1e597] [cursor=pointer]:
+        - generic [ref=f1e599]: New
+      - button "Quick Practice" [ref=f1e602] [cursor=pointer]
+      - button "Search scenarios" [ref=f1e606] [cursor=pointer]:
+        - generic [ref=f1e610]: ⌘K
+      - button "Account menu" [ref=f1e611] [cursor=pointer]: EV
+  - main [ref=f1e612]:
+    - generic [ref=f1e614]:
+      - generic [ref=f1e615]:
+        - heading "Processing Session" [level=1] [ref=f1e616]
+        - paragraph [ref=f1e617]: Analyzing coaching dialogue with Countess Sophie Von Berg
+      - generic [ref=f1e619]:
+        - generic [ref=f1e620]: Transcribing conversational dialogue
+        - generic [ref=f1e625]: Evaluating core communication competencies
+        - generic [ref=f1e629]: Synthesizing guest resolution indicators
+        - generic [ref=f1e633]: Compiling performance report

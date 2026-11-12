@@ -1,0 +1,199 @@
+- generic [ref=f1e3]:
+  - banner [ref=f1e4]:
+    - generic [ref=f1e10]:
+      - generic [ref=f1e11]: Hotel Coach
+      - generic [ref=f1e12]: The Grand Palais, Geneva
+    - navigation [ref=f1e13]:
+      - button "Today" [ref=f1e14] [cursor=pointer]
+      - button "Scenarios" [ref=f1e15] [cursor=pointer]
+      - button "Recordings" [ref=f1e16] [cursor=pointer]
+      - button "Progress" [ref=f1e17] [cursor=pointer]
+    - generic [ref=f1e18]:
+      - button "New creation menu" [ref=f1e20] [cursor=pointer]:
+        - generic [ref=f1e22]: New
+      - button "Quick Practice" [ref=f1e25] [cursor=pointer]
+      - button "Search scenarios" [ref=f1e29] [cursor=pointer]:
+        - generic [ref=f1e33]: ⌘K
+      - button "Account menu" [ref=f1e34] [cursor=pointer]: EV
+  - main [ref=f1e35]:
+    - generic [ref=f1e37]:
+      - generic [ref=f1e38]:
+        - generic [ref=f1e39]:
+          - heading "Good morning, Elena" [level=1] [ref=f1e40]
+          - paragraph [ref=f1e41]: Your daily practice desk is primed for luxury guest relations.
+        - generic [ref=f1e42]: Friday, Nov 13
+      - generic [ref=f1e43]:
+        - generic [ref=f1e44]:
+          - generic [ref=f1e45]:
+            - generic [ref=f1e46]:
+              - generic [ref=f1e47]: Executive Lounge
+              - generic [ref=f1e52]: Up next
+            - button "Why this?" [ref=f1e54] [cursor=pointer]
+          - generic [ref=f1e59]:
+            - img "Countess Sophie Von Berg" [ref=f1e61]
+            - generic [ref=f1e62]:
+              - generic [ref=f1e63]:
+                - heading "Diplomatic Arrival Protocol" [level=3] [ref=f1e64]
+                - generic [ref=f1e65]: Countess Sophie Von Berg · Royal Penthouse B · Diamond Ambassador
+              - paragraph [ref=f1e66]: Verify discreet check-in procedures, dietary security protocols, and private transport synchronization for a high-profile diplomatic patron.
+              - generic [ref=f1e67]:
+                - generic [ref=f1e68]: ~4 min
+                - generic [ref=f1e73]:
+                  - generic [ref=f1e74]: ●
+                  - generic [ref=f1e75]: Advanced
+                - generic [ref=f1e76]: "Mood: Reserved & Particular"
+          - generic [ref=f1e77]:
+            - button "Begin Session" [ref=f1e78] [cursor=pointer]
+            - button "Choose Another" [ref=f1e82] [cursor=pointer]
+        - generic [ref=f1e83]:
+          - generic [ref=f1e84]:
+            - generic [ref=f1e85]: Overall Rating
+            - generic [ref=f1e86]: +4% this month
+          - generic [ref=f1e91]:
+            - generic [ref=f1e92]: 91%
+            - generic [ref=f1e98]:
+              - generic [ref=f1e99]:
+                - generic [ref=f1e100]: Sessions
+                - strong [ref=f1e101]: "18"
+              - generic [ref=f1e102]:
+                - generic [ref=f1e103]: Practice time
+                - strong [ref=f1e104]: 54 mins
+              - generic [ref=f1e105]:
+                - generic [ref=f1e106]: Top skill
+                - strong [ref=f1e107]: Poise (95%)
+          - button "View Progress" [ref=f1e109] [cursor=pointer]
+        - generic [ref=f1e113]:
+          - generic [ref=f1e114]:
+            - heading "Recent Sessions" [level=4] [ref=f1e115]
+            - button "View all" [ref=f1e116] [cursor=pointer]
+          - generic [ref=f1e120]:
+            - generic [ref=f1e121] [cursor=pointer]:
+              - generic [ref=f1e122]:
+                - img "Marcus Sterling" [ref=f1e124]
+                - generic [ref=f1e125]:
+                  - generic [ref=f1e126]: Escalated Guest
+                  - generic [ref=f1e127]: Marcus Sterling · Today
+              - generic [ref=f1e128]:
+                - generic [ref=f1e129]: 2m 48s
+                - generic [ref=f1e130]: 92%
+            - generic [ref=f1e133] [cursor=pointer]:
+              - generic [ref=f1e134]:
+                - img "Claire & Thomas Laurent" [ref=f1e136]
+                - generic [ref=f1e137]:
+                  - generic [ref=f1e138]: Friendly Guest
+                  - generic [ref=f1e139]: Claire & Thomas Laurent · Yesterday
+              - generic [ref=f1e140]:
+                - generic [ref=f1e141]: 3m 0s
+                - generic [ref=f1e142]: 95%
+            - generic [ref=f1e145] [cursor=pointer]:
+              - generic [ref=f1e146]:
+                - img "Julian Vance-Croft" [ref=f1e148]
+                - generic [ref=f1e149]:
+                  - generic [ref=f1e150]: Demanding Guest
+                  - generic [ref=f1e151]: Julian Vance-Croft · 3 days ago
+              - generic [ref=f1e152]:
+                - generic [ref=f1e153]: 2m 34s
+                - generic [ref=f1e154]: 86%
+            - generic [ref=f1e157] [cursor=pointer]:
+              - generic [ref=f1e158]:
+                - img "Amira Al-Mansoor" [ref=f1e160]
+                - generic [ref=f1e161]:
+                  - generic [ref=f1e162]: Complaint Resolution
+                  - generic [ref=f1e163]: Amira Al-Mansoor · 5 days ago
+              - generic [ref=f1e164]:
+                - generic [ref=f1e165]: 0m 22s
+                - generic [ref=f1e166]: Too short
+        - generic [ref=f1e169]:
+          - generic [ref=f1e170]:
+            - generic [ref=f1e171]:
+              - generic [ref=f1e172]: This Week
+              - generic [ref=f1e173]: 4-day streak
+            - generic [ref=f1e177]:
+              - generic [ref=f1e178]: M
+              - generic [ref=f1e180]: T
+              - generic [ref=f1e182]: W
+              - generic [ref=f1e184]: T
+              - generic [ref=f1e186]: F
+              - generic [ref=f1e188]: S
+              - generic [ref=f1e190]: S
+            - generic [ref=f1e192]:
+              - text: "Goal: 3 sessions ·"
+              - strong [ref=f1e193]: 2 done
+          - generic [ref=f1e196]:
+            - generic [ref=f1e197]:
+              - generic [ref=f1e198]: Manager Assigned
+              - generic [ref=f1e199]: Due Tomorrow, 17:00
+            - generic [ref=f1e200]: Diplomatic Arrival Protocol
+            - generic [ref=f1e201]: "Assigned by Front Desk Lead: Verify discreet check-in procedures, dietary security protocols, and private transport synchronization for a high-profile diplomatic patron."
+            - button "Start Assignment" [ref=f1e202] [cursor=pointer]
+        - generic [ref=f1e203]:
+          - generic [ref=f1e204]: "Quick Start:"
+          - button "Escalation Management" [ref=f1e205] [cursor=pointer]
+          - button "Concierge" [ref=f1e211] [cursor=pointer]
+          - button "Executive Lounge" [ref=f1e218] [cursor=pointer]
+          - button "Front Desk" [ref=f1e224] [cursor=pointer]
+          - button "Guest Services" [ref=f1e231] [cursor=pointer]
+          - button "Random" [ref=f1e238] [cursor=pointer]
+          - button "Last used" [ref=f1e246] [cursor=pointer]
+  - dialog [ref=f1e252]:
+    - generic [ref=f1e505]:
+      - generic [ref=f1e506]: "3"
+      - generic [ref=f1e507]: Connecting live feed with Countess Sophie Von Berg…
+    - generic [ref=f1e253]:
+      - generic [ref=f1e254]:
+        - generic [ref=f1e258]: Session Briefing
+        - generic [ref=f1e259]: Executive Lounge
+      - button "Close" [ref=f1e260] [cursor=pointer]
+    - generic [ref=f1e264]:
+      - generic [ref=f1e265]:
+        - generic [ref=f1e266]:
+          - img "Countess Sophie Von Berg" [ref=f1e498]
+          - generic [ref=f1e269]:
+            - heading "Countess Sophie Von Berg" [level=3] [ref=f1e499]
+            - generic [ref=f1e271]: Royal Penthouse B • Diamond Ambassador
+            - generic [ref=f1e272]: "Mood: Reserved & Particular & Diplomatic"
+        - generic [ref=f1e273]:
+          - heading "Guest" [level=4] [ref=f1e274]
+          - button "Select guest persona, currently Countess Sophie Von Berg" [ref=f1e500] [cursor=pointer]:
+            - generic [ref=f1e277]:
+              - img "Countess Sophie Von Berg" [ref=f1e501]
+              - generic [ref=f1e280]:
+                - generic [ref=f1e281]:
+                  - generic "Countess Sophie Von Berg" [ref=f1e502]
+                  - generic [ref=f1e503]: Default
+                - generic "Royal Penthouse B · Diamond Ambassador · Reserved & Particular & Diplomatic" [ref=f1e504]
+        - generic [ref=f1e288]:
+          - heading "Situation Context" [level=4] [ref=f1e289]
+          - paragraph [ref=f1e290]: Countess Sophie is arriving for the annual Geneva diplomatic summit. She requires quiet, expedited private lounge check-in with zero public lobby exposure.
+        - generic [ref=f1e291]:
+          - heading "Key Objectives" [level=4] [ref=f1e292]
+          - generic [ref=f1e293]:
+            - generic [ref=f1e294]: Uphold classical luxury service standards and refined cadence
+            - generic [ref=f1e301]: Clarify dietary and security preferences with utmost tact
+            - generic [ref=f1e308]: Coordinate seamlessly with private driver and concierge teams
+      - generic [ref=f1e316]:
+        - heading "Hardware & Camera Check" [level=4] [ref=f1e317]
+        - generic [ref=f1e318]:
+          - generic [ref=f1e319]: EV
+          - generic [ref=f1e320]: Mirror Preview
+        - generic [ref=f1e331]:
+          - generic [ref=f1e332]:
+            - generic [ref=f1e333]: Camera Source
+            - combobox [ref=f1e334]:
+              - option "FaceTime HD Camera (Built-in)" [selected]
+              - option "Studio Display Camera"
+              - option "External Webcam"
+          - generic [ref=f1e335]:
+            - generic [ref=f1e336]: Microphone Input
+            - combobox [ref=f1e337]:
+              - option "MacBook Studio Microphone (Built-in)" [selected]
+              - option "AirPods Pro"
+              - option "External USB Microphone"
+        - generic [ref=f1e338]:
+          - button "Mute Mic" [ref=f1e339] [cursor=pointer]
+          - button "Video Off" [ref=f1e344] [cursor=pointer]
+    - generic [ref=f1e349]:
+      - generic [ref=f1e350]: "Session length: ~4 minutes"
+      - generic [ref=f1e351]:
+        - button "Cancel" [ref=f1e352] [cursor=pointer]
+        - button "Start Session" [active] [ref=f1e353] [cursor=pointer]

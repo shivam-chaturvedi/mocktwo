@@ -1,0 +1,126 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e10]:
+      - generic [ref=e11]: Hotel Coach
+      - generic [ref=e12]: The Grand Palais, Geneva
+    - navigation [ref=e13]:
+      - button "Today" [ref=e14] [cursor=pointer]
+      - button "Scenarios" [ref=e15] [cursor=pointer]
+      - button "Recordings" [ref=e16] [cursor=pointer]
+      - button "Progress" [ref=e17] [cursor=pointer]
+    - generic [ref=e18]:
+      - button "New creation menu" [ref=e20] [cursor=pointer]:
+        - generic [ref=e22]: New
+      - button "Quick Practice" [ref=e25] [cursor=pointer]
+      - button "Search scenarios" [ref=e29] [cursor=pointer]:
+        - generic [ref=e33]: ⌘K
+      - button "Account menu" [ref=e34] [cursor=pointer]: EV
+  - main [ref=e35]:
+    - generic [ref=e654]:
+      - generic [ref=e655]:
+        - generic [ref=e656]:
+          - button "All Recordings" [ref=e657] [cursor=pointer]
+          - generic "Click to rename" [ref=e662] [cursor=pointer]:
+            - generic [ref=e663]: Escalated Guest
+            - generic [ref=e664]: ✎
+          - generic [ref=e665]: • Marcus Sterling
+        - generic [ref=e666]:
+          - button "Share with Team" [ref=e667] [cursor=pointer]
+          - button [ref=e675] [cursor=pointer]
+          - button "Toggle Inspector (⌥⌘0)" [ref=e679] [cursor=pointer]
+      - generic [ref=e683]:
+        - generic [ref=e684]:
+          - generic [ref=e685]:
+            - generic [ref=e686]:
+              - generic [ref=e687]:
+                - img "Marcus Sterling" [ref=e689]
+                - generic [ref=e690]:
+                  - generic [ref=e691]: Marcus Sterling
+                  - generic [ref=e692]: Recorded Dialogue Session
+              - generic [ref=e693]: 0:00 / 2:48
+            - generic [ref=e694]:
+              - slider [ref=e695] [cursor=pointer]: "0"
+              - generic [ref=e696]:
+                - generic [ref=e697]:
+                  - button [ref=e698] [cursor=pointer]
+                  - button "Rewind 5s (←)" [ref=e701] [cursor=pointer]
+                  - button "Forward 5s (→)" [ref=e705] [cursor=pointer]
+                  - generic [ref=e709]: 0:00 / 2:48
+                - generic [ref=e710]:
+                  - generic [ref=e711]:
+                    - button "0.5x" [ref=e712] [cursor=pointer]
+                    - button "1x" [ref=e713] [cursor=pointer]
+                    - button "1.25x" [ref=e714] [cursor=pointer]
+                    - button "1.5x" [ref=e715] [cursor=pointer]
+                    - button "2x" [ref=e716] [cursor=pointer]
+                  - button [ref=e717] [cursor=pointer]
+          - generic [ref=e722]:
+            - generic [ref=e723]:
+              - generic [ref=e724]: Timestamped Transcript
+              - button "Copy transcript" [ref=e728] [cursor=pointer]
+            - generic [ref=e733]:
+              - generic [ref=e734] [cursor=pointer]:
+                - generic [ref=e735]:
+                  - generic [ref=e736]: Marcus Sterling
+                  - generic [ref=e737]: 0:04
+                - generic [ref=e738]: I've been traveling for 14 hours across two delayed connections. My suite isn't ready because of an air conditioning breakdown, and I have a board dinner in two hours. What exactly are you going to do about this?
+              - generic [ref=e739] [cursor=pointer]:
+                - generic [ref=e740]:
+                  - generic [ref=e741]: You (Elena Vance)
+                  - generic [ref=e742]: 0:18
+                - generic [ref=e743]: Mr. Sterling, welcome to the Grand Palais. I completely understand how exhaustive such a long journey must be, especially with your dinner this evening. Let us take care of your luggage immediately, and allow me to escort you to our Executive Diplomatic Suite while our engineering team inspects your quarters.
+              - generic [ref=e744] [cursor=pointer]:
+                - generic [ref=e745]:
+                  - generic [ref=e746]: Marcus Sterling
+                  - generic [ref=e747]: 0:38
+                - generic [ref=e748]: The Diplomatic Suite? Is it fully quiet, and can I get my tuxedo pressed before 17:00? I cannot attend this dinner looking like I slept in an overhead bin.
+              - generic [ref=e749] [cursor=pointer]:
+                - generic [ref=e750]:
+                  - generic [ref=e751]: You (Elena Vance)
+                  - generic [ref=e752]: 0:52
+                - generic [ref=e753]: Basically, I will personally guarantee our master valet attends to your wardrobe within fifteen minutes. We will also arrange complimentary arrival refreshments in your suite right away.
+                - generic [ref=e754]: "Coaching tip: Consider removing filler 'Basically' — lead directly with confident luxury ownership."
+              - generic [ref=e758] [cursor=pointer]:
+                - generic [ref=e759]:
+                  - generic [ref=e760]: Marcus Sterling
+                  - generic [ref=e761]: 1:14
+                - generic [ref=e762]: Thank you, Elena. That sounds like a proper solution. Please have the pressing service attend to my suit immediately.
+              - generic [ref=e763] [cursor=pointer]:
+                - generic [ref=e764]:
+                  - generic [ref=e765]: You (Elena Vance)
+                  - generic [ref=e766]: 1:30
+                - generic [ref=e767]: It is our absolute pleasure, Mr. Sterling. Right this way to the private lift.
+            - generic [ref=e768]:
+              - generic [ref=e769]: Your Personal Practice Notes
+              - generic [ref=e770] [cursor=pointer]:
+                - generic [ref=e771]: "[0:52]"
+                - text: "Note to self: caught myself saying 'basically' here. Practice opening directly with 'I will ensure...'"
+            - generic [ref=e772]:
+              - textbox "Add a practice note at 0:00…" [ref=e773]
+              - button "Add Note" [disabled] [ref=e774]
+        - generic [ref=e775]:
+          - generic [ref=e777]:
+            - button "Coaching" [ref=e778] [cursor=pointer]
+            - button "Analytics" [active] [ref=e779] [cursor=pointer]
+          - generic [ref=e849]:
+            - generic [ref=e850]:
+              - button "Language" [ref=e851] [cursor=pointer]
+              - button "Listening" [ref=e856] [cursor=pointer]
+              - button "Delivery" [ref=e860] [cursor=pointer]
+            - generic [ref=e865]:
+              - generic [ref=e866]:
+                - generic [ref=e867]:
+                  - generic [ref=e868]: Filler Word Rate
+                  - generic [ref=e869]: 1.1%
+                - generic [ref=e870]: Optimal (< 2.0%). Your articulation was crisp and intentional.
+              - generic [ref=e871]:
+                - generic [ref=e872]: Hedging / Weak Phrasing
+                - generic [ref=e873]: "\"Basically\""
+              - generic [ref=e875]:
+                - generic [ref=e876]: Five-Star Service Vocabulary Used
+                - generic [ref=e877]:
+                  - generic [ref=e878]: Pleasure
+                  - generic [ref=e879]: Guarantee
+                  - generic [ref=e880]: Personally
+                  - generic [ref=e881]: Sanctuary
+                  - generic [ref=e882]: Comfort

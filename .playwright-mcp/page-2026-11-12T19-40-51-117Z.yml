@@ -1,0 +1,25 @@
+- generic [ref=f1e508]:
+  - banner [ref=f1e509]:
+    - generic [ref=f1e510]:
+      - generic [ref=f1e511]: Countess Sophie Von Berg
+      - generic [ref=f1e512]: • Diplomatic Arrival Protocol
+    - generic [ref=f1e513]: 0:35 / 1:00
+    - generic [ref=f1e515]:
+      - generic [ref=f1e516]: Live Dialogue
+      - button "Toggle Fullscreen" [ref=f1e519] [cursor=pointer]
+  - generic [ref=f1e525]:
+    - generic [ref=f1e527]:
+      - img "Countess Sophie Von Berg" [ref=f1e529]
+      - generic [ref=f1e530]:
+        - heading "Countess Sophie Von Berg" [level=2] [ref=f1e531]
+        - generic [ref=f1e532]: Listening to you
+    - generic [ref=f1e543]:
+      - generic [ref=f1e544]: EV
+      - generic [ref=f1e545]: You (Elena Vance)
+  - contentinfo [ref=f1e546]:
+    - generic [ref=f1e547]:
+      - button "Objectives" [ref=f1e548] [cursor=pointer]
+      - button "Mute Microphone" [ref=f1e554] [cursor=pointer]
+      - button "Turn Camera Off" [ref=f1e558] [cursor=pointer]
+      - button "Audio Volume" [ref=f1e562] [cursor=pointer]
+      - button "End Session" [ref=f1e568] [cursor=pointer]

@@ -1,0 +1,77 @@
+- generic [ref=e3]:
+  - banner [ref=e27]:
+    - generic [ref=e28]: Session History
+    - generic [ref=e30]: The Grand Palais, Geneva
+  - generic [ref=e37]:
+    - complementary [ref=e38]:
+      - generic [ref=e39]:
+        - generic [ref=e40]:
+          - generic [ref=e41]: Hotel Coach
+          - button "Collapse sidebar" [ref=e47] [cursor=pointer]
+        - navigation [ref=e51]:
+          - generic [ref=e52]: Navigation
+          - list [ref=e53]:
+            - listitem [ref=e54]:
+              - button "Overview" [ref=e55] [cursor=pointer]
+            - listitem [ref=e63]:
+              - button "Practice Scenarios" [ref=e64] [cursor=pointer]
+            - listitem [ref=e71]:
+              - button "My Performance" [ref=e72] [cursor=pointer]
+            - listitem [ref=e76]:
+              - button "Session History" [active] [ref=e77] [cursor=pointer]
+      - generic [ref=e84]:
+        - generic [ref=e85]: Account
+        - list [ref=e86]:
+          - listitem [ref=e87]:
+            - button "Preferences" [ref=e88] [cursor=pointer]
+          - listitem [ref=e93]:
+            - button "Sign Out" [ref=e94] [cursor=pointer]
+        - generic [ref=e99]:
+          - generic [ref=e100]: EV
+          - generic [ref=e101]:
+            - paragraph [ref=e102]: Elena Vance
+            - paragraph [ref=e103]: Front Office Concierge
+    - main [ref=e104]:
+      - generic [ref=e472]:
+        - generic [ref=e473]:
+          - generic [ref=e474]:
+            - heading "Session History" [level=1] [ref=e475]
+            - paragraph [ref=e476]: Review previous practice sessions and detailed performance debriefs.
+          - button "New Practice" [ref=e477] [cursor=pointer]
+        - generic [ref=e481]:
+          - textbox "Search by scenario or guest..." [ref=e486]
+          - generic [ref=e487]:
+            - button "All" [ref=e488] [cursor=pointer]
+            - button "Escalation Management" [ref=e489] [cursor=pointer]
+            - button "Concierge" [ref=e490] [cursor=pointer]
+            - button "Front Desk" [ref=e491] [cursor=pointer]
+            - button "Guest Services" [ref=e492] [cursor=pointer]
+        - generic [ref=e494]:
+          - generic [ref=e495] [cursor=pointer]:
+            - generic [ref=e500]:
+              - generic [ref=e501]:
+                - generic [ref=e502]: Escalated Guest
+                - generic [ref=e503]: • Marcus Sterling
+              - generic [ref=e504]: "Today, 14:20 • Duration: 2m 48s • Escalation Management"
+            - generic [ref=e505]: 92%
+          - generic [ref=e509] [cursor=pointer]:
+            - generic [ref=e515]:
+              - generic [ref=e516]:
+                - generic [ref=e517]: Friendly Guest
+                - generic [ref=e518]: • Claire & Thomas Laurent
+              - generic [ref=e519]: "Yesterday, 16:45 • Duration: 3m 00s • Concierge"
+            - generic [ref=e520]: 95%
+          - generic [ref=e524] [cursor=pointer]:
+            - generic [ref=e530]:
+              - generic [ref=e531]:
+                - generic [ref=e532]: Demanding Guest
+                - generic [ref=e533]: • Julian Vance-Croft
+              - generic [ref=e534]: "10 Nov 2026, 11:15 • Duration: 2m 34s • Front Desk"
+            - generic [ref=e535]: 86%
+          - generic [ref=e539] [cursor=pointer]:
+            - generic [ref=e544]:
+              - generic [ref=e545]:
+                - generic [ref=e546]: Complaint Resolution
+                - generic [ref=e547]: • Amira Al-Mansoor
+              - generic [ref=e548]: "08 Nov 2026, 09:30 • Duration: 2m 52s • Guest Services"
+            - generic [ref=e549]: 89%

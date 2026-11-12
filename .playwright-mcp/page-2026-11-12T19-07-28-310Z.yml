@@ -1,0 +1,13 @@
+- main [ref=e4]:
+  - generic [ref=e5]:
+    - generic [ref=e6]: Hotel Coach • Employee Portal
+    - generic [ref=e8]:
+      - generic [ref=e9]:
+        - heading "Hotel Coach" [level=1] [ref=e14]
+        - paragraph [ref=e15]: Practice the moments that define a guest's stay.
+      - generic [ref=e16]:
+        - generic [ref=e17]: EV
+        - heading "Elena Vance" [level=3] [ref=e18]
+        - generic [ref=e19]: The Grand Palais, Geneva
+        - button "Unlock with Touch ID" [ref=e20] [cursor=pointer]
+        - button "Use a different account" [ref=e31] [cursor=pointer]

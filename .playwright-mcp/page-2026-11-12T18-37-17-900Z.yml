@@ -1,0 +1,64 @@
+- generic [ref=e3]:
+  - banner [ref=e27]:
+    - generic [ref=e28]: Live Simulation
+    - generic [ref=e30]: The Grand Palais, Geneva
+  - generic [ref=e37]:
+    - complementary [ref=e38]:
+      - generic [ref=e39]:
+        - generic [ref=e40]:
+          - generic [ref=e41]: Hotel Coach
+          - button "Collapse sidebar" [ref=e46] [cursor=pointer]
+        - navigation [ref=e49]:
+          - list [ref=e50]:
+            - listitem [ref=e51]:
+              - button "Overview" [ref=e52] [cursor=pointer]
+            - listitem [ref=e60]:
+              - button "Practice" [ref=e61] [cursor=pointer]
+            - listitem [ref=e68]:
+              - button "My Performance" [ref=e69] [cursor=pointer]
+            - listitem [ref=e73]:
+              - button "Session History" [ref=e74] [cursor=pointer]
+      - generic [ref=e81]:
+        - list [ref=e82]:
+          - listitem [ref=e83]:
+            - button "Preferences" [ref=e84] [cursor=pointer]
+          - listitem [ref=e89]:
+            - button "Sign Out" [ref=e90] [cursor=pointer]
+        - generic [ref=e95]:
+          - generic [ref=e96]: EV
+          - generic [ref=e97]:
+            - paragraph [ref=e98]: Elena Vance
+            - paragraph [ref=e99]: Front Office Concierge
+    - main [ref=e100]:
+      - generic [ref=e551]:
+        - generic [ref=e552]:
+          - generic [ref=e553]:
+            - generic [ref=e554]: Marcus Sterling
+            - generic [ref=e555]: (Escalated Guest)
+          - generic [ref=e556]: 0:41 / 1:00
+          - generic [ref=e558]: Connected
+        - generic [ref=e561]:
+          - generic [ref=e562]:
+            - img "Marcus Sterling" [ref=e564]
+            - generic [ref=e565]:
+              - heading "Marcus Sterling" [level=2] [ref=e566]
+              - generic [ref=e567]: Speaking
+          - generic [ref=e578]:
+            - generic [ref=e579]: EV
+            - generic [ref=e580]: You
+        - generic [ref=e582]:
+          - button "Mute Microphone" [ref=e583] [cursor=pointer]
+          - button "Turn Video Off" [ref=e587] [cursor=pointer]
+          - button "Audio Volume" [ref=e591] [cursor=pointer]
+          - button "End Session" [active] [ref=e596] [cursor=pointer]
+        - dialog "End Simulation" [ref=e603]:
+          - generic [ref=e604]:
+            - generic [ref=e605]:
+              - heading "End Simulation" [level=3] [ref=e606]
+              - paragraph [ref=e607]: End current practice with Marcus Sterling?
+            - button "Close" [ref=e608] [cursor=pointer]
+          - generic [ref=e613]:
+            - paragraph [ref=e614]: Your completed dialogue of 0:41 will be saved and assessed for your performance report.
+            - generic [ref=e615]:
+              - button "Continue Practice" [ref=e616] [cursor=pointer]
+              - button "End & Generate Report" [ref=e617] [cursor=pointer]

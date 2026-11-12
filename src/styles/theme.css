@@ -1,0 +1,28 @@
+@import "./tokens.css";
+
+/* Compatibility Aliases */
+:root {
+  --bg-app: var(--bg-window);
+  --bg-surface: var(--bg-elevated);
+  --bg-surface-elevated: var(--bg-control);
+  --border-subtle: var(--separator);
+  --border-medium: rgba(255, 255, 255, 0.12);
+  --border-strong: rgba(255, 255, 255, 0.20);
+  --accent-primary: var(--accent-blue);
+  --success-color: var(--accent-green);
+  --warning-color: var(--accent-orange);
+  --danger-color: var(--accent-red);
+}
+
+[data-theme="light"] {
+  --bg-app: var(--bg-window);
+  --bg-surface: var(--bg-elevated);
+  --bg-surface-elevated: var(--bg-control);
+  --border-subtle: var(--separator);
+  --border-medium: rgba(0, 0, 0, 0.12);
+  --border-strong: rgba(0, 0, 0, 0.20);
+  --accent-primary: var(--accent-blue);
+  --success-color: var(--accent-green);
+  --warning-color: var(--accent-orange);
+  --danger-color: var(--accent-red);
+}

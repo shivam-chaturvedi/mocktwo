@@ -1,0 +1,137 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e11]:
+      - generic [ref=e12]: mocktwo
+      - generic [ref=e13]: The Grand Palais, Geneva
+    - navigation [ref=e14]:
+      - button "Today" [ref=e15] [cursor=pointer]
+      - button "Scenarios" [ref=e16] [cursor=pointer]
+      - button "Recordings" [ref=e17] [cursor=pointer]
+      - button "Progress" [ref=e18] [cursor=pointer]
+    - generic [ref=e19]:
+      - button "New creation menu" [ref=e21] [cursor=pointer]:
+        - generic [ref=e23]: New
+      - button "Quick Practice" [ref=e26] [cursor=pointer]
+      - button "Search scenarios" [ref=e30] [cursor=pointer]:
+        - generic [ref=e34]: ⌘K
+      - button "Account menu" [ref=e35] [cursor=pointer]: EV
+  - main [ref=e36]:
+    - generic [ref=e38]:
+      - generic [ref=e39]:
+        - generic [ref=e40]:
+          - heading "Good morning, Elena" [level=1] [ref=e41]
+          - paragraph [ref=e42]: Your daily practice desk is primed for luxury guest relations.
+        - generic [ref=e43]: Friday, Nov 13
+      - generic [ref=e44]:
+        - generic [ref=e45]:
+          - generic [ref=e46]:
+            - generic [ref=e47]:
+              - generic [ref=e48]: Executive Lounge
+              - generic [ref=e53]: Up next
+            - button "Why this?" [ref=e55] [cursor=pointer]
+          - generic [ref=e60]:
+            - img "Countess Sophie Von Berg" [ref=e62]
+            - generic [ref=e63]:
+              - generic [ref=e64]:
+                - heading "Diplomatic Arrival Protocol" [level=3] [ref=e65]
+                - generic [ref=e66]: Countess Sophie Von Berg · Royal Penthouse B · Diamond Ambassador
+              - paragraph [ref=e67]: Verify discreet check-in procedures, dietary security protocols, and private transport synchronization for a high-profile diplomatic patron.
+              - generic [ref=e68]:
+                - generic [ref=e69]: ~4 min
+                - generic [ref=e74]:
+                  - generic [ref=e75]: ●
+                  - generic [ref=e76]: Advanced
+                - generic [ref=e77]: "Mood: Reserved & Particular"
+          - generic [ref=e78]:
+            - button "Begin Session" [ref=e79] [cursor=pointer]
+            - button "Choose Another" [ref=e83] [cursor=pointer]
+        - generic [ref=e84]:
+          - generic [ref=e85]:
+            - generic [ref=e86]: Overall Rating
+            - generic [ref=e87]: +4% this month
+          - generic [ref=e92]:
+            - generic [ref=e93]: 0%
+            - generic [ref=e99]:
+              - generic [ref=e100]:
+                - generic [ref=e101]: Sessions
+                - strong [ref=e102]: "18"
+              - generic [ref=e103]:
+                - generic [ref=e104]: Practice time
+                - strong [ref=e105]: 54 mins
+              - generic [ref=e106]:
+                - generic [ref=e107]: Top skill
+                - strong [ref=e108]: Poise (95%)
+          - button "View Progress" [ref=e110] [cursor=pointer]
+        - generic [ref=e114]:
+          - generic [ref=e115]:
+            - heading "Recent Sessions" [level=4] [ref=e116]
+            - button "View all" [ref=e117] [cursor=pointer]
+          - generic [ref=e121]:
+            - generic [ref=e122] [cursor=pointer]:
+              - generic [ref=e123]:
+                - img "Marcus Sterling" [ref=e125]
+                - generic [ref=e126]:
+                  - generic [ref=e127]: Escalated Guest
+                  - generic [ref=e128]: Marcus Sterling · Today
+              - generic [ref=e129]:
+                - generic [ref=e130]: 2m 48s
+                - generic [ref=e131]: 92%
+            - generic [ref=e134] [cursor=pointer]:
+              - generic [ref=e135]:
+                - img "Claire & Thomas Laurent" [ref=e137]
+                - generic [ref=e138]:
+                  - generic [ref=e139]: Friendly Guest
+                  - generic [ref=e140]: Claire & Thomas Laurent · Yesterday
+              - generic [ref=e141]:
+                - generic [ref=e142]: 3m 0s
+                - generic [ref=e143]: 95%
+            - generic [ref=e146] [cursor=pointer]:
+              - generic [ref=e147]:
+                - img "Julian Vance-Croft" [ref=e149]
+                - generic [ref=e150]:
+                  - generic [ref=e151]: Demanding Guest
+                  - generic [ref=e152]: Julian Vance-Croft · 3 days ago
+              - generic [ref=e153]:
+                - generic [ref=e154]: 2m 34s
+                - generic [ref=e155]: 86%
+            - generic [ref=e158] [cursor=pointer]:
+              - generic [ref=e159]:
+                - img "Amira Al-Mansoor" [ref=e161]
+                - generic [ref=e162]:
+                  - generic [ref=e163]: Complaint Resolution
+                  - generic [ref=e164]: Amira Al-Mansoor · 5 days ago
+              - generic [ref=e165]:
+                - generic [ref=e166]: 0m 22s
+                - generic [ref=e167]: Too short
+        - generic [ref=e170]:
+          - generic [ref=e171]:
+            - generic [ref=e172]:
+              - generic [ref=e173]: This Week
+              - generic [ref=e174]: 4-day streak
+            - generic [ref=e178]:
+              - generic [ref=e179]: M
+              - generic [ref=e181]: T
+              - generic [ref=e183]: W
+              - generic [ref=e185]: T
+              - generic [ref=e187]: F
+              - generic [ref=e189]: S
+              - generic [ref=e191]: S
+            - generic [ref=e193]:
+              - text: "Goal: 3 sessions ·"
+              - strong [ref=e194]: 2 done
+          - generic [ref=e197]:
+            - generic [ref=e198]:
+              - generic [ref=e199]: Manager Assigned
+              - generic [ref=e200]: Due Tomorrow, 17:00
+            - generic [ref=e201]: Diplomatic Arrival Protocol
+            - generic [ref=e202]: "Assigned by Front Desk Lead: Verify discreet check-in procedures, dietary security protocols, and private transport synchronization for a high-profile diplomatic patron."
+            - button "Start Assignment" [ref=e203] [cursor=pointer]
+        - generic [ref=e204]:
+          - generic [ref=e205]: "Quick Start:"
+          - button "Escalation Management" [ref=e206] [cursor=pointer]
+          - button "Concierge" [ref=e212] [cursor=pointer]
+          - button "Executive Lounge" [ref=e219] [cursor=pointer]
+          - button "Front Desk" [ref=e225] [cursor=pointer]
+          - button "Guest Services" [ref=e232] [cursor=pointer]
+          - button "Random" [ref=e239] [cursor=pointer]
+          - button "Last used" [ref=e247] [cursor=pointer]
