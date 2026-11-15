@@ -1,6 +1,7 @@
 const { app, BrowserWindow, Menu, ipcMain, shell, dialog, screen, session } = require("electron");
 const path = require("path");
 const fs = require("fs");
+const { fileURLToPath } = require("url");
 const { StorageManager } = require("./storage/storageManager.cjs");
 const { PermissionsService } = require("./permissions/permissionsService.cjs");
 
@@ -148,14 +149,17 @@ function debouncedSaveBounds(win) {
 }
 
 function flushBoundsNow(win) {
-  if (saveBoundsTimeout) clearTimeout(saveBoundsTimeout);
-  if (win && !win.isDestroyed()) {
-    try {
-      const b = win.getBounds();
-      fs.writeFileSync(boundsFilePath, JSON.stringify(b), "utf8");
-    } catch {
-      // ignore
+  try {
+    if (saveBoundsTimeout) {
+      clearTimeout(saveBoundsTimeout);
+      saveBoundsTimeout = null;
     }
+    const b = (win && !win.isDestroyed()) ? win.getBounds() : pendingBounds;
+    if (b) {
+      fs.writeFileSync(boundsFilePath, JSON.stringify(b), "utf8");
+    }
+  } catch {
+    // ignore
   }
 }
 
@@ -346,17 +350,34 @@ function isAllowedReload() {
   return recentCrashTimestamps.length < 3;
 }
 
+function isAllowedAppOrigin(url) {
+  if (!url || typeof url !== "string") return false;
+  try {
+    const parsed = new URL(url);
+    if (app.isPackaged) {
+      if (parsed.protocol !== "file:") return false;
+      const appPath = path.resolve(app.getAppPath());
+      const filePath = fileURLToPath(url);
+      return filePath === appPath || filePath.startsWith(appPath + path.sep);
+    }
+    if (parsed.origin === DEV_SERVER_URL) return true;
+    if (parsed.protocol === "file:") {
+      const distPath = path.resolve(__dirname, "../dist");
+      const filePath = fileURLToPath(url);
+      return filePath === distPath || filePath.startsWith(distPath + path.sep);
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 function isValidSender(frameOrEvent) {
   try {
     if (!frameOrEvent) return false;
     const frame = frameOrEvent.senderFrame !== undefined ? frameOrEvent.senderFrame : frameOrEvent;
     if (!frame || !frame.url) return false;
-    const url = frame.url;
-    if (app.isPackaged) {
-      const appPath = app.getAppPath();
-      return url.startsWith(`file://${appPath}`);
-    }
-    return url.startsWith(DEV_SERVER_URL) || url.startsWith(`file://${path.resolve(__dirname, "../dist")}`);
+    return isAllowedAppOrigin(frame.url);
   } catch {
     // Gracefully handle frame disposal during rapid navigation/reload
     return false;
@@ -364,15 +385,6 @@ function isValidSender(frameOrEvent) {
 }
 
 let isSessionSecurityConfigured = false;
-
-function isAllowedAppOrigin(url) {
-  if (!url || typeof url !== "string") return false;
-  if (app.isPackaged) {
-    const appPath = app.getAppPath();
-    return url.startsWith(`file://${appPath}`);
-  }
-  return url.startsWith(DEV_SERVER_URL) || url.startsWith(`file://${path.resolve(__dirname, "../dist")}`);
-}
 
 function configureSessionSecurity() {
   if (isSessionSecurityConfigured) return;
@@ -685,8 +697,8 @@ ipcMain.handle("storage:update-persona", async (event, payload) => {
 
 ipcMain.handle("storage:delete-persona", async (event, id) => {
   try {
-    if (!isValidSender(event) || !storageManager) return false;
-    return await storageManager.execute("personas:delete", id);
+    if (!isValidSender(event) || !storageManager || typeof id !== "string" || !id.trim()) return false;
+    return await storageManager.execute("personas:delete", id.trim());
   } catch (err) {
     writeLogEntry("warn", "ipc:storage:delete-persona", err.message);
     return false;
@@ -715,8 +727,8 @@ ipcMain.handle("storage:create-scenario", async (event, scenario) => {
 
 ipcMain.handle("storage:delete-scenario", async (event, id) => {
   try {
-    if (!isValidSender(event) || !storageManager) return false;
-    return await storageManager.execute("scenarios:delete", id);
+    if (!isValidSender(event) || !storageManager || typeof id !== "string" || !id.trim()) return false;
+    return await storageManager.execute("scenarios:delete", id.trim());
   } catch (err) {
     writeLogEntry("warn", "ipc:storage:delete-scenario", err.message);
     return false;
@@ -735,8 +747,8 @@ ipcMain.handle("storage:get-recordings", async (event, params) => {
 
 ipcMain.handle("storage:get-recording", async (event, id) => {
   try {
-    if (!isValidSender(event) || !storageManager) return null;
-    return await storageManager.execute("recordings:get", id);
+    if (!isValidSender(event) || !storageManager || typeof id !== "string" || !id.trim()) return null;
+    return await storageManager.execute("recordings:get", id.trim());
   } catch (err) {
     writeLogEntry("warn", "ipc:storage:get-recording", err.message);
     return null;
@@ -755,8 +767,8 @@ ipcMain.handle("storage:save-recording", async (event, rec) => {
 
 ipcMain.handle("storage:delete-recording", async (event, id) => {
   try {
-    if (!isValidSender(event) || !storageManager) return false;
-    return await storageManager.execute("recordings:delete", id);
+    if (!isValidSender(event) || !storageManager || typeof id !== "string" || !id.trim()) return false;
+    return await storageManager.execute("recordings:delete", id.trim());
   } catch (err) {
     writeLogEntry("warn", "ipc:storage:delete-recording", err.message);
     return false;
@@ -846,8 +858,8 @@ ipcMain.handle("storage:check-space", async (event) => {
 // Audio Chunk Recording Handlers
 ipcMain.handle("audio:start-recording", async (event, id) => {
   try {
-    if (!isValidSender(event) || !storageManager) return null;
-    return await storageManager.startAudioRecording(id);
+    if (!isValidSender(event) || !storageManager || typeof id !== "string" || !id.trim()) return null;
+    return await storageManager.startAudioRecording(id.trim());
   } catch (err) {
     writeLogEntry("warn", "ipc:audio:start-recording", err.message);
     return null;
@@ -858,9 +870,26 @@ ipcMain.handle("audio:append-chunk", async (event, payload) => {
   try {
     if (!isValidSender(event) || !storageManager || !payload || typeof payload !== "object") return false;
     const { id, chunk } = payload;
-    if (!id || !chunk) return false;
-    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-    await storageManager.appendAudioChunk(id, buffer);
+    if (typeof id !== "string" || !id.trim() || !chunk) return false;
+
+    let buffer;
+    if (Buffer.isBuffer(chunk)) {
+      buffer = chunk;
+    } else if (chunk instanceof ArrayBuffer || ArrayBuffer.isView(chunk)) {
+      buffer = Buffer.from(chunk);
+    } else if (Array.isArray(chunk)) {
+      buffer = Buffer.from(chunk);
+    } else {
+      return false;
+    }
+
+    // Limit individual chunk size to 10 MB to prevent memory exhaustion
+    if (buffer.length > 10 * 1024 * 1024) {
+      writeLogEntry("warn", "ipc:audio:append-chunk", "Audio chunk exceeds maximum allowed size (10 MB)");
+      return false;
+    }
+
+    await storageManager.appendAudioChunk(id.trim(), buffer);
     return true;
   } catch (err) {
     writeLogEntry("warn", "ipc:audio:append-chunk", err.message);
@@ -870,8 +899,8 @@ ipcMain.handle("audio:append-chunk", async (event, payload) => {
 
 ipcMain.handle("audio:finalize-recording", async (event, id) => {
   try {
-    if (!isValidSender(event) || !storageManager) return null;
-    return await storageManager.finalizeAudioRecording(id);
+    if (!isValidSender(event) || !storageManager || typeof id !== "string" || !id.trim()) return null;
+    return await storageManager.finalizeAudioRecording(id.trim());
   } catch (err) {
     writeLogEntry("warn", "ipc:audio:finalize-recording", err.message);
     return null;
@@ -898,3 +927,10 @@ ipcMain.handle("permissions:request", async (event, resource) => {
     return false;
   }
 });
+
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = {
+    isAllowedAppOrigin,
+    isValidSender,
+  };
+}

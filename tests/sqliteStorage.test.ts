@@ -343,6 +343,23 @@ describe("Phase 3: SQLite Storage & Worker Subsystem", () => {
     assert.equal(updated.name, "Renamed Update Partner");
     assert.equal(updated.title, "Senior Lead"); // Preserved!
 
+    // Verify recordings:save blocks untrusted external audio paths
+    const recWithMaliciousPath = await send("recordings:save", {
+      id: "rec-malicious-path",
+      scenarioTitle: "Path Security Test",
+      audioPath: "/etc/passwd",
+    });
+    assert.ok(recWithMaliciousPath);
+    const retrievedMalicious = await send("recordings:get", "rec-malicious-path");
+    assert.equal(retrievedMalicious.audioUrl, undefined, "Untrusted audio path outside recordingsDir must not be stored");
+
+    // Verify invalid/empty id validation
+    const deleteEmptyResult = await send("recordings:delete", "");
+    assert.equal(deleteEmptyResult, false);
+
+    const getEmptyResult = await send("recordings:get", "");
+    assert.equal(getEmptyResult, null);
+
     await worker.terminate();
   });
 });

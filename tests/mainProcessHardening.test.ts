@@ -79,18 +79,35 @@ test("Main Process: Crash reload throttling limit enforces max 3 per minute", ()
   assert.strictEqual(recordCrashAndCheckReload(base + 65000), true); // After 1 minute window -> allowed!
 });
 
-test("Main Process: isValidSender handles disposed frame exception without crashing", () => {
+test("Main Process: isValidSender handles disposed frame exception without crashing and enforces strict origin bounds", () => {
   const DEV_SERVER_URL = "http://127.0.0.1:5173";
+  function isAllowedAppOrigin(url: string, isPackaged = false, appPath = "/app"): boolean {
+    if (!url || typeof url !== "string") return false;
+    try {
+      const parsed = new URL(url);
+      if (isPackaged) {
+        if (parsed.protocol !== "file:") return false;
+        const filePath = parsed.pathname;
+        return filePath === appPath || filePath.startsWith(appPath + "/");
+      }
+      if (parsed.origin === DEV_SERVER_URL) return true;
+      if (parsed.protocol === "file:") {
+        const distPath = "/app/dist";
+        const filePath = parsed.pathname;
+        return filePath === distPath || filePath.startsWith(distPath + "/");
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
   function isValidSender(frameOrEvent: any, isPackaged = false): boolean {
     try {
       if (!frameOrEvent) return false;
       const frame = frameOrEvent.senderFrame !== undefined ? frameOrEvent.senderFrame : frameOrEvent;
       if (!frame || !frame.url) return false;
-      const url = frame.url;
-      if (isPackaged) {
-        return url.startsWith("file://");
-      }
-      return url.startsWith(DEV_SERVER_URL) || url.startsWith("file://");
+      return isAllowedAppOrigin(frame.url, isPackaged);
     } catch {
       return false;
     }
@@ -100,6 +117,17 @@ test("Main Process: isValidSender handles disposed frame exception without crash
   assert.strictEqual(isValidSender({ senderFrame: { url: "http://127.0.0.1:5173/" } }), true);
   // Valid file URL in production
   assert.strictEqual(isValidSender({ senderFrame: { url: "file:///app/dist/index.html" } }, true), true);
+  
+  // Security test: Port prefix injection attack (e.g. port 51730 matching 5173 prefix) MUST be rejected
+  assert.strictEqual(isValidSender({ senderFrame: { url: "http://127.0.0.1:51730/" } }), false);
+  assert.strictEqual(isValidSender({ senderFrame: { url: "http://127.0.0.1:51739/exploit" } }), false);
+  
+  // Security test: Host suffix spoofing attack MUST be rejected
+  assert.strictEqual(isValidSender({ senderFrame: { url: "http://127.0.0.1:5173.attacker.com/" } }), false);
+  
+  // Security test: File path traversal / prefix bypass MUST be rejected
+  assert.strictEqual(isValidSender({ senderFrame: { url: "file:///app-malicious/index.html" } }, true), false);
+  
   // Invalid remote origin
   assert.strictEqual(isValidSender({ senderFrame: { url: "https://evil.com" } }), false);
   // Null or missing event

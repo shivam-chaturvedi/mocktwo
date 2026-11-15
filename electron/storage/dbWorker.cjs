@@ -407,7 +407,11 @@ parentPort.on("message", ({ id, type, payload }) => {
       }
 
       case "personas:delete": {
-        db.prepare("DELETE FROM personas WHERE id = ?").run(payload);
+        if (typeof payload !== "string" || !payload.trim()) {
+          result = false;
+          break;
+        }
+        db.prepare("DELETE FROM personas WHERE id = ?").run(payload.trim());
         result = true;
         break;
       }
@@ -479,7 +483,11 @@ parentPort.on("message", ({ id, type, payload }) => {
       }
 
       case "scenarios:delete": {
-        db.prepare("DELETE FROM scenarios WHERE id = ?").run(payload);
+        if (typeof payload !== "string" || !payload.trim()) {
+          result = false;
+          break;
+        }
+        db.prepare("DELETE FROM scenarios WHERE id = ?").run(payload.trim());
         result = true;
         break;
       }
@@ -525,7 +533,11 @@ parentPort.on("message", ({ id, type, payload }) => {
 
       case "recordings:get": {
         const idToGet = payload;
-        const r = db.prepare("SELECT * FROM recordings WHERE id = ?").get(idToGet);
+        if (typeof idToGet !== "string" || !idToGet.trim()) {
+          result = null;
+          break;
+        }
+        const r = db.prepare("SELECT * FROM recordings WHERE id = ?").get(idToGet.trim());
         if (!r) {
           result = null;
         } else {
@@ -572,6 +584,17 @@ parentPort.on("message", ({ id, type, payload }) => {
         const personaName = rec.personaName || "Practice Partner";
         const durationSeconds = rec.durationSeconds ?? 60;
 
+        let safeAudioPath = null;
+        const candidateAudio = rec.audioUrl || rec.audioPath;
+        if (candidateAudio && typeof candidateAudio === "string" && candidateAudio.trim()) {
+          const base = path.resolve(recordingsDir);
+          const fileName = path.basename(candidateAudio);
+          const expected = path.join(base, fileName);
+          if (candidateAudio === expected || candidateAudio === fileName) {
+            safeAudioPath = expected;
+          }
+        }
+
         const insertRecording = db.transaction(() => {
           db.prepare(`
             INSERT INTO recordings (
@@ -604,7 +627,7 @@ parentPort.on("message", ({ id, type, payload }) => {
             rec.nervousnessLevel || null,
             rec.readinessStatus || null,
             rec.status || "Completed",
-            rec.audioUrl || rec.audioPath || null,
+            safeAudioPath,
             null,
             JSON.stringify(rec.transcript || []),
             rec.sessionBiometrics ? JSON.stringify(rec.sessionBiometrics) : null,
@@ -677,15 +700,19 @@ parentPort.on("message", ({ id, type, payload }) => {
 
       case "recordings:delete": {
         const idToDelete = payload;
-        const row = db.prepare("SELECT audio_path, waveform_path FROM recordings WHERE id = ?").get(idToDelete);
-        db.prepare("DELETE FROM recordings WHERE id = ?").run(idToDelete);
+        if (typeof idToDelete !== "string" || !idToDelete.trim()) {
+          result = false;
+          break;
+        }
+        const row = db.prepare("SELECT audio_path, waveform_path FROM recordings WHERE id = ?").get(idToDelete.trim());
+        db.prepare("DELETE FROM recordings WHERE id = ?").run(idToDelete.trim());
         if (row) {
           const isSafeFile = (filePath) => {
-            if (!filePath || typeof filePath !== "string") return false;
-            const cleanPath = path.normalize(filePath);
-            const resolved = path.resolve(cleanPath);
+            if (!filePath || typeof filePath !== "string" || !filePath.trim()) return false;
             const base = path.resolve(recordingsDir);
-            return resolved !== base && resolved.startsWith(base + path.sep);
+            const fileName = path.basename(filePath);
+            const expected = path.join(base, fileName);
+            return filePath === expected;
           };
           if (row.audio_path && isSafeFile(row.audio_path) && fs.existsSync(row.audio_path)) {
             try { fs.unlinkSync(row.audio_path); } catch { /* ignore */ }
@@ -878,7 +905,11 @@ parentPort.on("message", ({ id, type, payload }) => {
             const files = fs.readdirSync(recordingsDir);
             for (const file of files) {
               const fullPath = path.join(recordingsDir, file);
-              try { fs.unlinkSync(fullPath); } catch { /* ignore */ }
+              try {
+                if (fs.statSync(fullPath).isFile()) {
+                  fs.unlinkSync(fullPath);
+                }
+              } catch { /* ignore */ }
             }
           } catch { /* ignore */ }
         }
