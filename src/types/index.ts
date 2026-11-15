@@ -472,8 +472,14 @@ export function formatContextSetting(setting: string): string {
   while (/^(room|suite|setting|call|meeting|office|panel)\s+/i.test(cleaned)) {
     const match = cleaned.match(/^(room|suite|setting|call|meeting|office|panel)\s+/i);
     if (match) {
-      const remainder = cleaned.replace(/^(room|suite|setting|call|meeting|office|panel)\s+/i, "").trim();
-      if (new RegExp(`^${match[1]}\\b`, "i").test(remainder)) {
+      const word = match[1].toLowerCase();
+      const remainder = cleaned.slice(match[0].length).trim();
+      const remainderLower = remainder.toLowerCase();
+      if (
+        remainderLower === word ||
+        remainderLower.startsWith(word + " ") ||
+        remainderLower.startsWith(word + "\t")
+      ) {
         cleaned = remainder;
       } else {
         break;
@@ -548,8 +554,7 @@ export function renderScenarioText(text: string, scenario?: PracticeScenario | n
 
   const defaultName = scenario?.personaName || scenario?.guestName;
   if (defaultName && persona.name && persona.name !== defaultName) {
-    const defaultNameRegex = new RegExp(defaultName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g");
-    rendered = rendered.replace(defaultNameRegex, persona.name);
+    rendered = rendered.replaceAll(defaultName, persona.name);
 
     const nameParts = defaultName.split(" ");
     if (nameParts.length > 1) {
@@ -557,9 +562,17 @@ export function renderScenarioText(text: string, scenario?: PracticeScenario | n
       const personaNameParts = persona.name.split(" ");
       const personaLastName = personaNameParts[personaNameParts.length - 1];
       if (defaultLastName && personaLastName && defaultLastName !== personaLastName) {
-        const escapedLastName = defaultLastName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        const lastNameRegex = new RegExp(`\\b${escapedLastName}\\b`, "g");
-        rendered = rendered.replace(lastNameRegex, personaLastName);
+        // Safe token-based whole-word replacement without dynamic RegExp
+        rendered = rendered
+          .split(" ")
+          .map((token) => {
+            const tokenMatch = token.match(/^([a-zA-Z0-9_-]+)(.*)$/);
+            if (tokenMatch && tokenMatch[1] === defaultLastName) {
+              return personaLastName + tokenMatch[2];
+            }
+            return token;
+          })
+          .join(" ");
       }
     }
   }

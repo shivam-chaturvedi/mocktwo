@@ -682,9 +682,10 @@ parentPort.on("message", ({ id, type, payload }) => {
         if (row) {
           const isSafeFile = (filePath) => {
             if (!filePath || typeof filePath !== "string") return false;
-            const resolved = path.resolve(filePath);
+            const cleanPath = path.normalize(filePath);
+            const resolved = path.resolve(cleanPath);
             const base = path.resolve(recordingsDir);
-            return resolved === base || resolved.startsWith(base + path.sep);
+            return resolved !== base && resolved.startsWith(base + path.sep);
           };
           if (row.audio_path && isSafeFile(row.audio_path) && fs.existsSync(row.audio_path)) {
             try { fs.unlinkSync(row.audio_path); } catch { /* ignore */ }
@@ -859,6 +860,7 @@ parentPort.on("message", ({ id, type, payload }) => {
       // Atomic Clear All Data + VACUUM
       case "data:clear-all": {
         const clearAll = db.transaction(() => {
+          db.prepare("DELETE FROM recording_notes").run();
           db.prepare("DELETE FROM vitals_samples").run();
           db.prepare("DELETE FROM recordings").run();
           db.prepare("DELETE FROM baselines").run();

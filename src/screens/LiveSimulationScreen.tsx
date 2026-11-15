@@ -16,7 +16,7 @@ import {
 import { VALIDATION_HINTS, type ValidationStatusCode } from "../types";
 
 export const LiveSimulationScreen: React.FC = () => {
-  const { selectedScenario, activeSessionPersona, finishSimulation, user } = useApp();
+  const { selectedScenario, activeSessionPersona, finishSimulation, user, activeSessionId } = useApp();
 
   const currentPersona = activeSessionPersona || {
     id: selectedScenario.id,
@@ -46,21 +46,27 @@ export const LiveSimulationScreen: React.FC = () => {
   // Audio chunk recording subsystem for rehearsals
   useEffect(() => {
     if (!sessionIdRef.current) {
-      sessionIdRef.current = `session-${Date.now()}`;
+      sessionIdRef.current = activeSessionId || `session-${Date.now()}`;
     }
     const sessionId = sessionIdRef.current;
     let mediaRecorder: MediaRecorder | null = null;
     let audioStream: MediaStream | null = null;
+    let isCancelled = false;
 
     const initAudio = async () => {
       if (window.electronAPI?.audio) {
         try {
           await window.electronAPI.audio.startRecording(sessionId);
+          if (isCancelled) return;
           if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
             audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            if (isCancelled) {
+              audioStream.getTracks().forEach((t) => t.stop());
+              return;
+            }
             mediaRecorder = new MediaRecorder(audioStream);
             mediaRecorder.ondataavailable = async (e) => {
-              if (e.data && e.data.size > 0 && window.electronAPI?.audio) {
+              if (e.data && e.data.size > 0 && window.electronAPI?.audio && !isCancelled) {
                 try {
                   const buffer = await e.data.arrayBuffer();
                   await window.electronAPI.audio.appendChunk(sessionId, buffer);
@@ -80,6 +86,7 @@ export const LiveSimulationScreen: React.FC = () => {
     initAudio();
 
     return () => {
+      isCancelled = true;
       if (mediaRecorder && mediaRecorder.state !== "inactive") {
         try {
           mediaRecorder.stop();
@@ -96,7 +103,7 @@ export const LiveSimulationScreen: React.FC = () => {
         });
       }
     };
-  }, []);
+  }, [activeSessionId]);
 
   // Optical sensor validation status: simulated briefly without showing live numbers
   const currentValidationStatus: ValidationStatusCode = useMemo(() => {

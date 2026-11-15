@@ -142,7 +142,11 @@ export const TodayScreen: React.FC = () => {
       openQuickPractice();
       return;
     }
-    const nextScenario = scenarios[Math.floor(Math.random() * scenarios.length)];
+    const randomIndex =
+      typeof window !== "undefined" && window.crypto
+        ? window.crypto.getRandomValues(new Uint32Array(1))[0] % scenarios.length
+        : 0;
+    const nextScenario = scenarios[randomIndex];
     openBriefing(nextScenario);
   }, [scenarios, openBriefing, openQuickPractice]);
 

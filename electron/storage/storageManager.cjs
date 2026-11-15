@@ -106,10 +106,11 @@ class StorageManager {
     if (!cleanId) {
       throw new Error("Invalid recording ID characters");
     }
-    const targetPath = path.join(this.recordingsDir, `${cleanId}.${ext}`);
+    const safeExt = ext === "webm" ? "webm" : ext === "partial" ? "partial" : "dat";
+    const targetPath = path.join(this.recordingsDir, `${cleanId}.${safeExt}`);
     const resolved = path.resolve(targetPath);
     const base = path.resolve(this.recordingsDir);
-    if (resolved !== base && !resolved.startsWith(base + path.sep)) {
+    if (resolved === base || !resolved.startsWith(base + path.sep)) {
       throw new Error("Path traversal blocked");
     }
     return resolved;

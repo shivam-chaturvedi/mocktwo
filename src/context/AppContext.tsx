@@ -82,6 +82,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [activeSessionPersona, setActiveSessionPersona] = useState<Persona | null>(null);
 
   // Live session recordings
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [selectedRecordingId, setSelectedRecordingId] = useState<string | null>(null);
   const [isDebriefMode, setIsDebriefMode] = useState<boolean>(false);
@@ -477,7 +478,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const triggerRandomPractice = useCallback(() => {
     if (scenarios.length === 0) return;
-    const chosen = scenarios[Math.floor(Math.random() * scenarios.length)];
+    const randomIndex =
+      typeof window !== "undefined" && window.crypto
+        ? window.crypto.getRandomValues(new Uint32Array(1))[0] % scenarios.length
+        : 0;
+    const chosen = scenarios[randomIndex];
     openBriefing(chosen);
     setIsQuickPracticeOpen(false);
   }, [scenarios, openBriefing]);
@@ -535,28 +540,47 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [personas, activeSessionPersona]);
 
   // Live Simulation
-  const beginSimulation = useCallback((overridePersona?: Persona) => {
-    if (!serviceRegistry.session.isAvailable()) {
-      showToast(serviceRegistry.session.getUnavailableReason());
-      return;
-    }
-    const chosen = overridePersona || activeSessionPersona;
-    if (chosen) {
-      setActiveSessionPersona(chosen);
-    }
-    setIsBriefingOpen(false);
-    navigateTo("simulation");
-  }, [activeSessionPersona, navigateTo, showToast]);
+  const beginSimulation = useCallback(
+    async (overridePersona?: Persona) => {
+      if (!serviceRegistry.session.isAvailable()) {
+        showToast(serviceRegistry.session.getUnavailableReason());
+        return;
+      }
+      const chosen = overridePersona || activeSessionPersona;
+      if (chosen) {
+        setActiveSessionPersona(chosen);
+      }
+      setIsBriefingOpen(false);
+      try {
+        const { sessionId } = await serviceRegistry.session.startSession(
+          selectedScenario.id,
+          chosen?.id
+        );
+        setActiveSessionId(sessionId);
+      } catch (err) {
+        console.warn("[AppContext] Failed to start simulation session:", err);
+      }
+      navigateTo("simulation");
+    },
+    [activeSessionPersona, selectedScenario.id, navigateTo, showToast]
+  );
 
-  const finishSimulation = useCallback((_durationSeconds: number) => {
-    navigateTo("processing");
-  }, [navigateTo]);
+  const finishSimulation = useCallback(
+    (_durationSeconds: number) => {
+      navigateTo("processing");
+    },
+    [navigateTo]
+  );
 
   const completeProcessingSession = useCallback(async (): Promise<Recording | null> => {
     if (!serviceRegistry.session.isAvailable()) {
-      throw new Error(serviceRegistry.session.getUnavailableReason() || "Session analysis service unavailable");
+      throw new Error(
+        serviceRegistry.session.getUnavailableReason() || "Session analysis service unavailable"
+      );
     }
-    const { recordingId } = await serviceRegistry.session.endSession(`session-${Date.now()}`);
+    const sessionIdToFinalize = activeSessionId || `session-${Date.now()}`;
+    const { recordingId } = await serviceRegistry.session.endSession(sessionIdToFinalize);
+    setActiveSessionId(null);
     if (recordingId) {
       const rec = await serviceRegistry.recordings.getRecording(recordingId);
       if (rec) {
@@ -566,7 +590,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
     }
     return null;
-  }, []);
+  }, [activeSessionId]);
 
   // Recordings management
   const selectRecording = useCallback((rec: Recording | null) => {
@@ -706,6 +730,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         closeBriefing,
         activeSessionPersona,
         setSessionPersona: setActiveSessionPersona,
+        activeSessionId,
         beginSimulation,
         finishSimulation,
         completeProcessingSession,

@@ -72,6 +72,8 @@ export const BaselineSheetModal: React.FC = () => {
   const modalRef = useRef<HTMLDivElement | null>(null);
   const previousActiveElementRef = useRef<HTMLElement | null>(null);
 
+  const isMountedRef = useRef(true);
+
   // Stop camera stream & release hardware indicator
   const stopCamera = useCallback(() => {
     if (mediaStreamRef.current) {
@@ -87,8 +89,10 @@ export const BaselineSheetModal: React.FC = () => {
 
   // Cleanup & focus management
   useEffect(() => {
+    isMountedRef.current = true;
     previousActiveElementRef.current = document.activeElement as HTMLElement;
     return () => {
+      isMountedRef.current = false;
       stopCamera();
       if (captureRafRef.current) cancelAnimationFrame(captureRafRef.current);
       if (getReadyTimerRef.current) clearTimeout(getReadyTimerRef.current);
@@ -104,13 +108,13 @@ export const BaselineSheetModal: React.FC = () => {
       if (window.electronAPI?.requestMediaAccess) {
         const granted = await window.electronAPI.requestMediaAccess("camera");
         if (!granted) {
-          setStep("permission-denied");
+          if (isMountedRef.current) setStep("permission-denied");
           return;
         }
       }
 
       if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== "function") {
-        setStep("no-camera");
+        if (isMountedRef.current) setStep("no-camera");
         return;
       }
 
@@ -118,6 +122,11 @@ export const BaselineSheetModal: React.FC = () => {
         video: { width: 640, height: 480, facingMode: "user" },
         audio: false,
       });
+
+      if (!isMountedRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
 
       mediaStreamRef.current = stream;
       if (videoRef.current) {
@@ -128,6 +137,7 @@ export const BaselineSheetModal: React.FC = () => {
       setStep("get-ready");
       setCountdown(3);
     } catch (err: unknown) {
+      if (!isMountedRef.current) return;
       const errorName = (err as Error)?.name || "";
       if (errorName === "NotAllowedError" || errorName === "PermissionDeniedError") {
         setStep("permission-denied");

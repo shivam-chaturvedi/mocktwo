@@ -323,9 +323,9 @@ export class SqliteSessionService implements SessionService {
     const now = new Date();
     const isoDate = now.toISOString();
 
-    const pulseRise = Math.floor(Math.random() * 8) + 8;
+    const pulseRise = 8 + (durationSeconds % 8);
     const peakPulse = 72 + pulseRise;
-    const recoverySec = Math.floor(Math.random() * 12) + 12;
+    const recoverySec = 12 + (durationSeconds % 12);
     const compCalc = calculateComposureScore({
       pulseRiseVsBaseline: pulseRise,
       peakPulse,
