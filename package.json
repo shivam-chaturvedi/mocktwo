@@ -15,17 +15,41 @@
   "build": {
     "appId": "com.mocktwo.desktop",
     "productName": "mocktwo",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*"
+    ],
     "asarUnpack": [
       "**/node_modules/better-sqlite3/**"
     ],
     "mac": {
+      "category": "public.app-category.productivity",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.inherit.plist",
       "target": [
-        "dmg"
+        "dmg",
+        "zip"
       ],
       "extendInfo": {
-        "NSCameraUsageDescription": "mocktwo uses your camera to measure optical pulse, breathing and HRV vitals locally on your device.",
-        "NSMicrophoneUsageDescription": "mocktwo uses your microphone for conversational rehearsal."
+        "NSCameraUsageDescription": "mocktwo uses your camera to measure optical blood volume pulse and facial composure signals during rehearsal simulations. Video is analyzed locally in real time and is never recorded, stored, or transmitted.",
+        "NSMicrophoneUsageDescription": "mocktwo uses your microphone for real-time speech and tone analysis during rehearsal simulations. Audio is processed locally on your device."
       }
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
     }
   },
   "dependencies": {
