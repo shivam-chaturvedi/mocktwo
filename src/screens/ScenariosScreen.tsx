@@ -48,6 +48,7 @@ export const ScenariosScreen: React.FC = () => {
   // Selected items for split view
   const [selectedScenarioId, setSelectedScenarioId] = useState<string>("");
   const [selectedPersonaId, setSelectedPersonaId] = useState<string>("");
+  const [scenarioToDelete, setScenarioToDelete] = useState<PracticeScenario | null>(null);
 
   // Close category popover on click outside
   useEffect(() => {
@@ -963,7 +964,7 @@ export const ScenariosScreen: React.FC = () => {
                       <span>Duplicate</span>
                     </button>
                     <button
-                      onClick={() => deleteScenario(activeScenario.id)}
+                      onClick={() => setScenarioToDelete(activeScenario)}
                       className="focus-ring hover-subtle"
                       style={{
                         padding: "6px 12px",
@@ -1004,6 +1005,96 @@ export const ScenariosScreen: React.FC = () => {
                 </span>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {scenarioToDelete && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            backgroundColor: "rgba(0, 0, 0, 0.65)",
+            backdropFilter: "blur(4px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+            padding: "20px",
+          }}
+          onClick={() => setScenarioToDelete(null)}
+        >
+          <div
+            style={{
+              backgroundColor: "var(--bg-card)",
+              border: "1px solid var(--separator)",
+              borderRadius: "var(--radius-md)",
+              padding: "22px",
+              maxWidth: "400px",
+              width: "100%",
+              boxShadow: "0 12px 36px rgba(0, 0, 0, 0.4)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px" }}>
+              <div
+                style={{
+                  width: "32px",
+                  height: "32px",
+                  borderRadius: "50%",
+                  backgroundColor: "rgba(239, 68, 68, 0.15)",
+                  display: "grid",
+                  placeItems: "center",
+                  color: "var(--accent-red)",
+                }}
+              >
+                <Trash2 size={16} />
+              </div>
+              <div style={{ fontSize: "15px", fontWeight: 650, color: "var(--text-primary)" }}>
+                Delete Practice Scenario?
+              </div>
+            </div>
+            <p style={{ fontSize: "12.5px", color: "var(--text-secondary)", lineHeight: 1.5, margin: "0 0 18px 0" }}>
+              Are you sure you want to delete &ldquo;{scenarioToDelete.title}&rdquo;? This scenario will be permanently removed from your personal library.
+            </p>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
+              <button
+                type="button"
+                onClick={() => setScenarioToDelete(null)}
+                className="mac-btn focus-ring"
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: "var(--radius-sm)",
+                  backgroundColor: "var(--bg-control)",
+                  border: "1px solid var(--separator)",
+                  fontSize: "12.5px",
+                  color: "var(--text-primary)",
+                  cursor: "pointer",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  deleteScenario(scenarioToDelete.id);
+                  setScenarioToDelete(null);
+                }}
+                className="mac-btn focus-ring"
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: "var(--radius-sm)",
+                  backgroundColor: "#ef4444",
+                  border: "none",
+                  fontSize: "12.5px",
+                  fontWeight: 600,
+                  color: "#ffffff",
+                  cursor: "pointer",
+                }}
+              >
+                Delete Scenario
+              </button>
+            </div>
           </div>
         </div>
       )}

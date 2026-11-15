@@ -16,6 +16,7 @@ import {
   Activity,
   Clock,
   FileText,
+  Trash2,
 } from "lucide-react";
 import {
   getComposureTier,
@@ -35,6 +36,7 @@ export const RecordingsScreen: React.FC = () => {
     openBriefing,
     scenarios,
     addRecordingNote,
+    deleteRecording,
     showToast,
     baseline,
   } = useApp();
@@ -49,10 +51,20 @@ export const RecordingsScreen: React.FC = () => {
   const [isInspectorOpen, setIsInspectorOpen] = useState(true);
   const [inspectorTab, setInspectorTab] = useState<"coaching" | "analytics">("coaching");
   const [noteInput, setNoteInput] = useState("");
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const playTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const activeRecording = selectedRecording || (recordings.length > 0 ? recordings[0] : null);
+
+  const lastRecordingIdRef = useRef<string | null>(activeRecording?.id || null);
+  useEffect(() => {
+    if (activeRecording?.id !== lastRecordingIdRef.current) {
+      lastRecordingIdRef.current = activeRecording?.id || null;
+      setIsPlaying(false);
+      setPlaybackTime(0);
+    }
+  }, [activeRecording?.id]);
 
   const handleSelectRecording = (rec: Recording | null) => {
     setIsPlaying(false);
@@ -337,6 +349,27 @@ export const RecordingsScreen: React.FC = () => {
               <span>Practice Again</span>
             </button>
             <button
+              onClick={() => setShowDeleteConfirm(true)}
+              aria-label="Delete Recording"
+              title="Delete Recording"
+              className="focus-ring hover-subtle"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+                padding: "4px 8px",
+                borderRadius: "var(--radius-sm)",
+                backgroundColor: "var(--bg-control)",
+                color: "var(--accent-red)",
+                border: "1px solid var(--separator)",
+                fontSize: "12px",
+                cursor: "pointer",
+              }}
+            >
+              <Trash2 size={13} />
+              <span>Delete</span>
+            </button>
+            <button
               onClick={() => setIsInspectorOpen((prev) => !prev)}
               aria-label="Toggle Inspector"
               title="Toggle Inspector (⌥⌘0)"
@@ -352,6 +385,97 @@ export const RecordingsScreen: React.FC = () => {
             </button>
           </div>
         </div>
+
+        {showDeleteConfirm && (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              backgroundColor: "rgba(0, 0, 0, 0.65)",
+              backdropFilter: "blur(4px)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 9999,
+              padding: "20px",
+            }}
+            onClick={() => setShowDeleteConfirm(false)}
+          >
+            <div
+              style={{
+                backgroundColor: "var(--bg-card)",
+                border: "1px solid var(--separator)",
+                borderRadius: "var(--radius-md)",
+                padding: "22px",
+                maxWidth: "400px",
+                width: "100%",
+                boxShadow: "0 12px 36px rgba(0, 0, 0, 0.4)",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px" }}>
+                <div
+                  style={{
+                    width: "32px",
+                    height: "32px",
+                    borderRadius: "50%",
+                    backgroundColor: "rgba(239, 68, 68, 0.15)",
+                    display: "grid",
+                    placeItems: "center",
+                    color: "var(--accent-red)",
+                  }}
+                >
+                  <Trash2 size={16} />
+                </div>
+                <div style={{ fontSize: "15px", fontWeight: 650, color: "var(--text-primary)" }}>
+                  Delete Rehearsal Recording?
+                </div>
+              </div>
+              <p style={{ fontSize: "12.5px", color: "var(--text-secondary)", lineHeight: 1.5, margin: "0 0 18px 0" }}>
+                Are you sure you want to delete this recording for &ldquo;{activeRecording.scenarioTitle}&rdquo;? Audio files and physiological telemetry debriefs will be permanently removed.
+              </p>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="mac-btn focus-ring"
+                  style={{
+                    padding: "6px 14px",
+                    borderRadius: "var(--radius-sm)",
+                    backgroundColor: "var(--bg-control)",
+                    border: "1px solid var(--separator)",
+                    fontSize: "12.5px",
+                    color: "var(--text-primary)",
+                    cursor: "pointer",
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    deleteRecording(activeRecording.id);
+                    setShowDeleteConfirm(false);
+                    handleCloseDebrief();
+                  }}
+                  className="mac-btn focus-ring"
+                  style={{
+                    padding: "6px 14px",
+                    borderRadius: "var(--radius-sm)",
+                    backgroundColor: "#ef4444",
+                    border: "none",
+                    fontSize: "12.5px",
+                    fontWeight: 600,
+                    color: "#ffffff",
+                    cursor: "pointer",
+                  }}
+                >
+                  Delete Recording
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Master Detail Grid (No outer scrolling!) */}
         <div
