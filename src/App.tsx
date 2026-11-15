@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { AppProvider, useApp } from "./context";
 import { AppLayout } from "./components/layout/AppLayout";
 import { SignInScreen } from "./screens/SignInScreen";
@@ -8,6 +8,7 @@ import { RecordingsScreen } from "./screens/RecordingsScreen";
 import { ProgressScreen } from "./screens/ProgressScreen";
 import { LiveSimulationScreen } from "./screens/LiveSimulationScreen";
 import { ProcessingScreen } from "./screens/ProcessingScreen";
+import { ErrorBoundary } from "./components/common/ErrorBoundary";
 
 const MainContent: React.FC = () => {
   const { currentScreen, isAuthenticated } = useApp();
@@ -35,12 +36,41 @@ const MainContent: React.FC = () => {
 };
 
 export function App() {
+  // Global window-level crash and unhandled rejection guards
+  useEffect(() => {
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      console.error("[mocktwo] Unhandled promise rejection:", event.reason);
+      // Prevent browser default popups or crashes
+      event.preventDefault();
+    };
+
+    const handleWindowError = (
+      event: Event | string,
+      source?: string,
+      lineno?: number,
+      colno?: number,
+      error?: Error
+    ) => {
+      console.error("[mocktwo] Window error caught:", { event, source, lineno, colno, error });
+    };
+
+    window.addEventListener("unhandledrejection", handleUnhandledRejection);
+    window.onerror = handleWindowError;
+
+    return () => {
+      window.removeEventListener("unhandledrejection", handleUnhandledRejection);
+      window.onerror = null;
+    };
+  }, []);
+
   return (
-    <AppProvider>
-      <AppLayout>
-        <MainContent />
-      </AppLayout>
-    </AppProvider>
+    <ErrorBoundary fallbackTitle="Application encountered an error">
+      <AppProvider>
+        <AppLayout>
+          <MainContent />
+        </AppLayout>
+      </AppProvider>
+    </ErrorBoundary>
   );
 }
 

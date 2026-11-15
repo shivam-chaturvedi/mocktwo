@@ -10,22 +10,26 @@ import {
   Plus,
   Zap,
   UserPlus,
+  User,
   FilePlus,
-  ChevronDown
+  ChevronDown,
+  Database,
 } from "lucide-react";
 
 export const TitleBar: React.FC = () => {
   const {
     currentScreen,
     navigateTo,
-    employee,
+    user,
     openSettings,
     openSearch,
     openSignOutConfirm,
     openStudio,
     openQuickPractice,
     isDevMode,
-    toggleDevMode
+    toggleDevMode,
+    demoDataEnabled,
+    toggleDemoData,
   } = useApp();
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -63,11 +67,11 @@ export const TitleBar: React.FC = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isMenuOpen, isNewMenuOpen]);
 
-  const tabs: { id: "today" | "scenarios" | "recordings" | "progress"; label: string }[] = [
-    { id: "today", label: "Today" },
+  const tabs: { id: "home" | "scenarios" | "recordings" | "progress"; label: string }[] = [
+    { id: "home", label: "Home" },
     { id: "scenarios", label: "Scenarios" },
     { id: "recordings", label: "Recordings" },
-    { id: "progress", label: "Progress" }
+    { id: "progress", label: "Progress" },
   ];
 
   return (
@@ -83,7 +87,7 @@ export const TitleBar: React.FC = () => {
         borderBottom: "1px solid var(--separator)",
         backgroundColor: "var(--bg-window)",
         zIndex: 50,
-        userSelect: "none"
+        userSelect: "none",
       }}
     >
       {/* Left: Traffic light clearance & mocktwo branding */}
@@ -93,7 +97,7 @@ export const TitleBar: React.FC = () => {
           display: "flex",
           alignItems: "center",
           gap: "10px",
-          paddingLeft: "72px"
+          paddingLeft: "72px",
         }}
       >
         <div
@@ -106,35 +110,26 @@ export const TitleBar: React.FC = () => {
             placeItems: "center",
             color: "#ffffff",
             boxShadow: "0 1px 3px rgba(10, 132, 255, 0.35)",
-            flexShrink: 0
+            flexShrink: 0,
           }}
         >
           <Layers size={13} strokeWidth={2.2} />
         </div>
-        <div style={{ display: "flex", alignItems: "baseline", gap: "8px" }}>
+        <div style={{ display: "flex", alignItems: "center" }}>
           <span
             style={{
               fontWeight: 650,
               fontSize: "13.5px",
               letterSpacing: "-0.015em",
-              color: "var(--text-primary)"
+              color: "var(--text-primary)",
             }}
           >
             mocktwo
           </span>
-          <span
-            style={{
-              fontSize: "11.5px",
-              color: "var(--text-secondary)",
-              fontWeight: 450
-            }}
-          >
-            {employee.property}
-          </span>
         </div>
       </div>
 
-      {/* Center: Apple-style Segmented Control (Today | Scenarios | Recordings | Progress) */}
+      {/* Center: Apple-style Segmented Control (Home | Scenarios | Recordings | Progress) */}
       <nav
         className="no-drag"
         style={{
@@ -144,15 +139,17 @@ export const TitleBar: React.FC = () => {
           backgroundColor: "var(--bg-control)",
           padding: "3px",
           borderRadius: "var(--radius-md)",
-          border: "1px solid var(--separator)"
+          border: "1px solid var(--separator)",
         }}
       >
         {tabs.map((tab) => {
-          const isActive = currentScreen === tab.id;
+          const isActive =
+            currentScreen === tab.id || (tab.id === "home" && currentScreen === "today");
           return (
             <button
               key={tab.id}
               onClick={() => navigateTo(tab.id)}
+              className="focus-ring"
               style={{
                 padding: "4px 16px",
                 borderRadius: "var(--radius-sm)",
@@ -161,7 +158,8 @@ export const TitleBar: React.FC = () => {
                 color: isActive ? "var(--text-primary)" : "var(--text-secondary)",
                 backgroundColor: isActive ? "var(--bg-elevated)" : "transparent",
                 boxShadow: isActive ? "0 1px 3px rgba(0, 0, 0, 0.3)" : "none",
-                transition: "all 0.12s cubic-bezier(0.16, 1, 0.3, 1)"
+                transition: "all 0.12s cubic-bezier(0.16, 1, 0.3, 1)",
+                outline: "none",
               }}
             >
               {tab.label}
@@ -177,7 +175,7 @@ export const TitleBar: React.FC = () => {
           display: "flex",
           alignItems: "center",
           gap: "8px",
-          position: "relative"
+          position: "relative",
         }}
       >
         {/* ＋ New Menu */}
@@ -186,7 +184,8 @@ export const TitleBar: React.FC = () => {
             ref={newButtonRef}
             onClick={() => setIsNewMenuOpen((prev) => !prev)}
             aria-label="New creation menu"
-            title="Create Scenario or Guest (⌘N)"
+            title="Create Scenario or Persona (⌘N)"
+            className="focus-ring"
             style={{
               display: "inline-flex",
               alignItems: "center",
@@ -198,7 +197,7 @@ export const TitleBar: React.FC = () => {
               fontSize: "12px",
               fontWeight: 500,
               color: "var(--text-primary)",
-              transition: "all 0.12s ease"
+              transition: "all 0.12s ease",
             }}
           >
             <Plus size={13} strokeWidth={2.2} />
@@ -219,7 +218,7 @@ export const TitleBar: React.FC = () => {
                 boxShadow: "var(--shadow-dropdown)",
                 border: "1px solid var(--separator)",
                 padding: "5px",
-                zIndex: 100
+                zIndex: 100,
               }}
             >
               <button
@@ -236,7 +235,7 @@ export const TitleBar: React.FC = () => {
                   borderRadius: "var(--radius-sm)",
                   fontSize: "12.5px",
                   color: "var(--text-primary)",
-                  textAlign: "left"
+                  textAlign: "left",
                 }}
                 className="hover-subtle"
               >
@@ -252,7 +251,7 @@ export const TitleBar: React.FC = () => {
               <button
                 onClick={() => {
                   setIsNewMenuOpen(false);
-                  openStudio("guest");
+                  openStudio("persona");
                 }}
                 style={{
                   width: "100%",
@@ -263,13 +262,13 @@ export const TitleBar: React.FC = () => {
                   borderRadius: "var(--radius-sm)",
                   fontSize: "12.5px",
                   color: "var(--text-primary)",
-                  textAlign: "left"
+                  textAlign: "left",
                 }}
                 className="hover-subtle"
               >
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                   <UserPlus size={14} style={{ color: "var(--accent-green)" }} />
-                  <span>New Guest</span>
+                  <span>New Persona</span>
                 </div>
                 <span style={{ fontSize: "10.5px", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)" }}>
                   ⌘⇧N
@@ -284,6 +283,7 @@ export const TitleBar: React.FC = () => {
           onClick={openQuickPractice}
           aria-label="Quick Practice"
           title="Quick Practice Picker (⌘⇧P)"
+          className="hover-subtle focus-ring"
           style={{
             display: "inline-flex",
             alignItems: "center",
@@ -295,9 +295,8 @@ export const TitleBar: React.FC = () => {
             fontSize: "12px",
             fontWeight: 500,
             color: "var(--accent-orange)",
-            transition: "all 0.12s ease"
+            transition: "all 0.12s ease",
           }}
-          className="hover-subtle"
         >
           <Zap size={13} strokeWidth={2.2} fill="var(--accent-orange)" />
           <span style={{ color: "var(--text-primary)" }}>Quick Practice</span>
@@ -308,6 +307,7 @@ export const TitleBar: React.FC = () => {
           onClick={openSearch}
           aria-label="Search scenarios"
           title="Search scenarios (⌘K)"
+          className="hover-subtle focus-ring"
           style={{
             display: "inline-flex",
             alignItems: "center",
@@ -318,9 +318,8 @@ export const TitleBar: React.FC = () => {
             borderRadius: "var(--radius-sm)",
             fontSize: "11.5px",
             color: "var(--text-secondary)",
-            transition: "all 0.12s ease"
+            transition: "all 0.12s ease",
           }}
-          className="hover-subtle"
         >
           <Search size={13} strokeWidth={1.8} />
           <span
@@ -331,7 +330,7 @@ export const TitleBar: React.FC = () => {
               padding: "1px 4px",
               borderRadius: "4px",
               border: "1px solid var(--separator)",
-              color: "var(--text-tertiary)"
+              color: "var(--text-tertiary)",
             }}
           >
             ⌘K
@@ -343,6 +342,7 @@ export const TitleBar: React.FC = () => {
           ref={avatarButtonRef}
           onClick={() => setIsMenuOpen((prev) => !prev)}
           aria-label="Account menu"
+          className="focus-ring"
           style={{
             width: "30px",
             height: "30px",
@@ -356,14 +356,18 @@ export const TitleBar: React.FC = () => {
             fontWeight: 650,
             color: "var(--text-primary)",
             cursor: "pointer",
-            transition: "all 0.12s ease"
+            transition: "all 0.12s ease",
           }}
         >
-          {employee.name
-            .split(" ")
-            .map((n) => n[0])
-            .join("")
-            .slice(0, 2)}
+          {!user.name || user.name.trim() === "" || user.name === "Learner" ? (
+            <User size={13} strokeWidth={2} style={{ color: "var(--text-secondary)" }} />
+          ) : (
+            user.name
+              .split(" ")
+              .map((n) => n[0])
+              .join("")
+              .slice(0, 2)
+          )}
         </button>
 
         {/* Account Menu Popover */}
@@ -380,7 +384,7 @@ export const TitleBar: React.FC = () => {
               boxShadow: "var(--shadow-dropdown)",
               border: "1px solid var(--separator)",
               padding: "6px",
-              zIndex: 100
+              zIndex: 100,
             }}
           >
             {/* User Identity Header */}
@@ -388,7 +392,7 @@ export const TitleBar: React.FC = () => {
               style={{
                 padding: "8px 10px 10px 10px",
                 borderBottom: "1px solid var(--separator)",
-                marginBottom: "5px"
+                marginBottom: "5px",
               }}
             >
               <div
@@ -396,29 +400,29 @@ export const TitleBar: React.FC = () => {
                   fontSize: "13px",
                   fontWeight: 600,
                   color: "var(--text-primary)",
-                  lineHeight: 1.3
+                  lineHeight: 1.3,
                 }}
               >
-                {employee.name}
+                {user.name}
               </div>
               <div
                 style={{
                   fontSize: "11.5px",
                   color: "var(--text-secondary)",
-                  marginTop: "1px"
+                  marginTop: "1px",
                 }}
               >
-                {employee.role}
+                {user.role}
               </div>
               <div
                 style={{
                   fontSize: "11px",
                   color: "var(--text-tertiary)",
                   marginTop: "2px",
-                  fontFamily: "var(--font-mono)"
+                  fontFamily: "var(--font-mono)",
                 }}
               >
-                {employee.email}
+                {user.email}
               </div>
             </div>
 
@@ -437,7 +441,7 @@ export const TitleBar: React.FC = () => {
                 borderRadius: "var(--radius-sm)",
                 fontSize: "12.5px",
                 color: "var(--text-primary)",
-                textAlign: "left"
+                textAlign: "left",
               }}
               className="hover-subtle"
             >
@@ -449,7 +453,7 @@ export const TitleBar: React.FC = () => {
                 style={{
                   fontSize: "10.5px",
                   color: "var(--text-tertiary)",
-                  fontFamily: "var(--font-mono)"
+                  fontFamily: "var(--font-mono)",
                 }}
               >
                 ⌘,
@@ -470,7 +474,7 @@ export const TitleBar: React.FC = () => {
                 borderRadius: "var(--radius-sm)",
                 fontSize: "12.5px",
                 color: "var(--text-primary)",
-                textAlign: "left"
+                textAlign: "left",
               }}
               className="hover-subtle"
             >
@@ -481,11 +485,42 @@ export const TitleBar: React.FC = () => {
               {isDevMode && <Check size={13} style={{ color: "var(--accent-orange)" }} />}
             </button>
 
+            {/* Demo Data Toggle (under isDevMode) */}
+            {isDevMode && (
+              <button
+                onClick={() => {
+                  toggleDemoData();
+                }}
+                style={{
+                  width: "100%",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "6px 10px",
+                  borderRadius: "var(--radius-sm)",
+                  fontSize: "12.5px",
+                  color: "var(--text-primary)",
+                  textAlign: "left",
+                  backgroundColor: demoDataEnabled ? "transparent" : "rgba(255, 159, 10, 0.1)",
+                }}
+                className="hover-subtle"
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <Database
+                    size={14}
+                    style={{ color: demoDataEnabled ? "var(--accent-green)" : "var(--accent-orange)" }}
+                  />
+                  <span>Demo data: {demoDataEnabled ? "On" : "Off (0 sessions)"}</span>
+                </div>
+                {demoDataEnabled && <Check size={13} style={{ color: "var(--accent-green)" }} />}
+              </button>
+            )}
+
             <div
               style={{
                 height: "1px",
                 backgroundColor: "var(--separator)",
-                margin: "4px 0"
+                margin: "4px 0",
               }}
             />
 
@@ -504,7 +539,7 @@ export const TitleBar: React.FC = () => {
                 borderRadius: "var(--radius-sm)",
                 fontSize: "12.5px",
                 color: "var(--accent-red)",
-                textAlign: "left"
+                textAlign: "left",
               }}
               className="hover-subtle"
             >

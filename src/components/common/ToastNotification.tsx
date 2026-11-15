@@ -38,11 +38,12 @@ export const ToastNotification: React.FC = () => {
         {toastAction && (
           <button
             onClick={toastAction.onClick}
+            className="toast-action-btn"
             style={{
               display: "inline-flex",
               alignItems: "center",
               gap: "4px",
-              padding: "3px 10px",
+              padding: "4px 11px",
               borderRadius: "var(--radius-full)",
               backgroundColor: "var(--accent-blue)",
               color: "#ffffff",
@@ -50,7 +51,8 @@ export const ToastNotification: React.FC = () => {
               fontWeight: 600,
               border: "none",
               cursor: "pointer",
-              marginLeft: "4px"
+              marginLeft: "4px",
+              transition: "background-color 0.15s ease, transform 0.1s ease"
             }}
           >
             <span>{toastAction.label}</span>

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useApp } from "../../context";
-import { generateScenarioDraft } from "../../data/mockData";
+import { serviceRegistry } from "../../services/api";
 import {
   X,
   Wand2,
@@ -9,9 +9,11 @@ import {
   RotateCw,
   Check,
   User,
-  Volume2
+  Volume2,
+  FilePlus,
+  AlertCircle,
 } from "lucide-react";
-import type { GuestScenario, Guest, InteractionType, DifficultyLevel } from "../../types";
+import type { PracticeScenario, Persona, InteractionType, DifficultyLevel, SeniorityLevel } from "../../types";
 
 export const StudioSheet: React.FC = () => {
   const {
@@ -19,64 +21,104 @@ export const StudioSheet: React.FC = () => {
     studioInitialTab,
     closeStudio,
     addScenario,
-    addGuest,
-    guests
+    addPersona,
+    personas,
   } = useApp();
 
-  const [studioMode, setStudioMode] = useState<"describe" | "manual" | "guest">(
-    studioInitialTab === "guest" ? "guest" : "describe"
+  const [studioMode, setStudioMode] = useState<"describe" | "manual" | "persona">(
+    studioInitialTab === "guest" || studioInitialTab === "persona" ? "persona" : "describe"
   );
 
   // Describe Mode State
   const [promptText, setPromptText] = useState("");
   const [attachedDoc, setAttachedDoc] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [generatedDraft, setGeneratedDraft] = useState<Partial<GuestScenario> | null>(null);
+  const [generationError, setGenerationError] = useState<string | null>(null);
+  const [generatedDraft, setGeneratedDraft] = useState<Partial<PracticeScenario> | null>(null);
   const [isDictating, setIsDictating] = useState(false);
 
   // Manual Mode State
   const [manualStep, setManualStep] = useState<1 | 2 | 3 | 4>(1);
-  const [manualGuestId, setManualGuestId] = useState(guests[0]?.id || "");
+  const [manualPersonaId, setManualPersonaId] = useState(personas[0]?.id || "");
   const [manualTitle, setManualTitle] = useState("");
-  const [manualCategory, setManualCategory] = useState<InteractionType>("Front Desk");
+  const [manualCategory, setManualCategory] = useState<InteractionType>("Interviews");
   const [manualDifficulty, setManualDifficulty] = useState<DifficultyLevel>("Intermediate");
   const [manualDuration, setManualDuration] = useState(3);
   const [manualContext, setManualContext] = useState("");
   const [manualObjectives, setManualObjectives] = useState<string[]>([
-    "De-escalate initial guest frustration warmly",
-    "Offer immediate luxury alternative amenities"
+    "Acknowledge personal accountability without defensiveness",
+    "Maintain steady breathing cadence under challenging questions",
   ]);
 
-  // Guest Editor State
-  const [guestName, setGuestName] = useState("");
-  const [guestTitle, setGuestTitle] = useState("");
-  const [guestRoom, setGuestRoom] = useState("Suite 1204");
-  const [guestTier, setGuestTier] = useState<Guest["loyaltyTier"]>("Platinum Premier");
-  const [guestLanguage, setGuestLanguage] = useState("English (US)");
-  const [guestTraits, setGuestTraits] = useState<string[]>(["Agitated", "Impatient"]);
-  const [guestVoice, setGuestVoice] = useState("Echo (Direct American)");
-  const [guestBackstory, setGuestBackstory] = useState("");
-  const [guestNotes, setGuestNotes] = useState("");
+  // Persona Editor State
+  const [personaName, setPersonaName] = useState("");
+  const [personaTitle, setPersonaTitle] = useState("");
+  const [personaSetting, setPersonaSetting] = useState("Executive Boardroom");
+  const [personaSeniorty, setPersonaSeniorty] = useState<SeniorityLevel>("Senior Executive");
+  const personaLanguage = "English (US)";
+  const [personaTraits, setPersonaTraits] = useState<string[]>(["Skeptical", "Direct"]);
+  const [personaVoice, setPersonaVoice] = useState("Echo (Direct American)");
+  const [personaBackstory, setPersonaBackstory] = useState("");
+  const [personaNotes, setPersonaNotes] = useState("");
+  const [personaPressure, setPersonaPressure] = useState<"Moderate" | "High" | "Intense">("High");
   const [isPlayingVoice, setIsPlayingVoice] = useState(false);
+
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && isStudioOpen) {
+        closeStudio();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isStudioOpen, closeStudio]);
 
   if (!isStudioOpen) return null;
 
+  const categories: InteractionType[] = [
+    "Interviews",
+    "Sales & Pitches",
+    "Presentations",
+    "Negotiation",
+    "Difficult Conversations",
+    "Customer Service",
+    "Hospitality",
+  ];
+
+  // 4 Universal AI Describe Templates
   const templates = [
-    { label: "Late Check-in Friction", prompt: "A Diamond member arrives at 01:30 AM after a delayed flight and finds their reserved room has maintenance issues." },
-    { label: "Room Not Ready", prompt: "An international traveler arrives at 11:00 AM before official check-in time and needs a place to shower and change for a client summit." },
-    { label: "Billing Dispute", prompt: "A corporate executive disputes daily minibar and parking charges on checkout, requesting full adjustment." },
-    { label: "VIP Request", prompt: "A VIP diplomatic patron requests immediate private security coordination and bespoke room placement away from public elevators." },
-    { label: "Noise Complaint", prompt: "An adjoining guest reports loud music from a neighboring suite at 23:00 and demands an immediate room swap." },
-    { label: "Lost Luggage", prompt: "A guest arrives without baggage due to airline mishandling and has an urgent black-tie dinner in three hours." },
-    { label: "Upsell Opportunity", prompt: "A celebratory anniversary couple asks about standard room features; explore presenting a penthouse suite enhancement." }
+    {
+      label: "Tough Interview Question",
+      prompt: "A senior hiring committee asks you to explain a high-stakes failure, probing who was at fault and what you personally learned.",
+    },
+    {
+      label: "Pricing Objection",
+      prompt: "An aggressive procurement director demands a 30% discount 48 hours before contract sign-off or threatens to freeze onboarding.",
+    },
+    {
+      label: "Skeptical Executive Q&A",
+      prompt: "An impatient executive partner interrupts 30 seconds into your deck demanding return metrics and payback justification.",
+    },
+    {
+      label: "Difficult Performance Feedback",
+      prompt: "A defensive colleague pushes back on critical delivery milestones, claiming unrealistic deadlines and lack of engineering context.",
+    },
   ];
 
   const handleGenerate = async () => {
     if (!promptText.trim()) return;
     setIsGenerating(true);
+    setGenerationError(null);
     try {
-      const draft = await generateScenarioDraft(promptText, attachedDoc || undefined);
-      setGeneratedDraft(draft);
+      if (serviceRegistry.scenarios.generateDraft) {
+        const draft = await serviceRegistry.scenarios.generateDraft(promptText, attachedDoc || undefined);
+        setGeneratedDraft(draft);
+      } else {
+        throw new Error("AI scenario generation requires a connected mocktwo workspace backend; please create manually or connect a backend.");
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "AI scenario generation requires a connected mocktwo workspace backend; please create manually or connect a backend.";
+      setGenerationError(msg);
     } finally {
       setIsGenerating(false);
     }
@@ -84,85 +126,84 @@ export const StudioSheet: React.FC = () => {
 
   const handleSaveDescribeDraft = () => {
     if (!generatedDraft) return;
-    const finalScenario: GuestScenario = {
+    const finalScenario: PracticeScenario = {
       id: `sc-mine-${Date.now()}`,
       title: generatedDraft.title || "Custom Scenario",
-      guestName: generatedDraft.guestName || "Marcus Sterling",
-      guestId: generatedDraft.guestId || "guest-marcus",
-      roomNumber: generatedDraft.roomNumber || "Suite 1408",
-      loyaltyTier: generatedDraft.loyaltyTier || "Diamond Ambassador",
-      interactionType: generatedDraft.interactionType || "Front Desk",
+      personaName: generatedDraft.personaName || generatedDraft.guestName || "Counterpart",
+      personaId: generatedDraft.personaId || generatedDraft.guestId || "persona-custom",
+      contextSetting: generatedDraft.contextSetting || generatedDraft.roomNumber || "Executive Meeting Room",
+      seniority: generatedDraft.seniority || generatedDraft.loyaltyTier || "Senior Executive",
+      interactionType: generatedDraft.interactionType || "Interviews",
       difficulty: generatedDraft.difficulty || "Intermediate",
       durationMinutes: generatedDraft.durationMinutes || 3,
       summary: generatedDraft.summary || promptText,
       context: generatedDraft.context || "",
-      guestMood: generatedDraft.guestMood || "Direct & Firm",
-      learningObjectives: generatedDraft.learningObjectives || ["Resolve situation diplomatically"],
-      keyChallenges: generatedDraft.keyChallenges || ["High guest expectations"],
-      recommendedPhrases: generatedDraft.recommendedPhrases || ["Allow me to handle this personally."],
-      guestAvatarUrl: generatedDraft.guestAvatarUrl || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=600&auto=format&fit=crop&q=80",
-      personaSummary: generatedDraft.personaSummary || "",
+      personaMood: generatedDraft.personaMood || generatedDraft.guestMood || "Direct & Analytical",
+      learningObjectives: generatedDraft.learningObjectives || ["Maintain composure and answer directly"],
+      keyChallenges: generatedDraft.keyChallenges || ["Managing unexpected interruptions"],
+      recommendedPhrases: generatedDraft.recommendedPhrases || ["I hear your concern directly, let's address the metrics."],
+      personaAvatarUrl: generatedDraft.personaAvatarUrl || generatedDraft.guestAvatarUrl || "",
+      personaSummary: "Custom counterpart generated in Studio",
       source: "Mine",
-      submissionStatus: "Draft",
-      sopDocumentName: attachedDoc || undefined,
-      successCriteria: generatedDraft.successCriteria || ["Diplomatic resolution committed"],
-      createdAt: new Date().toISOString().split("T")[0]
+      referenceMaterialName: attachedDoc || undefined,
+      createdAt: new Date().toISOString().split("T")[0],
     };
     addScenario(finalScenario);
     closeStudio();
   };
 
   const handleSaveManualScenario = () => {
-    const matchedGuest = guests.find((g) => g.id === manualGuestId) || guests[0];
-    const finalScenario: GuestScenario = {
+    const assignedPersona = personas.find((p) => p.id === manualPersonaId) || personas[0];
+    const newScenario: PracticeScenario = {
       id: `sc-mine-${Date.now()}`,
-      title: manualTitle.trim() || `${manualCategory} Situation`,
-      guestName: matchedGuest.name,
-      guestId: matchedGuest.id,
-      roomNumber: matchedGuest.roomNumber,
-      loyaltyTier: matchedGuest.loyaltyTier,
+      title: manualTitle.trim() || "Untitled Practice Scenario",
+      personaName: assignedPersona.name,
+      personaId: assignedPersona.id,
+      contextSetting: assignedPersona.contextSetting,
+      seniority: assignedPersona.seniority,
       interactionType: manualCategory,
       difficulty: manualDifficulty,
       durationMinutes: manualDuration,
-      summary: manualContext.slice(0, 140),
+      summary: manualContext.slice(0, 140) || "Custom rehearsal scenario.",
       context: manualContext,
-      guestMood: matchedGuest.temperamentTraits.join(" & "),
-      learningObjectives: manualObjectives,
-      keyChallenges: ["Maintaining composure under policy discussion"],
-      recommendedPhrases: ["I am taking complete personal ownership of this right now."],
-      guestAvatarUrl: matchedGuest.avatarUrl || "",
-      personaSummary: matchedGuest.backstory,
+      personaMood: assignedPersona.temperamentTraits.join(" & ") || "Direct",
+      learningObjectives: manualObjectives.filter((o) => o.trim().length > 0),
+      keyChallenges: ["Maintaining steady breathing during aggressive prompts"],
+      recommendedPhrases: ["I acknowledge the core bottleneck directly."],
+      personaAvatarUrl: assignedPersona.avatarUrl || "",
+      personaSummary: `${assignedPersona.title}; values directness and unshakeable composure.`,
       source: "Mine",
-      submissionStatus: "Draft",
-      successCriteria: ["Uphold five-star luxury standards", "Deliver swift concrete resolution"],
-      createdAt: new Date().toISOString().split("T")[0]
+      createdAt: new Date().toISOString().split("T")[0],
     };
-    addScenario(finalScenario);
+    addScenario(newScenario);
     closeStudio();
   };
 
-  const handleSaveGuest = () => {
-    if (!guestName.trim()) return;
-    const newGuest: Guest = {
-      id: `guest-${Date.now()}`,
-      name: guestName.trim(),
-      monogram: guestName
+  const handleSavePersona = () => {
+    if (!personaName.trim()) return;
+    const newP: Persona = {
+      id: `persona-mine-${Date.now()}`,
+      name: personaName.trim(),
+      avatarUrl: undefined,
+      monogram: personaName
         .split(" ")
         .map((n) => n[0])
         .join("")
-        .toUpperCase()
-        .slice(0, 2),
-      title: guestTitle.trim() || "Private Patron",
-      roomNumber: guestRoom.trim() || "Suite 1204",
-      loyaltyTier: guestTier,
-      language: guestLanguage,
-      temperamentTraits: guestTraits,
-      voice: guestVoice,
-      backstory: guestBackstory.trim() || "Discerning international guest visiting The Grand Palais.",
-      communicationNotes: guestNotes.trim() || "Values proactive anticipation and flawless hospitality.",
-      scenariosCount: 0
+        .slice(0, 2)
+        .toUpperCase(),
+      title: personaTitle.trim() || "Counterpart",
+      contextSetting: personaSetting.trim() || "Panel room",
+      seniority: personaSeniorty,
+      language: personaLanguage.trim() || "English (US)",
+      temperamentTraits: personaTraits,
+      voice: personaVoice,
+      backstory: personaBackstory.trim(),
+      communicationNotes: personaNotes.trim(),
+      scenariosCount: 0,
+      pressureLevel: personaPressure,
+      source: "Mine",
     };
-    addGuest(newGuest);
+    addPersona(newP);
     closeStudio();
   };
 
@@ -171,13 +212,13 @@ export const StudioSheet: React.FC = () => {
       style={{
         position: "fixed",
         inset: 0,
-        zIndex: 1100,
-        backgroundColor: "rgba(0, 0, 0, 0.72)",
+        zIndex: 1050,
+        backgroundColor: "rgba(0, 0, 0, 0.65)",
         backdropFilter: "blur(14px)",
         WebkitBackdropFilter: "blur(14px)",
         display: "grid",
         placeItems: "center",
-        padding: "24px"
+        padding: "24px",
       }}
       onClick={closeStudio}
     >
@@ -185,36 +226,39 @@ export const StudioSheet: React.FC = () => {
         className="glass-surface animate-sheet-in"
         style={{
           width: "100%",
-          maxWidth: "960px",
-          height: "680px",
-          maxHeight: "90vh",
+          maxWidth: "920px",
+          height: "640px",
+          maxHeight: "calc(100vh - 48px)",
           borderRadius: "var(--radius-xl)",
           boxShadow: "var(--shadow-modal)",
           border: "1px solid var(--separator)",
           display: "flex",
           flexDirection: "column",
-          overflow: "hidden"
+          overflow: "hidden",
         }}
         onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
       >
-        {/* Header & Mode Switcher */}
-        <header
+        {/* Studio Sheet Header (Pinned) */}
+        <div
           style={{
-            height: "56px",
+            height: "54px",
+            flexShrink: 0,
             padding: "0 24px",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
             borderBottom: "1px solid var(--separator)",
-            backgroundColor: "rgba(42, 42, 44, 0.4)"
+            backgroundColor: "rgba(42, 42, 44, 0.4)",
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            <span style={{ fontSize: "14px", fontWeight: 650, color: "var(--text-primary)" }}>
-              Scenario & Guest Studio
+            <span style={{ fontSize: "15px", fontWeight: 650, color: "var(--text-primary)" }}>
+              Scenario & Persona Studio
             </span>
 
-            {/* Segmented Control: Describe (AI) | Manual | Guest Editor */}
+            {/* Mode Tabs */}
             <div
               style={{
                 display: "inline-flex",
@@ -223,334 +267,661 @@ export const StudioSheet: React.FC = () => {
                 backgroundColor: "var(--bg-control)",
                 padding: "2px",
                 borderRadius: "var(--radius-sm)",
-                border: "1px solid var(--separator)"
+                border: "1px solid var(--separator)",
               }}
             >
               <button
                 onClick={() => setStudioMode("describe")}
+                className="focus-ring"
                 style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "5px",
-                  padding: "4px 12px",
+                  padding: "4px 10px",
                   borderRadius: "var(--radius-xs)",
                   fontSize: "12px",
                   fontWeight: studioMode === "describe" ? 600 : 450,
                   color: studioMode === "describe" ? "var(--text-primary)" : "var(--text-secondary)",
                   backgroundColor: studioMode === "describe" ? "var(--bg-elevated)" : "transparent",
-                  border: "none",
-                  cursor: "pointer"
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "5px",
                 }}
               >
-                <Wand2 size={12} style={{ color: "var(--accent-blue)" }} />
+                <Wand2 size={12} style={{ color: "var(--accent-purple)" }} />
                 <span>Describe (AI)</span>
               </button>
-
               <button
                 onClick={() => setStudioMode("manual")}
+                className="focus-ring"
                 style={{
-                  padding: "4px 12px",
+                  padding: "4px 10px",
                   borderRadius: "var(--radius-xs)",
                   fontSize: "12px",
                   fontWeight: studioMode === "manual" ? 600 : 450,
                   color: studioMode === "manual" ? "var(--text-primary)" : "var(--text-secondary)",
                   backgroundColor: studioMode === "manual" ? "var(--bg-elevated)" : "transparent",
-                  border: "none",
-                  cursor: "pointer"
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "5px",
                 }}
               >
-                Manual Form
+                <FilePlus size={12} style={{ color: "var(--accent-blue)" }} />
+                <span>Manual Builder</span>
               </button>
-
               <button
-                onClick={() => setStudioMode("guest")}
+                onClick={() => setStudioMode("persona")}
+                className="focus-ring"
                 style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "4px",
-                  padding: "4px 12px",
+                  padding: "4px 10px",
                   borderRadius: "var(--radius-xs)",
                   fontSize: "12px",
-                  fontWeight: studioMode === "guest" ? 600 : 450,
-                  color: studioMode === "guest" ? "var(--text-primary)" : "var(--text-secondary)",
-                  backgroundColor: studioMode === "guest" ? "var(--bg-elevated)" : "transparent",
-                  border: "none",
-                  cursor: "pointer"
+                  fontWeight: studioMode === "persona" ? 600 : 450,
+                  color: studioMode === "persona" ? "var(--text-primary)" : "var(--text-secondary)",
+                  backgroundColor: studioMode === "persona" ? "var(--bg-elevated)" : "transparent",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "5px",
                 }}
               >
                 <User size={12} style={{ color: "var(--accent-green)" }} />
-                <span>Guest Editor</span>
+                <span>Persona Editor</span>
               </button>
             </div>
           </div>
 
           <button
             onClick={closeStudio}
+            aria-label="Close"
+            className="hover-subtle focus-ring"
             style={{
-              width: "28px",
-              height: "28px",
-              borderRadius: "50%",
-              background: "none",
-              border: "none",
-              color: "var(--text-secondary)",
-              display: "grid",
-              placeItems: "center",
-              cursor: "pointer"
+              color: "var(--text-tertiary)",
+              padding: "4px",
+              borderRadius: "var(--radius-sm)",
             }}
-            className="hover-subtle"
           >
             <X size={16} />
           </button>
-        </header>
+        </div>
 
-        {/* Studio Body */}
+        {/* Studio Sheet Body */}
         <div style={{ flex: 1, overflowY: "auto", padding: "24px 32px" }}>
           {/* ============================================================ */}
-          {/* DESCRIBE (AI-ASSISTED) MODE */}
+          {/* DESCRIBE (AI) MODE */}
           {/* ============================================================ */}
           {studioMode === "describe" && (
-            <div style={{ maxWidth: "880px", margin: "0 auto" }}>
-              {!generatedDraft ? (
-                <>
-                  <div style={{ marginBottom: "16px" }}>
-                    <label style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", display: "block", marginBottom: "6px" }}>
-                      Describe the situation in a few sentences…
-                    </label>
-                    <div
-                      style={{
-                        position: "relative",
-                        backgroundColor: "var(--bg-control)",
-                        border: "1px solid var(--separator)",
-                        borderRadius: "var(--radius-lg)",
-                        overflow: "hidden"
-                      }}
-                    >
-                      <textarea
-                        rows={4}
-                        placeholder="E.g., A Diamond member arrives at midnight after a cancelled flight. Their assigned executive suite has a faulty thermostat, and standard suites are sold out..."
-                        value={promptText}
-                        onChange={(e) => setPromptText(e.target.value)}
-                        style={{
-                          width: "100%",
-                          padding: "14px 16px",
-                          background: "none",
-                          border: "none",
-                          outline: "none",
-                          color: "var(--text-primary)",
-                          fontSize: "13.5px",
-                          lineHeight: 1.5,
-                          resize: "none"
-                        }}
-                      />
+            <div style={{ maxWidth: "720px", margin: "0 auto" }}>
+              <div style={{ marginBottom: "14px" }}>
+                <label style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)" }}>
+                  Describe the Situation
+                </label>
+                <p style={{ fontSize: "12px", color: "var(--text-secondary)", marginTop: "2px" }}>
+                  Write a scenario in plain language or select an AI template. The studio will synthesize objectives,
+                  objections, and counterpart traits.
+                </p>
+              </div>
 
-                      {/* Bottom action toolbar inside textarea */}
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          padding: "8px 14px",
-                          borderTop: "1px solid var(--separator)",
-                          backgroundColor: "rgba(30, 30, 32, 0.4)"
-                        }}
-                      >
-                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                          {/* Dictation Simulation Button */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setIsDictating((prev) => !prev);
-                              if (!isDictating) {
-                                setPromptText((prev) => prev + " Guest is demanding immediate suite upgrade and valet luggage delivery.");
-                              }
-                            }}
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: "5px",
-                              fontSize: "12px",
-                              color: isDictating ? "var(--accent-red)" : "var(--text-secondary)",
-                              background: "none",
-                              border: "none",
-                              cursor: "pointer"
-                            }}
-                          >
-                            <Mic size={14} />
-                            <span>{isDictating ? "Listening…" : "Dictate"}</span>
-                          </button>
+              {/* Quick Template Buttons */}
+              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "12px" }}>
+                {templates.map((tpl) => (
+                  <button
+                    key={tpl.label}
+                    onClick={() => setPromptText(tpl.prompt)}
+                    className="hover-subtle focus-ring"
+                    style={{
+                      fontSize: "11px",
+                      padding: "4px 10px",
+                      borderRadius: "var(--radius-full)",
+                      backgroundColor: "var(--bg-control)",
+                      border: "1px solid var(--separator)",
+                      color: "var(--text-primary)",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {tpl.label}
+                  </button>
+                ))}
+              </div>
 
-                          {/* SOP Attachment Button */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const doc = prompt("Enter SOP/Policy Document Name:", "SOP-804-Escalation-Recovery.pdf");
-                              if (doc) setAttachedDoc(doc);
-                            }}
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: "5px",
-                              fontSize: "12px",
-                              color: attachedDoc ? "var(--accent-blue)" : "var(--text-secondary)",
-                              background: "none",
-                              border: "none",
-                              cursor: "pointer"
-                            }}
-                          >
-                            <Paperclip size={14} />
-                            <span>{attachedDoc || "Attach SOP / Policy"}</span>
-                          </button>
-                        </div>
+              {/* Main Prompt Textarea */}
+              <div
+                style={{
+                  position: "relative",
+                  backgroundColor: "var(--bg-control)",
+                  borderRadius: "var(--radius-md)",
+                  border: "1px solid var(--separator)",
+                  padding: "12px",
+                  marginBottom: "14px",
+                }}
+              >
+                <textarea
+                  rows={4}
+                  placeholder="E.g., An enterprise partner is skeptical of our Q3 timeline and threatens to delay funding unless we demonstrate immediate break-even..."
+                  value={promptText}
+                  onChange={(e) => setPromptText(e.target.value)}
+                  style={{
+                    width: "100%",
+                    background: "none",
+                    border: "none",
+                    outline: "none",
+                    color: "var(--text-primary)",
+                    fontSize: "13px",
+                    lineHeight: 1.5,
+                    resize: "none",
+                  }}
+                />
 
-                        <button
-                          type="button"
-                          onClick={handleGenerate}
-                          disabled={!promptText.trim() || isGenerating}
-                          style={{
-                            height: "32px",
-                            padding: "0 14px",
-                            borderRadius: "var(--radius-md)",
-                            backgroundColor: "var(--accent-blue)",
-                            color: "#ffffff",
-                            fontSize: "12.5px",
-                            fontWeight: 600,
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: "6px",
-                            border: "none",
-                            cursor: promptText.trim() && !isGenerating ? "pointer" : "not-allowed",
-                            opacity: promptText.trim() && !isGenerating ? 1 : 0.5
-                          }}
-                        >
-                          <Wand2 size={13} />
-                          <span>{isGenerating ? "Synthesizing Draft…" : "Generate Scenario"}</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Template Chips */}
-                  <div style={{ marginTop: "24px" }}>
-                    <div style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "10px" }}>
-                      Or Start from a Standard Luxury Template:
-                    </div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-                      {templates.map((tpl, i) => (
-                        <button
-                          key={i}
-                          type="button"
-                          onClick={() => setPromptText(tpl.prompt)}
-                          style={{
-                            padding: "6px 12px",
-                            borderRadius: "var(--radius-full)",
-                            backgroundColor: "var(--bg-control)",
-                            border: "1px solid var(--separator)",
-                            fontSize: "12px",
-                            color: "var(--text-secondary)",
-                            cursor: "pointer",
-                            textAlign: "left",
-                            transition: "all 0.12s ease"
-                          }}
-                          className="hover-subtle"
-                        >
-                          {tpl.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </>
-              ) : (
-                /* Generated Draft Preview & Editable Review */
-                <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                      <Wand2 size={16} style={{ color: "var(--accent-blue)" }} />
-                      <span style={{ fontSize: "14px", fontWeight: 650, color: "var(--text-primary)" }}>
-                        AI Generated Scenario Preview
-                      </span>
-                    </div>
-
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "8px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                     <button
-                      type="button"
-                      onClick={() => setGeneratedDraft(null)}
+                      onClick={() => setIsDictating((prev) => !prev)}
                       style={{
                         display: "inline-flex",
                         alignItems: "center",
-                        gap: "5px",
-                        fontSize: "12px",
-                        color: "var(--text-secondary)",
-                        background: "none",
-                        border: "none",
-                        cursor: "pointer"
+                        gap: "4px",
+                        fontSize: "11.5px",
+                        color: isDictating ? "var(--accent-red)" : "var(--text-secondary)",
                       }}
+                      className="hover-subtle"
                     >
-                      <RotateCw size={12} />
-                      <span>Regenerate / Edit Prompt</span>
+                      <Mic size={13} />
+                      <span>{isDictating ? "Listening…" : "Dictate"}</span>
+                    </button>
+
+                    <button
+                      onClick={() => setAttachedDoc(attachedDoc ? null : "Enterprise-Reference-Doc.pdf")}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "4px",
+                        fontSize: "11.5px",
+                        color: attachedDoc ? "var(--accent-blue)" : "var(--text-secondary)",
+                      }}
+                      className="hover-subtle"
+                    >
+                      <Paperclip size={13} />
+                      <span>{attachedDoc ? "Doc Attached" : "Attach reference material (PDF/TXT)"}</span>
                     </button>
                   </div>
 
-                  <div
+                  <button
+                    onClick={handleGenerate}
+                    disabled={isGenerating || !promptText.trim()}
+                    className="mac-btn focus-ring"
                     style={{
-                      backgroundColor: "var(--bg-elevated)",
-                      borderRadius: "var(--radius-lg)",
-                      border: "1px solid var(--separator)",
-                      padding: "20px"
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "5px",
+                      padding: "6px 14px",
+                      borderRadius: "var(--radius-sm)",
+                      backgroundColor: "var(--accent-purple)",
+                      color: "#ffffff",
+                      fontSize: "12px",
+                      fontWeight: 600,
+                      opacity: isGenerating || !promptText.trim() ? 0.5 : 1,
                     }}
                   >
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px" }}>
-                      <div>
-                        <label style={{ fontSize: "11.5px", color: "var(--text-tertiary)", fontWeight: 600 }}>Title</label>
-                        <input
-                          type="text"
-                          value={generatedDraft.title || ""}
-                          onChange={(e) => setGeneratedDraft((prev) => ({ ...prev, title: e.target.value }))}
-                          style={{ width: "100%", padding: "7px 10px", backgroundColor: "var(--bg-control)", border: "1px solid var(--separator)", borderRadius: "var(--radius-sm)", color: "var(--text-primary)", fontSize: "13px", marginTop: "4px" }}
-                        />
-                      </div>
+                    {isGenerating ? <RotateCw size={13} className="animate-spin-apple" /> : <Wand2 size={13} />}
+                    <span>{isGenerating ? "Synthesizing…" : "Generate Scenario"}</span>
+                  </button>
+                </div>
+              </div>
 
-                      <div>
-                        <label style={{ fontSize: "11.5px", color: "var(--text-tertiary)", fontWeight: 600 }}>Assigned Guest</label>
-                        <div style={{ padding: "7px 10px", backgroundColor: "var(--bg-control)", border: "1px solid var(--separator)", borderRadius: "var(--radius-sm)", color: "var(--text-primary)", fontSize: "13px", marginTop: "4px" }}>
-                          {generatedDraft.guestName} ({generatedDraft.loyaltyTier})
-                        </div>
-                      </div>
+              {generationError && (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "flex-start",
+                    gap: "10px",
+                    padding: "12px 14px",
+                    borderRadius: "var(--radius-md)",
+                    backgroundColor: "rgba(255, 159, 10, 0.12)",
+                    border: "1px solid rgba(255, 159, 10, 0.3)",
+                    color: "var(--text-primary)",
+                    fontSize: "12px",
+                    lineHeight: 1.4,
+                  }}
+                >
+                  <AlertCircle size={16} style={{ color: "var(--accent-orange)", flexShrink: 0, marginTop: "2px" }} />
+                  <div>
+                    <span style={{ fontWeight: 600, display: "block", marginBottom: "2px" }}>
+                      AI Workspace Service Disconnected
+                    </span>
+                    <span style={{ color: "var(--text-secondary)" }}>
+                      {generationError}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Generated Draft Preview */}
+              {generatedDraft && (
+                <div
+                  style={{
+                    backgroundColor: "var(--bg-elevated)",
+                    borderRadius: "var(--radius-lg)",
+                    border: "1px solid var(--separator)",
+                    padding: "16px 20px",
+                    boxShadow: "var(--shadow-card)",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
+                    <span style={{ fontSize: "14px", fontWeight: 650, color: "var(--text-primary)" }}>
+                      {generatedDraft.title}
+                    </span>
+                    <span style={{ fontSize: "11px", color: "var(--accent-blue)", fontWeight: 600 }}>
+                      {generatedDraft.interactionType} · {generatedDraft.difficulty}
+                    </span>
+                  </div>
+                  <p style={{ fontSize: "12.5px", color: "var(--text-secondary)", lineHeight: 1.45 }}>
+                    {generatedDraft.summary}
+                  </p>
+                  <div style={{ marginTop: "12px", display: "flex", justifyContent: "flex-end" }}>
+                    <button
+                      onClick={handleSaveDescribeDraft}
+                      className="mac-btn focus-ring"
+                      style={{
+                        padding: "6px 14px",
+                        borderRadius: "var(--radius-sm)",
+                        backgroundColor: "var(--accent-blue)",
+                        color: "#ffffff",
+                        fontSize: "12px",
+                        fontWeight: 600,
+                      }}
+                    >
+                      Save to Mine & Practice
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ============================================================ */}
+          {/* MANUAL BUILDER MODE */}
+          {/* ============================================================ */}
+          {studioMode === "manual" && (
+            <div style={{ maxWidth: "720px", margin: "0 auto" }}>
+              {/* Wizard Steps Bar */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  marginBottom: "24px",
+                  paddingBottom: "12px",
+                  borderBottom: "1px solid var(--separator)",
+                }}
+              >
+                {[
+                  { step: 1, label: "Persona" },
+                  { step: 2, label: "Details" },
+                  { step: 3, label: "Objectives" },
+                  { step: 4, label: "Review" },
+                ].map((s) => (
+                  <div
+                    key={s.step}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      fontSize: "12px",
+                      fontWeight: manualStep === s.step ? 600 : 450,
+                      color:
+                        manualStep === s.step
+                          ? "var(--accent-blue)"
+                          : manualStep > s.step
+                          ? "var(--text-primary)"
+                          : "var(--text-tertiary)",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: "18px",
+                        height: "18px",
+                        borderRadius: "50%",
+                        backgroundColor:
+                          manualStep === s.step
+                            ? "var(--accent-blue)"
+                            : manualStep > s.step
+                            ? "var(--accent-green)"
+                            : "var(--bg-control)",
+                        color: "#ffffff",
+                        display: "grid",
+                        placeItems: "center",
+                        fontSize: "10px",
+                        fontWeight: 650,
+                      }}
+                    >
+                      {manualStep > s.step ? <Check size={10} /> : s.step}
                     </div>
+                    <span>{s.label}</span>
+                  </div>
+                ))}
+              </div>
 
-                    <div style={{ marginBottom: "16px" }}>
-                      <label style={{ fontSize: "11.5px", color: "var(--text-tertiary)", fontWeight: 600 }}>Situation Context</label>
-                      <textarea
-                        rows={3}
-                        value={generatedDraft.context || ""}
-                        onChange={(e) => setGeneratedDraft((prev) => ({ ...prev, context: e.target.value }))}
-                        style={{ width: "100%", padding: "8px 10px", backgroundColor: "var(--bg-control)", border: "1px solid var(--separator)", borderRadius: "var(--radius-sm)", color: "var(--text-primary)", fontSize: "13px", marginTop: "4px", lineHeight: 1.4 }}
+              {/* Step 1: Select Persona */}
+              {manualStep === 1 && (
+                <div>
+                  <h3 style={{ fontSize: "15px", fontWeight: 650, color: "var(--text-primary)", marginBottom: "12px" }}>
+                    Step 1: Select Persona
+                  </h3>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "20px" }}>
+                    {personas.map((p) => {
+                      const isSelected = p.id === manualPersonaId;
+                      return (
+                        <div
+                          key={p.id}
+                          onClick={() => setManualPersonaId(p.id)}
+                          style={{
+                            padding: "12px",
+                            borderRadius: "var(--radius-md)",
+                            backgroundColor: isSelected ? "var(--selection)" : "var(--bg-control)",
+                            border: isSelected ? "1px solid var(--accent-blue)" : "1px solid var(--separator)",
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "10px",
+                          }}
+                        >
+                          <div
+                            style={{
+                              width: "32px",
+                              height: "32px",
+                              borderRadius: "50%",
+                              backgroundColor: "var(--bg-elevated)",
+                              display: "grid",
+                              placeItems: "center",
+                              fontSize: "11px",
+                              fontWeight: 650,
+                              color: "var(--text-primary)",
+                            }}
+                          >
+                            {p.monogram || p.name.slice(0, 2)}
+                          </div>
+                          <div>
+                            <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)" }}>
+                              {p.name}
+                            </div>
+                            <div style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
+                              {p.title} · {p.seniority}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                    <button
+                      onClick={() => setManualStep(2)}
+                      className="mac-btn focus-ring"
+                      style={{
+                        padding: "7px 18px",
+                        borderRadius: "var(--radius-sm)",
+                        backgroundColor: "var(--accent-blue)",
+                        color: "#ffffff",
+                        fontSize: "12.5px",
+                        fontWeight: 600,
+                      }}
+                    >
+                      Next: Details →
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Step 2: Details */}
+              {manualStep === 2 && (
+                <div>
+                  <h3 style={{ fontSize: "15px", fontWeight: 650, color: "var(--text-primary)", marginBottom: "12px" }}>
+                    Step 2: Scenario Details
+                  </h3>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "20px" }}>
+                    <div>
+                      <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Scenario Title</label>
+                      <input
+                        type="text"
+                        placeholder="E.g., Challenging Engineering Timeline Pushback"
+                        value={manualTitle}
+                        onChange={(e) => setManualTitle(e.target.value)}
+                        style={{
+                          width: "100%",
+                          padding: "7px 10px",
+                          backgroundColor: "var(--bg-control)",
+                          border: "1px solid var(--separator)",
+                          borderRadius: "var(--radius-sm)",
+                          color: "var(--text-primary)",
+                          fontSize: "13px",
+                          marginTop: "4px",
+                        }}
                       />
                     </div>
-
-                    <div>
-                      <label style={{ fontSize: "11.5px", color: "var(--text-tertiary)", fontWeight: 600 }}>Learning Objectives</label>
-                      <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "6px" }}>
-                        {generatedDraft.learningObjectives?.map((obj, i) => (
-                          <div key={i} style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12.5px", color: "var(--text-secondary)" }}>
-                            <Check size={13} style={{ color: "var(--accent-blue)" }} />
-                            <span>{obj}</span>
-                          </div>
-                        ))}
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px" }}>
+                      <div>
+                        <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Category</label>
+                        <select
+                          value={manualCategory}
+                          onChange={(e) => setManualCategory(e.target.value as InteractionType)}
+                          style={{
+                            width: "100%",
+                            padding: "7px 10px",
+                            backgroundColor: "var(--bg-control)",
+                            border: "1px solid var(--separator)",
+                            borderRadius: "var(--radius-sm)",
+                            color: "var(--text-primary)",
+                            fontSize: "12px",
+                            marginTop: "4px",
+                          }}
+                        >
+                          {categories.map((c) => (
+                            <option key={c} value={c}>
+                              {c}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Difficulty</label>
+                        <select
+                          value={manualDifficulty}
+                          onChange={(e) => setManualDifficulty(e.target.value as DifficultyLevel)}
+                          style={{
+                            width: "100%",
+                            padding: "7px 10px",
+                            backgroundColor: "var(--bg-control)",
+                            border: "1px solid var(--separator)",
+                            borderRadius: "var(--radius-sm)",
+                            color: "var(--text-primary)",
+                            fontSize: "12px",
+                            marginTop: "4px",
+                          }}
+                        >
+                          <option value="Foundational">Foundational</option>
+                          <option value="Intermediate">Intermediate</option>
+                          <option value="Advanced">Advanced</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Duration (min)</label>
+                        <input
+                          type="number"
+                          value={manualDuration}
+                          onChange={(e) => setManualDuration(Number(e.target.value))}
+                          style={{
+                            width: "100%",
+                            padding: "7px 10px",
+                            backgroundColor: "var(--bg-control)",
+                            border: "1px solid var(--separator)",
+                            borderRadius: "var(--radius-sm)",
+                            color: "var(--text-primary)",
+                            fontSize: "12px",
+                            marginTop: "4px",
+                          }}
+                        />
                       </div>
                     </div>
+                    <div>
+                      <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Situation Narrative</label>
+                      <textarea
+                        rows={3}
+                        placeholder="Describe the context and opening state before dialogue begins…"
+                        value={manualContext}
+                        onChange={(e) => setManualContext(e.target.value)}
+                        style={{
+                          width: "100%",
+                          padding: "7px 10px",
+                          backgroundColor: "var(--bg-control)",
+                          border: "1px solid var(--separator)",
+                          borderRadius: "var(--radius-sm)",
+                          color: "var(--text-primary)",
+                          fontSize: "13px",
+                          marginTop: "4px",
+                        }}
+                      />
+                    </div>
                   </div>
-
-                  <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "12px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
                     <button
-                      type="button"
-                      onClick={() => setGeneratedDraft(null)}
-                      style={{ height: "34px", padding: "0 14px", borderRadius: "var(--radius-md)", backgroundColor: "var(--bg-control)", border: "1px solid var(--separator)", color: "var(--text-secondary)", fontSize: "12.5px", cursor: "pointer" }}
+                      onClick={() => setManualStep(1)}
+                      className="hover-subtle"
+                      style={{ padding: "7px 14px", borderRadius: "var(--radius-sm)", color: "var(--text-secondary)" }}
                     >
-                      Discard
+                      Back
                     </button>
                     <button
-                      type="button"
-                      onClick={handleSaveDescribeDraft}
-                      style={{ height: "34px", padding: "0 18px", borderRadius: "var(--radius-md)", backgroundColor: "var(--accent-blue)", color: "#ffffff", fontSize: "12.5px", fontWeight: 600, border: "none", cursor: "pointer" }}
+                      onClick={() => setManualStep(3)}
+                      className="mac-btn focus-ring"
+                      style={{
+                        padding: "7px 18px",
+                        borderRadius: "var(--radius-sm)",
+                        backgroundColor: "var(--accent-blue)",
+                        color: "#ffffff",
+                        fontSize: "12.5px",
+                        fontWeight: 600,
+                      }}
+                    >
+                      Next: Objectives →
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Step 3: Objectives */}
+              {manualStep === 3 && (
+                <div>
+                  <h3 style={{ fontSize: "15px", fontWeight: 650, color: "var(--text-primary)", marginBottom: "12px" }}>
+                    Step 3: Key Objectives
+                  </h3>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "20px" }}>
+                    {manualObjectives.map((obj, i) => (
+                      <div key={i} style={{ display: "flex", gap: "8px" }}>
+                        <input
+                          type="text"
+                          value={obj}
+                          onChange={(e) => {
+                            const updated = [...manualObjectives];
+                            updated[i] = e.target.value;
+                            setManualObjectives(updated);
+                          }}
+                          style={{
+                            flex: 1,
+                            padding: "7px 10px",
+                            backgroundColor: "var(--bg-control)",
+                            border: "1px solid var(--separator)",
+                            borderRadius: "var(--radius-sm)",
+                            color: "var(--text-primary)",
+                            fontSize: "12.5px",
+                          }}
+                        />
+                        <button
+                          onClick={() => setManualObjectives(manualObjectives.filter((_, idx) => idx !== i))}
+                          style={{ background: "none", border: "none", color: "var(--accent-red)", cursor: "pointer" }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      onClick={() => setManualObjectives([...manualObjectives, ""])}
+                      style={{
+                        alignSelf: "flex-start",
+                        fontSize: "12px",
+                        color: "var(--accent-blue)",
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                      }}
+                    >
+                      + Add Objective
+                    </button>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <button
+                      onClick={() => setManualStep(2)}
+                      className="hover-subtle"
+                      style={{ padding: "7px 14px", borderRadius: "var(--radius-sm)", color: "var(--text-secondary)" }}
+                    >
+                      Back
+                    </button>
+                    <button
+                      onClick={() => setManualStep(4)}
+                      className="mac-btn focus-ring"
+                      style={{
+                        padding: "7px 18px",
+                        borderRadius: "var(--radius-sm)",
+                        backgroundColor: "var(--accent-blue)",
+                        color: "#ffffff",
+                        fontSize: "12.5px",
+                        fontWeight: 600,
+                      }}
+                    >
+                      Next: Review →
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Step 4: Review */}
+              {manualStep === 4 && (
+                <div>
+                  <h3 style={{ fontSize: "15px", fontWeight: 650, color: "var(--text-primary)", marginBottom: "12px" }}>
+                    Step 4: Review & Save
+                  </h3>
+                  <div
+                    style={{
+                      padding: "16px",
+                      backgroundColor: "var(--bg-elevated)",
+                      borderRadius: "var(--radius-md)",
+                      border: "1px solid var(--separator)",
+                      marginBottom: "20px",
+                    }}
+                  >
+                    <div style={{ fontSize: "15px", fontWeight: 600, color: "var(--text-primary)" }}>
+                      {manualTitle || "Untitled Scenario"}
+                    </div>
+                    <div style={{ fontSize: "12px", color: "var(--accent-blue)", marginTop: "2px" }}>
+                      {manualCategory} · {manualDifficulty} · ~{manualDuration}m
+                    </div>
+                    <p style={{ fontSize: "12.5px", color: "var(--text-secondary)", marginTop: "8px" }}>
+                      {manualContext || "No situation narrative provided."}
+                    </p>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <button
+                      onClick={() => setManualStep(3)}
+                      className="hover-subtle"
+                      style={{ padding: "7px 14px", borderRadius: "var(--radius-sm)", color: "var(--text-secondary)" }}
+                    >
+                      Back
+                    </button>
+                    <button
+                      onClick={handleSaveManualScenario}
+                      className="mac-btn focus-ring"
+                      style={{
+                        padding: "7px 18px",
+                        borderRadius: "var(--radius-sm)",
+                        backgroundColor: "var(--accent-blue)",
+                        color: "#ffffff",
+                        fontSize: "12.5px",
+                        fontWeight: 600,
+                      }}
                     >
                       Save to Mine
                     </button>
@@ -561,308 +932,135 @@ export const StudioSheet: React.FC = () => {
           )}
 
           {/* ============================================================ */}
-          {/* MANUAL FORM MODE */}
+          {/* PERSONA EDITOR MODE */}
           {/* ============================================================ */}
-          {studioMode === "manual" && (
+          {studioMode === "persona" && (
             <div style={{ maxWidth: "720px", margin: "0 auto" }}>
-              {/* Stepper indicator */}
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "12px", marginBottom: "24px" }}>
-                {[
-                  { step: 1, label: "Guest" },
-                  { step: 2, label: "Situation" },
-                  { step: 3, label: "Objectives" },
-                  { step: 4, label: "Review" }
-                ].map((s) => (
-                  <div key={s.step} style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                    <div
-                      style={{
-                        width: "22px",
-                        height: "22px",
-                        borderRadius: "50%",
-                        backgroundColor: manualStep === s.step ? "var(--accent-blue)" : manualStep > s.step ? "var(--accent-green)" : "var(--bg-control)",
-                        color: manualStep >= s.step ? "#ffffff" : "var(--text-tertiary)",
-                        display: "grid",
-                        placeItems: "center",
-                        fontSize: "11px",
-                        fontWeight: 650
-                      }}
-                    >
-                      {manualStep > s.step ? "✓" : s.step}
-                    </div>
-                    <span style={{ fontSize: "12px", fontWeight: manualStep === s.step ? 600 : 450, color: manualStep === s.step ? "var(--text-primary)" : "var(--text-tertiary)" }}>
-                      {s.label}
-                    </span>
-                    {s.step < 4 && <span style={{ color: "var(--separator)", marginLeft: "4px" }}>—</span>}
-                  </div>
-                ))}
-              </div>
-
-              {manualStep === 1 && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px", marginBottom: "14px" }}>
                 <div>
-                  <h3 style={{ fontSize: "16px", fontWeight: 600, color: "var(--text-primary)", marginBottom: "14px" }}>
-                    Step 1: Select Guest Persona
-                  </h3>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "20px" }}>
-                    {guests.map((g) => {
-                      const isSelected = manualGuestId === g.id;
-                      return (
-                        <div
-                          key={g.id}
-                          onClick={() => setManualGuestId(g.id)}
-                          style={{
-                            padding: "12px 14px",
-                            borderRadius: "var(--radius-md)",
-                            backgroundColor: isSelected ? "rgba(10, 132, 255, 0.12)" : "var(--bg-control)",
-                            border: isSelected ? "1.5px solid var(--accent-blue)" : "1px solid var(--separator)",
-                            cursor: "pointer"
-                          }}
-                        >
-                          <div style={{ fontSize: "13.5px", fontWeight: 600, color: "var(--text-primary)" }}>{g.name}</div>
-                          <div style={{ fontSize: "11.5px", color: "var(--text-secondary)" }}>{g.title}</div>
-                          <div style={{ fontSize: "11px", color: "var(--accent-orange)", marginTop: "4px" }}>{g.temperamentTraits.join(" · ")}</div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                    <button
-                      onClick={() => setManualStep(2)}
-                      style={{ height: "34px", padding: "0 18px", borderRadius: "var(--radius-md)", backgroundColor: "var(--accent-blue)", color: "#ffffff", fontSize: "12.5px", fontWeight: 600, border: "none", cursor: "pointer" }}
-                    >
-                      Next: Situation →
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {manualStep === 2 && (
-                <div>
-                  <h3 style={{ fontSize: "16px", fontWeight: 600, color: "var(--text-primary)", marginBottom: "14px" }}>
-                    Step 2: Situation & Parameters
-                  </h3>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "20px" }}>
-                    <div>
-                      <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Scenario Title</label>
-                      <input
-                        type="text"
-                        placeholder="E.g., Late Night Room Move"
-                        value={manualTitle}
-                        onChange={(e) => setManualTitle(e.target.value)}
-                        style={{ width: "100%", padding: "8px 10px", backgroundColor: "var(--bg-control)", border: "1px solid var(--separator)", borderRadius: "var(--radius-sm)", color: "var(--text-primary)", fontSize: "13px", marginTop: "4px" }}
-                      />
-                    </div>
-
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px" }}>
-                      <div>
-                        <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Category</label>
-                        <select
-                          value={manualCategory}
-                          onChange={(e) => setManualCategory(e.target.value as InteractionType)}
-                          style={{ width: "100%", padding: "8px 10px", backgroundColor: "var(--bg-control)", border: "1px solid var(--separator)", borderRadius: "var(--radius-sm)", color: "var(--text-primary)", fontSize: "13px", marginTop: "4px" }}
-                        >
-                          <option value="Front Desk">Front Desk</option>
-                          <option value="Concierge">Concierge</option>
-                          <option value="Executive Lounge">Executive Lounge</option>
-                          <option value="Guest Services">Guest Services</option>
-                          <option value="Escalation Management">Escalation Management</option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Difficulty</label>
-                        <select
-                          value={manualDifficulty}
-                          onChange={(e) => setManualDifficulty(e.target.value as DifficultyLevel)}
-                          style={{ width: "100%", padding: "8px 10px", backgroundColor: "var(--bg-control)", border: "1px solid var(--separator)", borderRadius: "var(--radius-sm)", color: "var(--text-primary)", fontSize: "13px", marginTop: "4px" }}
-                        >
-                          <option value="Foundational">Foundational</option>
-                          <option value="Intermediate">Intermediate</option>
-                          <option value="Advanced">Advanced</option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Est. Duration</label>
-                        <select
-                          value={manualDuration}
-                          onChange={(e) => setManualDuration(Number(e.target.value))}
-                          style={{ width: "100%", padding: "8px 10px", backgroundColor: "var(--bg-control)", border: "1px solid var(--separator)", borderRadius: "var(--radius-sm)", color: "var(--text-primary)", fontSize: "13px", marginTop: "4px" }}
-                        >
-                          <option value={2}>2 minutes</option>
-                          <option value={3}>3 minutes</option>
-                          <option value={4}>4 minutes</option>
-                          <option value={5}>5 minutes</option>
-                          <option value={7}>7 minutes</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Situation Narrative</label>
-                      <textarea
-                        rows={3}
-                        placeholder="Describe what happened prior to guest approaching..."
-                        value={manualContext}
-                        onChange={(e) => setManualContext(e.target.value)}
-                        style={{ width: "100%", padding: "8px 10px", backgroundColor: "var(--bg-control)", border: "1px solid var(--separator)", borderRadius: "var(--radius-sm)", color: "var(--text-primary)", fontSize: "13px", marginTop: "4px" }}
-                      />
-                    </div>
-                  </div>
-
-                  <div style={{ display: "flex", justifyContent: "space-between" }}>
-                    <button onClick={() => setManualStep(1)} style={{ height: "34px", padding: "0 14px", backgroundColor: "var(--bg-control)", border: "1px solid var(--separator)", color: "var(--text-secondary)", borderRadius: "var(--radius-md)", cursor: "pointer" }}>Back</button>
-                    <button onClick={() => setManualStep(3)} style={{ height: "34px", padding: "0 18px", backgroundColor: "var(--accent-blue)", color: "#ffffff", border: "none", borderRadius: "var(--radius-md)", fontWeight: 600, cursor: "pointer" }}>Next: Objectives →</button>
-                  </div>
-                </div>
-              )}
-
-              {manualStep === 3 && (
-                <div>
-                  <h3 style={{ fontSize: "16px", fontWeight: 600, color: "var(--text-primary)", marginBottom: "14px" }}>
-                    Step 3: Key Objectives
-                  </h3>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "20px" }}>
-                    {manualObjectives.map((obj, i) => (
-                      <div key={i} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                        <input
-                          type="text"
-                          value={obj}
-                          onChange={(e) => {
-                            const updated = [...manualObjectives];
-                            updated[i] = e.target.value;
-                            setManualObjectives(updated);
-                          }}
-                          style={{ flex: 1, padding: "8px 10px", backgroundColor: "var(--bg-control)", border: "1px solid var(--separator)", borderRadius: "var(--radius-sm)", color: "var(--text-primary)", fontSize: "13px" }}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setManualObjectives(manualObjectives.filter((_, idx) => idx !== i))}
-                          style={{ background: "none", border: "none", color: "var(--accent-red)", cursor: "pointer" }}
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={() => setManualObjectives([...manualObjectives, "New learning objective"])}
-                      style={{ alignSelf: "flex-start", padding: "4px 10px", backgroundColor: "var(--bg-control)", border: "1px solid var(--separator)", borderRadius: "var(--radius-sm)", fontSize: "12px", color: "var(--accent-blue)", cursor: "pointer", marginTop: "4px" }}
-                    >
-                      + Add Objective
-                    </button>
-                  </div>
-
-                  <div style={{ display: "flex", justifyContent: "space-between" }}>
-                    <button onClick={() => setManualStep(2)} style={{ height: "34px", padding: "0 14px", backgroundColor: "var(--bg-control)", border: "1px solid var(--separator)", color: "var(--text-secondary)", borderRadius: "var(--radius-md)", cursor: "pointer" }}>Back</button>
-                    <button onClick={() => setManualStep(4)} style={{ height: "34px", padding: "0 18px", backgroundColor: "var(--accent-blue)", color: "#ffffff", border: "none", borderRadius: "var(--radius-md)", fontWeight: 600, cursor: "pointer" }}>Next: Review →</button>
-                  </div>
-                </div>
-              )}
-
-              {manualStep === 4 && (
-                <div>
-                  <h3 style={{ fontSize: "16px", fontWeight: 600, color: "var(--text-primary)", marginBottom: "14px" }}>
-                    Step 4: Review & Save
-                  </h3>
-                  <div style={{ padding: "18px", backgroundColor: "var(--bg-elevated)", borderRadius: "var(--radius-lg)", border: "1px solid var(--separator)", marginBottom: "20px" }}>
-                    <div style={{ fontSize: "16px", fontWeight: 600, color: "var(--text-primary)", marginBottom: "4px" }}>{manualTitle || "Untitled Scenario"}</div>
-                    <div style={{ fontSize: "12.5px", color: "var(--accent-blue)", marginBottom: "10px" }}>{manualCategory} · {manualDifficulty} · ~{manualDuration} min</div>
-                    <p style={{ fontSize: "13px", color: "var(--text-secondary)", margin: "0 0 12px 0" }}>{manualContext || "No situation narrative provided."}</p>
-                    <div style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-tertiary)", marginBottom: "6px" }}>Objectives:</div>
-                    {manualObjectives.map((o, i) => (
-                      <div key={i} style={{ fontSize: "12px", color: "var(--text-secondary)", marginLeft: "8px", marginBottom: "4px" }}>• {o}</div>
-                    ))}
-                  </div>
-
-                  <div style={{ display: "flex", justifyContent: "space-between" }}>
-                    <button onClick={() => setManualStep(3)} style={{ height: "34px", padding: "0 14px", backgroundColor: "var(--bg-control)", border: "1px solid var(--separator)", color: "var(--text-secondary)", borderRadius: "var(--radius-md)", cursor: "pointer" }}>Back</button>
-                    <button onClick={handleSaveManualScenario} style={{ height: "34px", padding: "0 20px", backgroundColor: "var(--accent-blue)", color: "#ffffff", border: "none", borderRadius: "var(--radius-md)", fontWeight: 600, cursor: "pointer" }}>Save to Mine</button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ============================================================ */}
-          {/* GUEST EDITOR MODE */}
-          {/* ============================================================ */}
-          {studioMode === "guest" && (
-            <div style={{ maxWidth: "720px", margin: "0 auto" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px" }}>
-                <div>
-                  <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Guest Full Name</label>
+                  <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Persona Full Name</label>
                   <input
                     type="text"
-                    placeholder="E.g., Baroness Valerie de Chalon"
-                    value={guestName}
-                    onChange={(e) => setGuestName(e.target.value)}
-                    style={{ width: "100%", padding: "8px 10px", backgroundColor: "var(--bg-control)", border: "1px solid var(--separator)", borderRadius: "var(--radius-sm)", color: "var(--text-primary)", fontSize: "13px", marginTop: "4px" }}
+                    placeholder="E.g., Dr. Aris Thorne"
+                    value={personaName}
+                    onChange={(e) => setPersonaName(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "7px 10px",
+                      backgroundColor: "var(--bg-control)",
+                      border: "1px solid var(--separator)",
+                      borderRadius: "var(--radius-sm)",
+                      color: "var(--text-primary)",
+                      fontSize: "13px",
+                      marginTop: "4px",
+                    }}
                   />
                 </div>
-
                 <div>
                   <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Title / Profession</label>
                   <input
                     type="text"
-                    placeholder="E.g., Managing Partner, Private Equity"
-                    value={guestTitle}
-                    onChange={(e) => setGuestTitle(e.target.value)}
-                    style={{ width: "100%", padding: "8px 10px", backgroundColor: "var(--bg-control)", border: "1px solid var(--separator)", borderRadius: "var(--radius-sm)", color: "var(--text-primary)", fontSize: "13px", marginTop: "4px" }}
+                    placeholder="E.g., Chief Risk Officer"
+                    value={personaTitle}
+                    onChange={(e) => setPersonaTitle(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "7px 10px",
+                      backgroundColor: "var(--bg-control)",
+                      border: "1px solid var(--separator)",
+                      borderRadius: "var(--radius-sm)",
+                      color: "var(--text-primary)",
+                      fontSize: "13px",
+                      marginTop: "4px",
+                    }}
                   />
                 </div>
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "14px", marginBottom: "16px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px", marginBottom: "14px" }}>
                 <div>
-                  <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Loyalty Tier</label>
+                  <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Seniority</label>
                   <select
-                    value={guestTier}
-                    onChange={(e) => setGuestTier(e.target.value as Guest["loyaltyTier"])}
-                    style={{ width: "100%", padding: "8px 10px", backgroundColor: "var(--bg-control)", border: "1px solid var(--separator)", borderRadius: "var(--radius-sm)", color: "var(--text-primary)", fontSize: "12.5px", marginTop: "4px" }}
+                    value={personaSeniorty}
+                    onChange={(e) => setPersonaSeniorty(e.target.value as SeniorityLevel)}
+                    style={{
+                      width: "100%",
+                      padding: "7px 10px",
+                      backgroundColor: "var(--bg-control)",
+                      border: "1px solid var(--separator)",
+                      borderRadius: "var(--radius-sm)",
+                      color: "var(--text-primary)",
+                      fontSize: "12px",
+                      marginTop: "4px",
+                    }}
                   >
-                    <option value="Diamond Ambassador">Diamond Ambassador</option>
-                    <option value="Platinum Premier">Platinum Premier</option>
-                    <option value="Gold Elite">Gold Elite</option>
-                    <option value="Standard">Standard</option>
+                    <option value="Peer">Peer</option>
+                    <option value="Manager">Manager</option>
+                    <option value="Senior Executive">Senior Executive</option>
+                    <option value="Key Client">Key Client</option>
                   </select>
                 </div>
 
                 <div>
-                  <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Room / Suite</label>
+                  <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Setting</label>
                   <input
                     type="text"
-                    value={guestRoom}
-                    onChange={(e) => setGuestRoom(e.target.value)}
-                    style={{ width: "100%", padding: "8px 10px", backgroundColor: "var(--bg-control)", border: "1px solid var(--separator)", borderRadius: "var(--radius-sm)", color: "var(--text-primary)", fontSize: "12.5px", marginTop: "4px" }}
+                    placeholder="E.g., Executive Boardroom"
+                    value={personaSetting}
+                    onChange={(e) => setPersonaSetting(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "7px 10px",
+                      backgroundColor: "var(--bg-control)",
+                      border: "1px solid var(--separator)",
+                      borderRadius: "var(--radius-sm)",
+                      color: "var(--text-primary)",
+                      fontSize: "12px",
+                      marginTop: "4px",
+                    }}
                   />
                 </div>
 
                 <div>
-                  <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Primary Language</label>
-                  <input
-                    type="text"
-                    value={guestLanguage}
-                    onChange={(e) => setGuestLanguage(e.target.value)}
-                    style={{ width: "100%", padding: "8px 10px", backgroundColor: "var(--bg-control)", border: "1px solid var(--separator)", borderRadius: "var(--radius-sm)", color: "var(--text-primary)", fontSize: "12.5px", marginTop: "4px" }}
-                  />
+                  <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Pressure Level</label>
+                  <select
+                    value={personaPressure}
+                    onChange={(e) => setPersonaPressure(e.target.value as "Moderate" | "High" | "Intense")}
+                    style={{
+                      width: "100%",
+                      padding: "7px 10px",
+                      backgroundColor: "var(--bg-control)",
+                      border: "1px solid var(--separator)",
+                      borderRadius: "var(--radius-sm)",
+                      color: "var(--text-primary)",
+                      fontSize: "12px",
+                      marginTop: "4px",
+                    }}
+                  >
+                    <option value="Moderate">Moderate Pressure</option>
+                    <option value="High">High Pressure</option>
+                    <option value="Intense">Intense Pressure</option>
+                  </select>
                 </div>
               </div>
 
-              {/* Temperament Traits */}
-              <div style={{ marginBottom: "16px" }}>
-                <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Temperament & Behavioral Traits</label>
+              {/* Behavioral Traits */}
+              <div style={{ marginBottom: "14px" }}>
+                <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                  Temperament & Behavioral Traits
+                </label>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "6px" }}>
-                  {["Demanding", "Agitated", "Impatient", "Affable", "Precise", "VIP", "Analytical", "Cautious", "Hurried"].map((trait) => {
-                    const isSelected = guestTraits.includes(trait);
+                  {["Skeptical", "Direct", "Analytical", "Demanding", "Assertive", "Reserved", "Frustrated", "Urgent"].map((trait) => {
+                    const isSelected = personaTraits.includes(trait);
                     return (
                       <button
                         key={trait}
                         type="button"
                         onClick={() => {
                           if (isSelected) {
-                            setGuestTraits(guestTraits.filter((t) => t !== trait));
+                            setPersonaTraits(personaTraits.filter((t) => t !== trait));
                           } else {
-                            setGuestTraits([...guestTraits, trait]);
+                            setPersonaTraits([...personaTraits, trait]);
                           }
                         }}
                         style={{
@@ -873,24 +1071,33 @@ export const StudioSheet: React.FC = () => {
                           border: isSelected ? "1px solid var(--accent-blue)" : "1px solid var(--separator)",
                           backgroundColor: isSelected ? "rgba(10, 132, 255, 0.16)" : "var(--bg-control)",
                           color: isSelected ? "var(--accent-blue)" : "var(--text-secondary)",
-                          cursor: "pointer"
+                          cursor: "pointer",
                         }}
                       >
-                        {isSelected ? "✓ " : "+ "}{trait}
+                        {isSelected ? "✓ " : "+ "}
+                        {trait}
                       </button>
                     );
                   })}
                 </div>
               </div>
 
-              {/* Voice Picker with Preview button */}
-              <div style={{ marginBottom: "16px" }}>
+              {/* Synthetic Voice Model */}
+              <div style={{ marginBottom: "14px" }}>
                 <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Synthetic Voice Model</label>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "4px" }}>
                   <select
-                    value={guestVoice}
-                    onChange={(e) => setGuestVoice(e.target.value)}
-                    style={{ flex: 1, padding: "8px 10px", backgroundColor: "var(--bg-control)", border: "1px solid var(--separator)", borderRadius: "var(--radius-sm)", color: "var(--text-primary)", fontSize: "13px" }}
+                    value={personaVoice}
+                    onChange={(e) => setPersonaVoice(e.target.value)}
+                    style={{
+                      flex: 1,
+                      padding: "7px 10px",
+                      backgroundColor: "var(--bg-control)",
+                      border: "1px solid var(--separator)",
+                      borderRadius: "var(--radius-sm)",
+                      color: "var(--text-primary)",
+                      fontSize: "12.5px",
+                    }}
                   >
                     <option value="Echo (Direct American)">Echo (Direct American)</option>
                     <option value="Alloy (Warm British)">Alloy (Warm British)</option>
@@ -903,8 +1110,9 @@ export const StudioSheet: React.FC = () => {
                       setIsPlayingVoice(true);
                       setTimeout(() => setIsPlayingVoice(false), 1200);
                     }}
+                    className="hover-subtle"
                     style={{
-                      height: "36px",
+                      height: "34px",
                       padding: "0 12px",
                       backgroundColor: "var(--bg-control)",
                       border: "1px solid var(--separator)",
@@ -914,36 +1122,54 @@ export const StudioSheet: React.FC = () => {
                       display: "inline-flex",
                       alignItems: "center",
                       gap: "5px",
-                      cursor: "pointer"
                     }}
                   >
-                    <Volume2 size={14} />
-                    <span>{isPlayingVoice ? "Playing Sample…" : "Test Voice"}</span>
+                    <Volume2 size={13} />
+                    <span>{isPlayingVoice ? "Playing…" : "Test Voice"}</span>
                   </button>
                 </div>
               </div>
 
-              {/* Backstory & Communication Notes */}
+              {/* Backstory & Behavior Notes */}
               <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "20px" }}>
                 <div>
-                  <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Backstory & Persona Context</label>
+                  <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                    Backstory & Conversational Context
+                  </label>
                   <textarea
                     rows={2}
-                    placeholder="Frequent guest expectations, travel patterns, sensitivity points..."
-                    value={guestBackstory}
-                    onChange={(e) => setGuestBackstory(e.target.value)}
-                    style={{ width: "100%", padding: "8px 10px", backgroundColor: "var(--bg-control)", border: "1px solid var(--separator)", borderRadius: "var(--radius-sm)", color: "var(--text-primary)", fontSize: "13px", marginTop: "4px" }}
+                    placeholder="Counterpart background, expectations, sensitivity points…"
+                    value={personaBackstory}
+                    onChange={(e) => setPersonaBackstory(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "7px 10px",
+                      backgroundColor: "var(--bg-control)",
+                      border: "1px solid var(--separator)",
+                      borderRadius: "var(--radius-sm)",
+                      color: "var(--text-primary)",
+                      fontSize: "12.5px",
+                      marginTop: "4px",
+                    }}
                   />
                 </div>
-
                 <div>
-                  <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Staff Communication Protocol Notes</label>
+                  <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Behavior notes</label>
                   <textarea
                     rows={2}
-                    placeholder="How staff should address the guest, specific de-escalation keys..."
-                    value={guestNotes}
-                    onChange={(e) => setGuestNotes(e.target.value)}
-                    style={{ width: "100%", padding: "8px 10px", backgroundColor: "var(--bg-control)", border: "1px solid var(--separator)", borderRadius: "var(--radius-sm)", color: "var(--text-primary)", fontSize: "13px", marginTop: "4px" }}
+                    placeholder="Specific conversational triggers, what de-escalates them, physical cues…"
+                    value={personaNotes}
+                    onChange={(e) => setPersonaNotes(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "7px 10px",
+                      backgroundColor: "var(--bg-control)",
+                      border: "1px solid var(--separator)",
+                      borderRadius: "var(--radius-sm)",
+                      color: "var(--text-primary)",
+                      fontSize: "12.5px",
+                      marginTop: "4px",
+                    }}
                   />
                 </div>
               </div>
@@ -952,27 +1178,27 @@ export const StudioSheet: React.FC = () => {
                 <button
                   type="button"
                   onClick={closeStudio}
-                  style={{ height: "34px", padding: "0 14px", backgroundColor: "var(--bg-control)", border: "1px solid var(--separator)", color: "var(--text-secondary)", borderRadius: "var(--radius-md)", cursor: "pointer" }}
+                  className="hover-subtle"
+                  style={{ padding: "7px 14px", borderRadius: "var(--radius-sm)", color: "var(--text-secondary)" }}
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
-                  onClick={handleSaveGuest}
-                  disabled={!guestName.trim()}
+                  onClick={handleSavePersona}
+                  disabled={!personaName.trim()}
+                  className="mac-btn focus-ring"
                   style={{
-                    height: "34px",
-                    padding: "0 18px",
+                    padding: "7px 18px",
                     backgroundColor: "var(--accent-blue)",
                     color: "#ffffff",
-                    border: "none",
-                    borderRadius: "var(--radius-md)",
+                    borderRadius: "var(--radius-sm)",
                     fontWeight: 600,
-                    cursor: guestName.trim() ? "pointer" : "not-allowed",
-                    opacity: guestName.trim() ? 1 : 0.5
+                    fontSize: "12.5px",
+                    opacity: personaName.trim() ? 1 : 0.5,
                   }}
                 >
-                  Save Guest
+                  Save Persona
                 </button>
               </div>
             </div>

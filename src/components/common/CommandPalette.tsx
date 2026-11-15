@@ -13,7 +13,7 @@ import {
   Zap,
   UserPlus
 } from "lucide-react";
-import { formatRoomNumber } from "../../types";
+import { formatContextSetting } from "../../types";
 
 const CommandPaletteModal: React.FC = () => {
   const {
@@ -37,17 +37,17 @@ const CommandPaletteModal: React.FC = () => {
   const filteredScenarios = scenarios.filter(
     (s) =>
       s.title.toLowerCase().includes(query.toLowerCase()) ||
-      s.guestName.toLowerCase().includes(query.toLowerCase()) ||
+      (s.personaName || s.guestName || "").toLowerCase().includes(query.toLowerCase()) ||
       s.interactionType.toLowerCase().includes(query.toLowerCase())
   );
 
   const quickActions = [
-    { label: "Go to Today (⌘1)", icon: <LayoutDashboard size={14} />, action: () => navigateTo("today") },
+    { label: "Go to Home (⌘1)", icon: <LayoutDashboard size={14} />, action: () => navigateTo("today") },
     { label: "Browse Scenarios (⌘2)", icon: <Target size={14} />, action: () => navigateTo("scenarios") },
     { label: "View Recordings & Debriefs (⌘3)", icon: <Film size={14} />, action: () => navigateTo("recordings") },
-    { label: "View Performance & Mastery (⌘4)", icon: <ChartNoAxesColumn size={14} />, action: () => navigateTo("progress") },
+    { label: "View Composure & Progress (⌘4)", icon: <ChartNoAxesColumn size={14} />, action: () => navigateTo("progress") },
     { label: "New Scenario (⌘N)", icon: <Plus size={14} />, action: () => openStudio("scenario") },
-    { label: "New Guest (⌘⇧N)", icon: <UserPlus size={14} />, action: () => openStudio("guest") },
+    { label: "New Persona (⌘⇧N)", icon: <UserPlus size={14} />, action: () => openStudio("guest") },
     { label: "Quick Practice (⌘⇧P)", icon: <Zap size={14} />, action: () => openQuickPractice() },
     { label: "Open Preferences… (⌘,)", icon: <Settings size={14} />, action: () => openSettings() }
   ];
@@ -129,7 +129,7 @@ const CommandPaletteModal: React.FC = () => {
               setSelectedIndex(0);
             }}
             onKeyDown={handleKeyDown}
-            placeholder="Search scenarios, guests, or jump to tab…"
+            placeholder="Search scenarios, personas, or jump to tab…"
             style={{
               width: "100%",
               backgroundColor: "transparent",
@@ -180,6 +180,8 @@ const CommandPaletteModal: React.FC = () => {
               </div>
               {filteredScenarios.map((scenario, index) => {
                 const isSelected = selectedIndex === index;
+                const persona = scenario.personaName || scenario.guestName;
+                const setting = scenario.setting || scenario.roomNumber;
                 return (
                   <div
                     key={scenario.id}
@@ -215,7 +217,7 @@ const CommandPaletteModal: React.FC = () => {
                           {scenario.title}
                         </div>
                         <div style={{ fontSize: "11px", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
-                          {scenario.guestName} ({formatRoomNumber(scenario.roomNumber)}) • ~{scenario.durationMinutes}m
+                          {persona} ({formatContextSetting(setting || "")}) • ~{scenario.durationMinutes}m
                         </div>
                       </div>
                     </div>
@@ -282,7 +284,7 @@ const CommandPaletteModal: React.FC = () => {
 
           {filteredScenarios.length === 0 && query.trim() !== "" && (
             <div style={{ padding: "28px", textAlign: "center", color: "var(--text-tertiary)", fontSize: "13px" }}>
-              No matching scenarios found for "{query}"
+              No results for "{query}"
             </div>
           )}
         </div>

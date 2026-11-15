@@ -8,10 +8,10 @@ export const ProcessingScreen: React.FC = () => {
   const [currentStage, setCurrentStage] = useState(0);
 
   const stages = [
-    "Transcribing conversational dialogue",
-    "Evaluating core communication competencies",
-    "Synthesizing guest resolution indicators",
-    "Compiling performance report"
+    "Transcribing conversational audio",
+    "Measuring voice steadiness and pauses",
+    "Mapping biometric stress curve vs baseline",
+    "Generating composure and recovery debrief"
   ];
 
   useEffect(() => {
@@ -27,6 +27,8 @@ export const ProcessingScreen: React.FC = () => {
       return () => clearTimeout(timer);
     }
   }, [currentStage, stages.length, navigateTo]);
+
+  const counterpartName = selectedScenario.personaName || selectedScenario.guestName;
 
   return (
     <div
@@ -55,7 +57,7 @@ export const ProcessingScreen: React.FC = () => {
             Processing Session
           </h1>
           <p style={{ fontSize: "13.5px", color: "var(--text-secondary)", margin: 0 }}>
-            Analyzing coaching dialogue with {selectedScenario.guestName}
+            Analyzing pressure signals with {counterpartName}
           </p>
         </div>
 

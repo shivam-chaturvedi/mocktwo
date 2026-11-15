@@ -103,8 +103,9 @@ export const ScoreRing: React.FC<ScoreRingProps> = ({
         }}
       >
         <span
-          className="font-serif-luxury tabular-nums"
+          className="tabular-nums"
           style={{
+            fontFamily: "var(--font-sans)",
             fontSize: size >= 100 ? "34px" : "22px",
             fontWeight: 700,
             lineHeight: 1,

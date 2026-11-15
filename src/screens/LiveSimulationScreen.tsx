@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useApp } from "../context";
 import { AudioVisualizer } from "../components/common/AudioVisualizer";
 import { Button } from "../components/common/Button";
@@ -13,16 +13,18 @@ import {
   Target,
   Maximize2
 } from "lucide-react";
+import { VALIDATION_HINTS, type ValidationStatusCode } from "../types";
 
 export const LiveSimulationScreen: React.FC = () => {
-  const { selectedScenario, activeSessionGuest, finishSimulation } = useApp();
+  const { selectedScenario, activeSessionGuest, finishSimulation, user } = useApp();
 
-  const currentGuest = activeSessionGuest || {
-    name: selectedScenario.guestName,
-    avatarUrl: selectedScenario.guestAvatarUrl,
-    roomNumber: selectedScenario.roomNumber,
-    loyaltyTier: selectedScenario.loyaltyTier,
-    temperamentTraits: [selectedScenario.guestMood],
+  const currentPersona = activeSessionGuest || {
+    id: selectedScenario.id,
+    name: selectedScenario.personaName || selectedScenario.guestName,
+    avatarUrl: selectedScenario.personaAvatarUrl || selectedScenario.guestAvatarUrl,
+    setting: selectedScenario.setting || selectedScenario.roomNumber,
+    seniority: selectedScenario.seniority || selectedScenario.loyaltyTier,
+    temperamentTraits: [selectedScenario.personaTone || selectedScenario.guestMood],
     voice: "Alloy (Warm British)"
   };
 
@@ -32,11 +34,18 @@ export const LiveSimulationScreen: React.FC = () => {
   const [isSpeakerActive, setIsSpeakerActive] = useState(true);
   const [showEndModal, setShowEndModal] = useState(false);
   const [showObjectivesPanel, setShowObjectivesPanel] = useState(false);
-  const [guestSpeaking, setGuestSpeaking] = useState(true);
+  const [counterpartSpeaking, setCounterpartSpeaking] = useState(true);
   const [isTopBarVisible, setIsTopBarVisible] = useState(true);
 
   const TOTAL_SESSION_SECONDS = 60;
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Optical sensor validation status: simulated briefly without showing live numbers
+  const currentValidationStatus: ValidationStatusCode = useMemo(() => {
+    if (cameraOff) return "NO_FACE_FOUND";
+    if (secondsElapsed >= 18 && secondsElapsed <= 23) return "EXCESSIVE_MOTION";
+    return "OK";
+  }, [cameraOff, secondsElapsed]);
 
   // Timer increment
   useEffect(() => {
@@ -57,7 +66,7 @@ export const LiveSimulationScreen: React.FC = () => {
   // Turn-taking simulation
   useEffect(() => {
     const turnInterval = setInterval(() => {
-      setGuestSpeaking((prev) => !prev);
+      setCounterpartSpeaking((prev) => !prev);
     }, 4500);
     return () => clearInterval(turnInterval);
   }, []);
@@ -144,7 +153,7 @@ export const LiveSimulationScreen: React.FC = () => {
       >
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           <span style={{ fontSize: "14px", fontWeight: 650, color: "var(--text-primary)" }}>
-            {currentGuest.name}
+            {currentPersona.name}
           </span>
           <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
             • {selectedScenario.title}
@@ -208,7 +217,35 @@ export const LiveSimulationScreen: React.FC = () => {
         </div>
       </header>
 
-      {/* Guest Video Stage */}
+      {/* Optical Sensor Validation Hint Pill (Only appears when not OK, auto-hides when OK) */}
+      {currentValidationStatus !== "OK" && (
+        <div
+          style={{
+            position: "absolute",
+            top: "60px",
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 512,
+            backgroundColor: "rgba(255, 159, 10, 0.18)",
+            border: "1px solid rgba(255, 159, 10, 0.4)",
+            backdropFilter: "blur(16px)",
+            padding: "5px 14px",
+            borderRadius: "var(--radius-full)",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            boxShadow: "0 4px 16px rgba(0, 0, 0, 0.4)",
+            animation: "fadeIn 0.2s ease-in-out",
+          }}
+        >
+          <span style={{ width: "6px", height: "6px", borderRadius: "50%", backgroundColor: "var(--accent-orange)" }} />
+          <span style={{ fontSize: "11.5px", color: "#ffffff", fontWeight: 500 }}>
+            {VALIDATION_HINTS[currentValidationStatus]}
+          </span>
+        </div>
+      )}
+
+      {/* Counterpart Video Stage */}
       <div
         style={{
           flex: 1,
@@ -226,14 +263,14 @@ export const LiveSimulationScreen: React.FC = () => {
             width: "480px",
             height: "480px",
             borderRadius: "50%",
-            background: guestSpeaking
+            background: counterpartSpeaking
               ? "radial-gradient(circle, rgba(10, 132, 255, 0.12) 0%, transparent 70%)"
               : "radial-gradient(circle, rgba(255, 255, 255, 0.04) 0%, transparent 70%)",
             transition: "background 0.5s ease"
           }}
         />
 
-        {/* Guest Video Centerpiece */}
+        {/* Counterpart Video Centerpiece */}
         <div
           style={{
             display: "flex",
@@ -249,8 +286,8 @@ export const LiveSimulationScreen: React.FC = () => {
               height: "240px",
               borderRadius: "50%",
               overflow: "hidden",
-              border: guestSpeaking ? "2.5px solid var(--accent-blue)" : "1.5px solid rgba(255, 255, 255, 0.12)",
-              boxShadow: guestSpeaking
+              border: counterpartSpeaking ? "2.5px solid var(--accent-blue)" : "1.5px solid rgba(255, 255, 255, 0.12)",
+              boxShadow: counterpartSpeaking
                 ? "0 0 36px rgba(10, 132, 255, 0.35), 0 12px 32px rgba(0, 0, 0, 0.5)"
                 : "0 12px 32px rgba(0, 0, 0, 0.5)",
               transition: "border-color 0.25s ease, box-shadow 0.25s ease",
@@ -258,8 +295,8 @@ export const LiveSimulationScreen: React.FC = () => {
             }}
           >
             <img
-              src={currentGuest.avatarUrl}
-              alt={currentGuest.name}
+              src={currentPersona.avatarUrl}
+              alt={currentPersona.name}
               style={{ width: "100%", height: "100%", objectFit: "cover" }}
             />
           </div>
@@ -275,7 +312,7 @@ export const LiveSimulationScreen: React.FC = () => {
                 letterSpacing: "-0.015em"
               }}
             >
-              {currentGuest.name}
+              {currentPersona.name}
             </h2>
             <div
               style={{
@@ -283,18 +320,18 @@ export const LiveSimulationScreen: React.FC = () => {
                 alignItems: "center",
                 gap: "8px",
                 fontSize: "12.5px",
-                color: guestSpeaking ? "var(--accent-blue)" : "var(--text-secondary)",
+                color: counterpartSpeaking ? "var(--accent-blue)" : "var(--text-secondary)",
                 backgroundColor: "rgba(42, 42, 44, 0.6)",
                 padding: "4px 14px",
                 borderRadius: "var(--radius-full)",
                 border: "1px solid rgba(255, 255, 255, 0.08)"
               }}
             >
-              <span style={{ fontWeight: 550 }}>{guestSpeaking ? "Guest Speaking" : "Listening to you"}</span>
+              <span style={{ fontWeight: 550 }}>{counterpartSpeaking ? `${currentPersona.name} Speaking` : "Listening to you"}</span>
               <AudioVisualizer
-                active={guestSpeaking}
+                active={counterpartSpeaking}
                 barsCount={8}
-                color={guestSpeaking ? "var(--accent-blue)" : "var(--text-tertiary)"}
+                color={counterpartSpeaking ? "var(--accent-blue)" : "var(--text-tertiary)"}
                 size="sm"
               />
             </div>
@@ -385,10 +422,10 @@ export const LiveSimulationScreen: React.FC = () => {
                   marginBottom: "4px"
                 }}
               >
-                EV
+                {user?.name ? user.name.slice(0, 2).toUpperCase() : "U"}
               </div>
               <span style={{ fontSize: "12px", color: "var(--text-secondary)", fontWeight: 500 }}>
-                You (Elena Vance)
+                {user?.name ? `You (${user.name})` : "You"}
               </span>
             </>
           )}
@@ -600,7 +637,7 @@ export const LiveSimulationScreen: React.FC = () => {
                 margin: "0 0 20px 0"
               }}
             >
-              Your completed dialogue of {formatTime(secondsElapsed)} will be analyzed and saved to your performance report.
+              Your completed session of {formatTime(secondsElapsed)} will be analyzed for pressure response and composure.
             </p>
 
             <div style={{ display: "flex", gap: "10px", justifyContent: "center" }}>
@@ -608,7 +645,7 @@ export const LiveSimulationScreen: React.FC = () => {
                 Continue Session
               </Button>
               <Button variant="danger" size="md" onClick={handleEndEarly} style={{ flex: 1 }}>
-                End & Compile Report
+                End & View Debrief
               </Button>
             </div>
           </div>

@@ -4,14 +4,18 @@ import { Button } from "./Button";
 import { CategoryIcon } from "./CategoryIcon";
 import { Badge } from "./Badge";
 import { AudioVisualizer } from "./AudioVisualizer";
-import { GuestPicker } from "./GuestPicker";
-import { formatRoomNumber, renderScenarioText, type Guest } from "../../types";
+import { PersonaPicker } from "./PersonaPicker";
+import { formatContextSetting, renderScenarioText, type Persona, VALIDATION_HINTS } from "../../types";
+import { WELLNESS_DISCLAIMER } from "../../services/biometrics";
+import { serviceRegistry } from "../../services/api";
 import {
   Mic,
   Video,
   X,
   Target,
-  Play
+  Play,
+  Activity,
+  ShieldCheck,
 } from "lucide-react";
 
 export const BriefingSheet: React.FC = () => {
@@ -20,33 +24,48 @@ export const BriefingSheet: React.FC = () => {
     closeBriefing,
     selectedScenario,
     beginSimulation,
-    activeSessionGuest,
-    setSessionGuest,
-    guests,
+    activeSessionPersona,
+    setSessionPersona,
+    personas,
     settings,
-    updateSettings
+    updateSettings,
+    runMiniBaseline,
+    showToast,
+    openStudio,
   } = useApp();
+
+  const isSessionServiceAvailable = serviceRegistry.session.isAvailable();
 
   const [micMuted, setMicMuted] = useState(false);
   const [cameraOff, setCameraOff] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [isCrossfading, setIsCrossfading] = useState(false);
+  const [isMeasuringBaseline, setIsMeasuringBaseline] = useState(false);
+  const [miniBaselineProgress, setMiniBaselineProgress] = useState<number | null>(null);
+  const [baselinePulseResult, setBaselinePulseResult] = useState<number | null>(null);
 
-  // Active guest for this session (falls back to scenario default)
-  const currentGuest: Guest = useMemo(() => {
-    if (activeSessionGuest) return activeSessionGuest;
-    const defaultG = guests.find((g) => g.id === selectedScenario.guestId || g.name === selectedScenario.guestName);
-    return defaultG || guests[0];
-  }, [activeSessionGuest, guests, selectedScenario]);
+  // Active persona for this session (falls back to scenario default)
+  const currentPersona: Persona | undefined = useMemo(() => {
+    if (activeSessionPersona) return activeSessionPersona;
+    if (!selectedScenario) return personas[0];
+    const defaultP = personas.find(
+      (p) =>
+        p.id === selectedScenario.personaId ||
+        p.id === selectedScenario.guestId ||
+        p.name === selectedScenario.personaName ||
+        p.name === selectedScenario.guestName
+    );
+    return defaultP || personas[0];
+  }, [activeSessionPersona, personas, selectedScenario]);
 
-  const handleSelectGuest = (newGuest: Guest) => {
+  const handleSelectPersona = (newPersona: Persona) => {
     if (settings.reducedMotion) {
-      setSessionGuest(newGuest);
+      setSessionPersona(newPersona);
       return;
     }
     setIsCrossfading(true);
     setTimeout(() => {
-      setSessionGuest(newGuest);
+      setSessionPersona(newPersona);
       setIsCrossfading(false);
     }, 75);
   };
@@ -73,29 +92,33 @@ export const BriefingSheet: React.FC = () => {
     } else if (countdown === 1) {
       const timer = setTimeout(() => {
         setCountdown(null);
-        beginSimulation(currentGuest);
+        beginSimulation(currentPersona);
       }, 650);
       return () => clearTimeout(timer);
     }
-  }, [countdown, beginSimulation, currentGuest]);
+  }, [countdown, beginSimulation, currentPersona]);
 
-  if (!isBriefingOpen) return null;
+  if (!isBriefingOpen || !selectedScenario) return null;
 
   const cameraOptions = [
     "FaceTime HD Camera (Built-in)",
     "Studio Display Camera",
-    "External Webcam"
+    "External Webcam",
   ];
 
   const micOptions = [
     "MacBook Studio Microphone (Built-in)",
     "AirPods Pro",
-    "External USB Microphone"
+    "External USB Microphone",
   ];
 
   const handleStartSession = () => {
     setCountdown(3);
   };
+
+  const setting = currentPersona ? formatContextSetting(currentPersona.contextSetting || currentPersona.roomNumber || "") : "";
+  const seniority = currentPersona?.seniority || currentPersona?.loyaltyTier || "";
+  const tone = currentPersona?.temperamentTraits ? currentPersona.temperamentTraits.join(" & ") : (currentPersona?.title || "");
 
   return (
     <div
@@ -108,7 +131,7 @@ export const BriefingSheet: React.FC = () => {
         WebkitBackdropFilter: "blur(12px)",
         display: "grid",
         placeItems: "center",
-        padding: "24px"
+        padding: "24px",
       }}
       onClick={() => {
         if (countdown === null) closeBriefing();
@@ -126,7 +149,7 @@ export const BriefingSheet: React.FC = () => {
           flexDirection: "column",
           overflow: "hidden",
           position: "relative",
-          border: "1px solid var(--separator)"
+          border: "1px solid var(--separator)",
         }}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
@@ -145,22 +168,23 @@ export const BriefingSheet: React.FC = () => {
               flexDirection: "column",
               alignItems: "center",
               justifyContent: "center",
-              gap: "12px"
+              gap: "12px",
             }}
           >
             <span
-              className="font-serif-luxury"
+              className="tabular-nums"
               style={{
                 fontSize: "72px",
                 fontWeight: 700,
                 color: "#ffffff",
-                lineHeight: 1
+                lineHeight: 1,
+                fontFamily: "var(--font-sans)",
               }}
             >
               {countdown}
             </span>
             <span style={{ fontSize: "14px", color: "var(--text-secondary)", letterSpacing: "0.02em" }}>
-              Connecting live feed with {currentGuest.name}…
+              Connecting live feed with {currentPersona.name}…
             </span>
           </div>
         )}
@@ -174,7 +198,7 @@ export const BriefingSheet: React.FC = () => {
             alignItems: "center",
             justifyContent: "space-between",
             borderBottom: "1px solid var(--separator)",
-            backgroundColor: "rgba(42, 42, 44, 0.4)"
+            backgroundColor: "rgba(42, 42, 44, 0.4)",
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
@@ -190,21 +214,14 @@ export const BriefingSheet: React.FC = () => {
           <button
             onClick={closeBriefing}
             aria-label="Close"
+            className="hover-subtle focus-ring"
             style={{
               color: "var(--text-tertiary)",
               padding: "4px",
               borderRadius: "var(--radius-sm)",
               display: "grid",
               placeItems: "center",
-              transition: "all 0.12s ease"
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.color = "var(--text-primary)";
-              e.currentTarget.style.backgroundColor = "var(--bg-hover)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.color = "var(--text-tertiary)";
-              e.currentTarget.style.backgroundColor = "transparent";
+              transition: "all 0.12s ease",
             }}
           >
             <X size={16} />
@@ -217,10 +234,10 @@ export const BriefingSheet: React.FC = () => {
             flex: 1,
             display: "grid",
             gridTemplateColumns: "1.1fr 0.9fr",
-            overflow: "hidden"
+            overflow: "hidden",
           }}
         >
-          {/* Left Column: Guest Context & Objectives */}
+          {/* Left Column: Persona Context & Objectives */}
           <div
             style={{
               padding: "24px 28px",
@@ -228,10 +245,10 @@ export const BriefingSheet: React.FC = () => {
               overflowY: "auto",
               display: "flex",
               flexDirection: "column",
-              gap: "20px"
+              gap: "20px",
             }}
           >
-            {/* Guest Summary Card (Crossfades live when guest changes) */}
+            {/* Header Block shows: {setting} · {seniority} · {tone} */}
             <div
               style={{
                 display: "flex",
@@ -239,7 +256,7 @@ export const BriefingSheet: React.FC = () => {
                 gap: "16px",
                 opacity: isCrossfading ? 0.2 : 1,
                 transform: isCrossfading ? "scale(0.98)" : "scale(1)",
-                transition: settings.reducedMotion ? "none" : "opacity 150ms ease, transform 150ms ease"
+                transition: settings.reducedMotion ? "none" : "opacity 150ms ease, transform 150ms ease",
               }}
             >
               <div
@@ -251,13 +268,13 @@ export const BriefingSheet: React.FC = () => {
                   border: "1px solid var(--separator)",
                   boxShadow: "var(--shadow-card)",
                   flexShrink: 0,
-                  backgroundColor: "var(--bg-window)"
+                  backgroundColor: "var(--bg-window)",
                 }}
               >
-                {currentGuest.avatarUrl ? (
+                {currentPersona.avatarUrl ? (
                   <img
-                    src={currentGuest.avatarUrl}
-                    alt={currentGuest.name}
+                    src={currentPersona.avatarUrl}
+                    alt={currentPersona.name}
                     style={{ width: "100%", height: "100%", objectFit: "cover" }}
                   />
                 ) : (
@@ -265,15 +282,15 @@ export const BriefingSheet: React.FC = () => {
                     style={{
                       width: "100%",
                       height: "100%",
-                      background: "linear-gradient(135deg, rgba(10, 132, 255, 0.35), rgba(191, 90, 242, 0.35))",
+                      backgroundColor: "var(--bg-control)",
                       display: "grid",
                       placeItems: "center",
                       fontSize: "18px",
                       fontWeight: 650,
-                      color: "var(--text-primary)"
+                      color: "var(--text-primary)",
                     }}
                   >
-                    {currentGuest.monogram || currentGuest.name.slice(0, 2).toUpperCase()}
+                    {currentPersona.monogram || currentPersona.name.slice(0, 2).toUpperCase()}
                   </div>
                 )}
               </div>
@@ -284,21 +301,21 @@ export const BriefingSheet: React.FC = () => {
                     fontWeight: 650,
                     color: "var(--text-primary)",
                     margin: 0,
-                    letterSpacing: "-0.015em"
+                    letterSpacing: "-0.015em",
                   }}
                 >
-                  {currentGuest.name}
+                  {currentPersona.name}
                 </h3>
                 <div style={{ fontSize: "12.5px", color: "var(--text-secondary)", marginTop: "2px" }}>
-                  {formatRoomNumber(currentGuest.roomNumber)} • {currentGuest.loyaltyTier}
+                  {setting} · {seniority}
                 </div>
                 <div style={{ fontSize: "11.5px", color: "var(--accent-orange)", marginTop: "2px", fontWeight: 500 }}>
-                  Mood: {currentGuest.temperamentTraits.join(" & ") || currentGuest.title}
+                  Tone: {tone}
                 </div>
               </div>
             </div>
 
-            {/* GUEST Section */}
+            {/* PERSONA Section */}
             <div>
               <h4
                 style={{
@@ -307,16 +324,30 @@ export const BriefingSheet: React.FC = () => {
                   letterSpacing: "0.05em",
                   color: "var(--text-tertiary)",
                   margin: "0 0 6px 0",
-                  fontWeight: 600
+                  fontWeight: 600,
                 }}
               >
-                Guest
+                Persona
               </h4>
-              <GuestPicker
-                scenario={selectedScenario}
-                selectedGuest={currentGuest}
-                onSelectGuest={handleSelectGuest}
-              />
+              {!currentPersona ? (
+                <div style={{ padding: "16px", borderRadius: "var(--radius-md)", border: "1px dashed var(--separator)", textAlign: "center", backgroundColor: "var(--bg-control)" }}>
+                  <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", marginBottom: "4px" }}>
+                    No personas available
+                  </div>
+                  <div style={{ fontSize: "11.5px", color: "var(--text-secondary)", marginBottom: "12px" }}>
+                    Create a persona to practice with.
+                  </div>
+                  <Button variant="secondary" size="sm" onClick={() => openStudio("persona")}>
+                    New persona
+                  </Button>
+                </div>
+              ) : (
+                <PersonaPicker
+                  scenario={selectedScenario}
+                  selectedPersona={currentPersona}
+                  onSelectPersona={handleSelectPersona}
+                />
+              )}
             </div>
 
             {/* Situation Context */}
@@ -328,7 +359,7 @@ export const BriefingSheet: React.FC = () => {
                   letterSpacing: "0.05em",
                   color: "var(--text-tertiary)",
                   margin: "0 0 6px 0",
-                  fontWeight: 600
+                  fontWeight: 600,
                 }}
               >
                 Situation Context
@@ -338,10 +369,10 @@ export const BriefingSheet: React.FC = () => {
                   fontSize: "13px",
                   color: "var(--text-secondary)",
                   lineHeight: 1.5,
-                  margin: 0
+                  margin: 0,
                 }}
               >
-                {renderScenarioText(selectedScenario.context, selectedScenario, currentGuest)}
+                {renderScenarioText(selectedScenario.context, selectedScenario, currentPersona)}
               </p>
             </div>
 
@@ -354,7 +385,7 @@ export const BriefingSheet: React.FC = () => {
                   letterSpacing: "0.05em",
                   color: "var(--text-tertiary)",
                   margin: "0 0 8px 0",
-                  fontWeight: 600
+                  fontWeight: 600,
                 }}
               >
                 Key Objectives
@@ -371,13 +402,13 @@ export const BriefingSheet: React.FC = () => {
                         display: "grid",
                         placeItems: "center",
                         flexShrink: 0,
-                        marginTop: "2px"
+                        marginTop: "2px",
                       }}
                     >
                       <Target size={10} style={{ color: "var(--accent-blue)" }} />
                     </div>
                     <span style={{ fontSize: "12.5px", color: "var(--text-primary)", lineHeight: 1.45 }}>
-                      {renderScenarioText(obj, selectedScenario, currentGuest)}
+                      {renderScenarioText(obj, selectedScenario, currentPersona)}
                     </span>
                   </div>
                 ))}
@@ -385,20 +416,51 @@ export const BriefingSheet: React.FC = () => {
             </div>
           </div>
 
-          {/* Right Column: Hardware Preview & Controls */}
+          {/* Right Column: Hardware & Camera Check */}
           <div
+            className="custom-scroll"
             style={{
-              padding: "24px 28px",
+              padding: "20px 24px",
               backgroundColor: "rgba(30, 30, 32, 0.4)",
               display: "flex",
               flexDirection: "column",
-              justifyContent: "space-between"
+              overflowY: "auto",
+              gap: "14px",
             }}
           >
             <div>
-              <h4 style={{ fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-tertiary)", margin: "0 0 12px 0", fontWeight: 600 }}>
-                Hardware & Camera Check
-              </h4>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
+                <h4
+                  style={{
+                    fontSize: "11.5px",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.05em",
+                    color: "var(--text-tertiary)",
+                    margin: 0,
+                    fontWeight: 600,
+                  }}
+                >
+                  Hardware &amp; Sensor Calibration
+                </h4>
+                {/* Live validation hint pill */}
+                <div
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "5px",
+                    padding: "2px 8px",
+                    borderRadius: "var(--radius-full)",
+                    backgroundColor: "rgba(48, 209, 88, 0.12)",
+                    border: "1px solid rgba(48, 209, 88, 0.25)",
+                    fontSize: "10.5px",
+                    color: "var(--accent-green)",
+                    fontWeight: 500,
+                  }}
+                >
+                  <span style={{ width: "5px", height: "5px", borderRadius: "50%", backgroundColor: "var(--accent-green)" }} />
+                  <span>{VALIDATION_HINTS.OK}</span>
+                </div>
+              </div>
 
               {/* 16:9 Camera tile */}
               <div
@@ -413,8 +475,8 @@ export const BriefingSheet: React.FC = () => {
                   alignItems: "center",
                   justifyContent: "center",
                   position: "relative",
-                  marginBottom: "14px",
-                  overflow: "hidden"
+                  marginBottom: "12px",
+                  overflow: "hidden",
                 }}
               >
                 {cameraOff ? (
@@ -425,22 +487,22 @@ export const BriefingSheet: React.FC = () => {
                   <>
                     <div
                       style={{
-                        width: "48px",
-                        height: "48px",
+                        width: "44px",
+                        height: "44px",
                         borderRadius: "50%",
                         backgroundColor: "var(--bg-control)",
                         border: "1px solid var(--separator)",
                         display: "grid",
                         placeItems: "center",
                         color: "var(--text-primary)",
-                        fontSize: "14px",
+                        fontSize: "13px",
                         fontWeight: 650,
-                        marginBottom: "6px"
+                        marginBottom: "4px",
                       }}
                     >
                       EV
                     </div>
-                    <span style={{ fontSize: "12px", color: "var(--text-secondary)", fontWeight: 500 }}>
+                    <span style={{ fontSize: "11.5px", color: "var(--text-secondary)", fontWeight: 500 }}>
                       Mirror Preview
                     </span>
                   </>
@@ -450,84 +512,182 @@ export const BriefingSheet: React.FC = () => {
                 <div
                   style={{
                     position: "absolute",
-                    bottom: "8px",
-                    right: "10px",
+                    bottom: "6px",
+                    right: "8px",
                     display: "flex",
                     alignItems: "center",
                     gap: "6px",
                     backgroundColor: "rgba(0, 0, 0, 0.65)",
-                    padding: "3px 8px",
+                    padding: "2px 6px",
                     borderRadius: "var(--radius-sm)",
-                    border: "1px solid rgba(255, 255, 255, 0.08)"
+                    border: "1px solid rgba(255, 255, 255, 0.08)",
                   }}
                 >
-                  <AudioVisualizer active={!micMuted} barsCount={8} size="sm" />
+                  <AudioVisualizer active={!micMuted} barsCount={6} size="sm" />
                 </div>
               </div>
 
-              {/* Camera & Mic selectors */}
-              <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "12px" }}>
-                <div>
-                  <label style={{ display: "block", fontSize: "11.5px", color: "var(--text-tertiary)", marginBottom: "4px" }}>
-                    Camera Source
-                  </label>
-                  <select
-                    value={settings.selectedCamera}
-                    onChange={(e) => updateSettings({ selectedCamera: e.target.value })}
-                    style={{
-                      width: "100%",
-                      padding: "6px 10px",
-                      backgroundColor: "var(--bg-control)",
-                      border: "1px solid var(--separator)",
-                      borderRadius: "var(--radius-sm)",
-                      color: "var(--text-primary)",
-                      fontSize: "12px",
-                      outline: "none"
-                    }}
-                  >
-                    {cameraOptions.map((cam) => (
-                      <option key={cam} value={cam}>
-                        {cam}
-                      </option>
-                    ))}
-                  </select>
+              {/* Camera & Mic Selectors */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "10px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                  <div>
+                    <label style={{ display: "block", fontSize: "11px", color: "var(--text-tertiary)", marginBottom: "3px" }}>
+                      Camera Source
+                    </label>
+                    <select
+                      value={settings.selectedCamera}
+                      onChange={(e) => updateSettings({ selectedCamera: e.target.value })}
+                      style={{
+                        width: "100%",
+                        padding: "5px 8px",
+                        backgroundColor: "var(--bg-control)",
+                        border: "1px solid var(--separator)",
+                        borderRadius: "var(--radius-sm)",
+                        color: "var(--text-primary)",
+                        fontSize: "11.5px",
+                        outline: "none",
+                      }}
+                    >
+                      {cameraOptions.map((cam) => (
+                        <option key={cam} value={cam}>
+                          {cam}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={{ display: "block", fontSize: "11px", color: "var(--text-tertiary)", marginBottom: "3px" }}>
+                      Microphone
+                    </label>
+                    <select
+                      value={settings.selectedMicrophone}
+                      onChange={(e) => updateSettings({ selectedMicrophone: e.target.value })}
+                      style={{
+                        width: "100%",
+                        padding: "5px 8px",
+                        backgroundColor: "var(--bg-control)",
+                        border: "1px solid var(--separator)",
+                        borderRadius: "var(--radius-sm)",
+                        color: "var(--text-primary)",
+                        fontSize: "11.5px",
+                        outline: "none",
+                      }}
+                    >
+                      {micOptions.map((mic) => (
+                        <option key={mic} value={mic}>
+                          {mic}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
-                <div>
-                  <label style={{ display: "block", fontSize: "11.5px", color: "var(--text-tertiary)", marginBottom: "4px" }}>
-                    Microphone Input
-                  </label>
-                  <select
-                    value={settings.selectedMicrophone}
-                    onChange={(e) => updateSettings({ selectedMicrophone: e.target.value })}
-                    style={{
-                      width: "100%",
-                      padding: "6px 10px",
-                      backgroundColor: "var(--bg-control)",
-                      border: "1px solid var(--separator)",
-                      borderRadius: "var(--radius-sm)",
-                      color: "var(--text-primary)",
-                      fontSize: "12px",
-                      outline: "none"
-                    }}
-                  >
-                    {micOptions.map((mic) => (
-                      <option key={mic} value={mic}>
-                        {mic}
-                      </option>
-                    ))}
-                  </select>
+                {/* Camera Pulse Measurement (renamed from Heart Rate Sensor) */}
+                <div
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: "var(--radius-sm)",
+                    backgroundColor: "var(--bg-control)",
+                    border: "1px solid var(--separator)",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      <Activity size={13} style={{ color: "var(--accent-green)" }} />
+                      <span style={{ fontSize: "11.5px", fontWeight: 600, color: "var(--text-primary)" }}>
+                        Camera Pulse Measurement
+                      </span>
+                    </div>
+
+                    <button
+                      onClick={async () => {
+                        setIsMeasuringBaseline(true);
+                        setMiniBaselineProgress(0);
+                        const interval = setInterval(() => {
+                          setMiniBaselineProgress((p) => (p === null || p >= 95 ? p : p + 5));
+                        }, 90);
+                        try {
+                          const p = await runMiniBaseline(20);
+                          clearInterval(interval);
+                          setMiniBaselineProgress(100);
+                          setBaselinePulseResult(p.restingPulse);
+                          showToast(`Resting pulse verified: ${p.restingPulse} bpm`);
+                        } catch {
+                          clearInterval(interval);
+                        } finally {
+                          setTimeout(() => setIsMeasuringBaseline(false), 400);
+                        }
+                      }}
+                      disabled={isMeasuringBaseline}
+                      className="hover-subtle"
+                      style={{
+                        fontSize: "11px",
+                        color: "var(--accent-blue)",
+                        fontWeight: 500,
+                        background: "none",
+                        border: "none",
+                        cursor: "default",
+                        padding: 0,
+                      }}
+                    >
+                      {isMeasuringBaseline ? "Calibrating…" : "Quick 20s baseline"}
+                    </button>
+                  </div>
+
+                  {miniBaselineProgress !== null && (
+                    <div style={{ marginTop: "4px" }}>
+                      <div style={{ height: "3px", borderRadius: "1.5px", backgroundColor: "var(--bg-window)", overflow: "hidden" }}>
+                        <div
+                          style={{
+                            height: "100%",
+                            width: `${miniBaselineProgress}%`,
+                            backgroundColor: "var(--accent-blue)",
+                            transition: "width 0.1s ease",
+                          }}
+                        />
+                      </div>
+                      {baselinePulseResult && (
+                        <span style={{ fontSize: "10.5px", color: "var(--accent-green)", display: "block", marginTop: "3px" }}>
+                          ✓ Baseline pulse: {baselinePulseResult} bpm
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* 3-point Environmental Checklist */}
+                <div
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: "var(--radius-sm)",
+                    backgroundColor: "rgba(255, 255, 255, 0.02)",
+                    border: "1px solid var(--separator)",
+                    fontSize: "11px",
+                    color: "var(--text-secondary)",
+                    lineHeight: 1.4,
+                  }}
+                >
+                  <div style={{ fontWeight: 600, color: "var(--text-primary)", marginBottom: "3px" }}>
+                    Optical Sensor Checklist:
+                  </div>
+                  <div>• Place device on a stable surface (minimizes motion artifacts)</div>
+                  <div>• Face even front light (avoid harsh backlight or deep shadows)</div>
+                  <div>• Remain reasonably still while speaking</div>
+                  <div style={{ fontSize: "10px", color: "var(--text-tertiary)", marginTop: "4px" }}>
+                    Bright flickering screens or direct lights behind you reduce measurement accuracy.
+                  </div>
                 </div>
               </div>
 
               {/* Hardware toggles */}
-              <div style={{ display: "flex", gap: "8px" }}>
+              <div style={{ display: "flex", gap: "8px", marginBottom: "8px" }}>
                 <Button
                   variant={micMuted ? "outline" : "secondary"}
                   size="sm"
                   icon={<Mic size={13} />}
                   onClick={() => setMicMuted((prev) => !prev)}
-                  style={{ flex: 1, fontSize: "12px" }}
+                  style={{ flex: 1, fontSize: "11.5px" }}
                 >
                   {micMuted ? "Unmute Mic" : "Mute Mic"}
                 </Button>
@@ -536,10 +696,18 @@ export const BriefingSheet: React.FC = () => {
                   size="sm"
                   icon={<Video size={13} />}
                   onClick={() => setCameraOff((prev) => !prev)}
-                  style={{ flex: 1, fontSize: "12px" }}
+                  style={{ flex: 1, fontSize: "11.5px" }}
                 >
                   {cameraOff ? "Video On" : "Video Off"}
                 </Button>
+              </div>
+
+              {/* Mandatory Disclaimer */}
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <ShieldCheck size={12} style={{ color: "var(--text-tertiary)" }} />
+                <span style={{ fontSize: "10.5px", color: "var(--text-tertiary)" }}>
+                  {WELLNESS_DISCLAIMER} Stored locally.
+                </span>
               </div>
             </div>
           </div>
@@ -554,7 +722,7 @@ export const BriefingSheet: React.FC = () => {
             alignItems: "center",
             justifyContent: "space-between",
             borderTop: "1px solid var(--separator)",
-            backgroundColor: "rgba(42, 42, 44, 0.4)"
+            backgroundColor: "rgba(42, 42, 44, 0.4)",
           }}
         >
           <span style={{ fontSize: "12.5px", color: "var(--text-tertiary)" }}>
@@ -568,6 +736,8 @@ export const BriefingSheet: React.FC = () => {
             <Button
               variant="primary"
               size="md"
+              disabled={!isSessionServiceAvailable || !currentPersona}
+              title={!isSessionServiceAvailable ? "Practice sessions require a connected mocktwo backend service" : undefined}
               icon={<Play size={13} fill="currentColor" />}
               onClick={handleStartSession}
             >
@@ -579,4 +749,3 @@ export const BriefingSheet: React.FC = () => {
     </div>
   );
 };
-

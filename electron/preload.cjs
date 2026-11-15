@@ -7,6 +7,16 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on("menu-action", handler);
     return () => ipcRenderer.removeListener("menu-action", handler);
   },
-  sendWindowAction: (action) => ipcRenderer.send("window-action", action)
+  sendWindowAction: (action) => {
+    if (typeof action === "string" && ["toggle-fullscreen"].includes(action)) {
+      ipcRenderer.send("window-action", action);
+    }
+  },
+  openSystemSettings: (pane) => {
+    if (typeof pane === "string" && ["camera", "microphone"].includes(pane)) {
+      return ipcRenderer.invoke("open-system-settings", pane);
+    }
+    return Promise.resolve(false);
+  }
 });
 

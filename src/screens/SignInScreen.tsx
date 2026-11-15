@@ -11,15 +11,15 @@ import {
 } from "lucide-react";
 
 export const SignInScreen: React.FC = () => {
-  const { signIn, employee } = useApp();
+  const { signIn, user } = useApp();
 
   const [authStep, setAuthStep] = useState<"welcome" | "sso-or-code" | "enter-code">("welcome");
-  const [email, setEmail] = useState("elena.vance@grandpalais.luxury");
+  const [email, setEmail] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [codeDigits, setCodeDigits] = useState<string[]>(["", "", "", "", "", ""]);
   const [resendTimer, setResendTimer] = useState(45);
-  const [isReturningUser, setIsReturningUser] = useState(true);
+  const [isReturningUser, setIsReturningUser] = useState(Boolean(user?.email && user.name));
 
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -32,22 +32,10 @@ export const SignInScreen: React.FC = () => {
     return () => clearInterval(interval);
   }, [authStep, resendTimer]);
 
-  // Global ⌥⌘D shortcut to quickly sign in
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.altKey && (e.key === "d" || e.key === "D")) {
-        e.preventDefault();
-        signIn("elena.vance@grandpalais.luxury");
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [signIn]);
-
   const handleEmailSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !email.includes("@") || !email.includes(".")) {
-      setError("Please enter a valid luxury hotel work email.");
+      setError("Please enter a valid work email.");
       return;
     }
     setError("");
@@ -81,7 +69,7 @@ export const SignInScreen: React.FC = () => {
     setIsLoading(true);
     setTimeout(() => {
       setIsLoading(false);
-      signIn(employee.email);
+      signIn(user.email);
     }, 450);
   };
 
@@ -167,7 +155,7 @@ export const SignInScreen: React.FC = () => {
             textTransform: "uppercase"
           }}
         >
-          mocktwo • Employee Portal
+          mocktwo
         </span>
       </div>
 
@@ -220,7 +208,7 @@ export const SignInScreen: React.FC = () => {
               letterSpacing: "-0.01em"
             }}
           >
-            Practice the moments that define a guest's stay.
+            Rehearse high-pressure conversations before they happen.
           </p>
         </div>
 
@@ -255,7 +243,7 @@ export const SignInScreen: React.FC = () => {
                 boxShadow: "var(--shadow-card)"
               }}
             >
-              EV
+              {user.name ? user.name.slice(0, 2).toUpperCase() : "U"}
             </div>
 
             <h3
@@ -266,10 +254,10 @@ export const SignInScreen: React.FC = () => {
                 margin: "0 0 4px 0"
               }}
             >
-              {employee.name}
+              {user.name}
             </h3>
             <div style={{ fontSize: "12.5px", color: "var(--text-secondary)", marginBottom: "22px" }}>
-              {employee.property}
+              {user.role} • {user.team}
             </div>
 
             <Button
@@ -332,7 +320,7 @@ export const SignInScreen: React.FC = () => {
                     setEmail(e.target.value);
                     if (error) setError("");
                   }}
-                  placeholder="name@grandpalais.luxury"
+                  placeholder="name@company.com"
                   autoComplete="email"
                   autoFocus
                   style={{
@@ -393,10 +381,10 @@ export const SignInScreen: React.FC = () => {
           >
             <div style={{ marginBottom: "18px", textAlign: "center" }}>
               <span style={{ fontSize: "12px", color: "var(--text-tertiary)", display: "block" }}>
-                Identified Property Domain:
+                Identified Organization:
               </span>
               <span style={{ fontSize: "13.5px", fontWeight: 600, color: "var(--text-primary)" }}>
-                The Grand Palais Luxury Identity
+                Enterprise SSO Identity
               </span>
             </div>
 
@@ -409,7 +397,7 @@ export const SignInScreen: React.FC = () => {
                 onClick={handleSSOLogin}
                 style={{ width: "100%", justifyContent: "center" }}
               >
-                Continue with Hotel SSO
+                Continue with Company SSO
               </Button>
 
               <Button

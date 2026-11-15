@@ -1,781 +1,1000 @@
-import React, { useState } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import { useApp } from "../context";
 import { Badge } from "../components/common/Badge";
 import { CategoryIcon } from "../components/common/CategoryIcon";
+import { EmptyState } from "../components/common/EmptyState";
 import {
   Search,
-  Play,
-  MoreHorizontal,
-  Plus
+  ArrowRight,
+  Plus,
+  Briefcase,
+  TrendingUp,
+  Presentation,
+  Handshake,
+  MessageCircleWarning,
+  Headset,
+  ConciergeBell,
+  Target,
+  Clock,
+  Copy,
+  Trash2,
+  Compass,
+  FolderPlus,
+  User,
+  ChevronDown,
+  Check,
+  Layers,
 } from "lucide-react";
-import { formatRoomNumber, type InteractionType } from "../types";
+import { formatContextSetting, type InteractionType, type PracticeScenario, type Persona } from "../types";
 
 export const ScenariosScreen: React.FC = () => {
   const {
     scenarios,
-    guests,
+    personas,
     openBriefing,
     openStudio,
     duplicateScenario,
     deleteScenario,
-    submitScenarioToLibrary,
-    deleteGuest
   } = useApp();
 
-  const [activeSubTab, setActiveSubTab] = useState<"library" | "mine" | "guests">("library");
+  const [activeSubTab, setActiveSubTab] = useState<"library" | "mine" | "personas">("library");
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
+  const [isCategoryPopoverOpen, setIsCategoryPopoverOpen] = useState(false);
+  const categoryDropdownRef = useRef<HTMLDivElement>(null);
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const [sortBy, setSortBy] = useState<"recommended" | "newest" | "difficulty" | "duration">("recommended");
-  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+  const [sortBy] = useState<"recommended" | "duration" | "difficulty">("recommended");
 
-  const categoryOptions: { label: string; type?: InteractionType; color: string }[] = [
-    { label: "All", color: "var(--accent-blue)" },
-    { label: "Escalation Management", type: "Escalation Management", color: "var(--accent-red)" },
-    { label: "Concierge", type: "Concierge", color: "var(--accent-purple)" },
-    { label: "Executive Lounge", type: "Executive Lounge", color: "var(--accent-teal)" },
-    { label: "Front Desk", type: "Front Desk", color: "var(--accent-blue)" },
-    { label: "Guest Services", type: "Guest Services", color: "var(--accent-green)" }
+  // Selected items for split view
+  const [selectedScenarioId, setSelectedScenarioId] = useState<string>("");
+  const [selectedPersonaId, setSelectedPersonaId] = useState<string>("");
+
+  // Close category popover on click outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(e.target as Node)) {
+        setIsCategoryPopoverOpen(false);
+      }
+    };
+    if (isCategoryPopoverOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isCategoryPopoverOpen]);
+
+  const categoryOptions: { label: string; type?: InteractionType; icon: React.ReactNode }[] = [
+    { label: "All", icon: <Layers size={12} /> },
+    { label: "Interviews", type: "Interviews", icon: <Briefcase size={12} /> },
+    { label: "Sales & Pitches", type: "Sales & Pitches", icon: <TrendingUp size={12} /> },
+    { label: "Presentations", type: "Presentations", icon: <Presentation size={12} /> },
+    { label: "Negotiation", type: "Negotiation", icon: <Handshake size={12} /> },
+    { label: "Difficult Conversations", type: "Difficult Conversations", icon: <MessageCircleWarning size={12} /> },
+    { label: "Customer Service", type: "Customer Service", icon: <Headset size={12} /> },
+    { label: "Hospitality", type: "Hospitality", icon: <ConciergeBell size={12} /> },
   ];
 
-  // Filter Scenarios for Library vs Mine
-  const libraryScenarios = scenarios.filter((s) => s.source !== "Mine");
-  const mineScenarios = scenarios.filter((s) => s.source === "Mine");
+  const selectedCategoryObj = categoryOptions.find((c) => c.label === selectedCategory) || categoryOptions[0];
 
+  // Scenarios lists
+  const libraryScenarios = useMemo(() => scenarios.filter((s) => s.source !== "Mine"), [scenarios]);
+  const mineScenarios = useMemo(() => scenarios.filter((s) => s.source === "Mine"), [scenarios]);
   const currentScenariosList = activeSubTab === "mine" ? mineScenarios : libraryScenarios;
 
-  const filteredScenarios = currentScenariosList.filter((s) => {
-    const matchesCategory = selectedCategory === "All" || s.interactionType === selectedCategory;
-    const matchesSearch =
-      s.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.guestName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.summary.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
-  });
+  // Check if current tab is completely empty at source level
+  const isCurrentTabEmpty =
+    activeSubTab === "personas"
+      ? personas.length === 0
+      : activeSubTab === "mine"
+      ? mineScenarios.length === 0
+      : libraryScenarios.length === 0;
 
-  // Sorting
-  const sortedScenarios = [...filteredScenarios].sort((a, b) => {
-    if (sortBy === "duration") return a.durationMinutes - b.durationMinutes;
+  const filteredScenarios = useMemo(() => {
+    return currentScenariosList.filter((s) => {
+      const matchesCat = selectedCategory === "All" || s.interactionType === selectedCategory;
+      const personaName = s.personaName || s.guestName || "";
+      const matchesSearch =
+        s.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        personaName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        s.summary.toLowerCase().includes(searchQuery.toLowerCase());
+      return matchesCat && matchesSearch;
+    });
+  }, [currentScenariosList, selectedCategory, searchQuery]);
+
+  const sortedScenarios = useMemo(() => {
+    const list = [...filteredScenarios];
+    if (sortBy === "duration") return list.sort((a, b) => a.durationMinutes - b.durationMinutes);
     if (sortBy === "difficulty") {
-      const diffMap = { Foundational: 1, Intermediate: 2, Advanced: 3 };
-      return diffMap[b.difficulty] - diffMap[a.difficulty];
+      const diffOrder = { Foundational: 1, Intermediate: 2, Advanced: 3 };
+      return list.sort((a, b) => diffOrder[b.difficulty] - diffOrder[a.difficulty]);
     }
-    return 0;
-  });
+    return list;
+  }, [filteredScenarios, sortBy]);
 
-  // Filter Guests
-  const filteredGuests = guests.filter((g) => {
-    const q = searchQuery.toLowerCase();
-    return (
-      g.name.toLowerCase().includes(q) ||
-      g.title.toLowerCase().includes(q) ||
-      g.loyaltyTier.toLowerCase().includes(q) ||
-      g.temperamentTraits.some((t) => t.toLowerCase().includes(q))
-    );
-  });
+  // Filtered Personas
+  const filteredPersonas = useMemo(() => {
+    return personas.filter((p) => {
+      const q = searchQuery.toLowerCase();
+      const seniority = p.seniority || p.loyaltyTier || "";
+      return (
+        p.name.toLowerCase().includes(q) ||
+        p.title.toLowerCase().includes(q) ||
+        seniority.toLowerCase().includes(q) ||
+        (p.temperamentTraits || []).some((t) => t.toLowerCase().includes(q))
+      );
+    });
+  }, [personas, searchQuery]);
+
+  // Selected Scenario & Persona objects (auto-select first item when available, never null if items exist)
+  const activeScenario: PracticeScenario | undefined = useMemo(() => {
+    if (sortedScenarios.length === 0) return undefined;
+    return sortedScenarios.find((s) => s.id === selectedScenarioId) || sortedScenarios[0];
+  }, [sortedScenarios, selectedScenarioId]);
+
+  const activePersona: Persona | undefined = useMemo(() => {
+    if (filteredPersonas.length === 0) return undefined;
+    return filteredPersonas.find((p) => p.id === selectedPersonaId) || filteredPersonas[0];
+  }, [filteredPersonas, selectedPersonaId]);
 
   return (
     <div
-      style={{ padding: "32px 40px 60px", maxWidth: "1180px", margin: "0 auto" }}
-      onClick={() => {
-        if (activeMenuId) setActiveMenuId(null);
+      style={{
+        flex: 1,
+        height: "100%",
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+        backgroundColor: "var(--bg-window)",
       }}
     >
-      {/* Top Header: Title + Sub-Tabs + Search & Actions */}
+      {/* 44px Sub-Toolbar with Sub-Tabs */}
       <div
         style={{
+          height: "44px",
+          minHeight: "44px",
+          padding: "0 24px",
           display: "flex",
-          alignItems: "flex-end",
+          alignItems: "center",
           justifyContent: "space-between",
-          marginBottom: "24px",
-          gap: "16px",
-          flexWrap: "wrap"
+          borderBottom: "1px solid var(--separator)",
+          backgroundColor: "var(--bg-window)",
         }}
       >
-        <div>
-          <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "6px" }}>
-            <h1
-              style={{
-                fontSize: "26px",
-                fontWeight: 650,
-                color: "var(--text-primary)",
-                margin: 0,
-                letterSpacing: "-0.015em"
-              }}
-            >
-              Scenarios & Guests
-            </h1>
-
-            {/* Sub-Tabs: Library | Mine | Guests */}
-            <div
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "2px",
-                backgroundColor: "var(--bg-control)",
-                padding: "2px",
-                borderRadius: "var(--radius-sm)",
-                border: "1px solid var(--separator)"
-              }}
-            >
-              {[
-                { id: "library", label: "Library" },
-                { id: "mine", label: `Mine (${mineScenarios.length})` },
-                { id: "guests", label: `Guests (${guests.length})` }
-              ].map((tab) => {
-                const isActive = activeSubTab === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveSubTab(tab.id as typeof activeSubTab)}
-                    style={{
-                      padding: "4px 12px",
-                      borderRadius: "var(--radius-xs)",
-                      fontSize: "12px",
-                      fontWeight: isActive ? 600 : 450,
-                      color: isActive ? "var(--text-primary)" : "var(--text-secondary)",
-                      backgroundColor: isActive ? "var(--bg-elevated)" : "transparent",
-                      border: "none",
-                      cursor: "pointer",
-                      transition: "all 0.12s ease"
-                    }}
-                  >
-                    {tab.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <p style={{ fontSize: "13.5px", color: "var(--text-secondary)", margin: 0 }}>
-            {activeSubTab === "guests"
-              ? "Manage realistic AI hospitality personas, temperaments, and vocal cadences."
-              : activeSubTab === "mine"
-              ? "Your private role-play practice situations and hotel library submissions."
-              : "Master challenging guest dialogues across luxury hotel operations."}
-          </p>
-        </div>
-
-        {/* Right Search & Action Controls */}
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          {/* Search Box */}
-          <div
+        {/* Left Sub-Tabs: No "(0)" in tabs */}
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <button
+            onClick={() => {
+              setActiveSubTab("library");
+              setSearchQuery("");
+            }}
+            className="focus-ring"
             style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              padding: "6px 10px",
-              backgroundColor: "var(--bg-control)",
-              border: "1px solid var(--separator)",
-              borderRadius: "var(--radius-md)",
-              minWidth: "220px"
+              padding: "4px 12px",
+              borderRadius: "var(--radius-sm)",
+              fontSize: "12px",
+              fontWeight: activeSubTab === "library" ? 600 : 450,
+              color: activeSubTab === "library" ? "var(--text-primary)" : "var(--text-secondary)",
+              backgroundColor: activeSubTab === "library" ? "var(--bg-control)" : "transparent",
+              cursor: "pointer",
             }}
           >
-            <Search size={13} style={{ color: "var(--text-secondary)" }} />
-            <input
-              type="text"
-              placeholder={activeSubTab === "guests" ? "Filter guests or traits…" : "Filter scenarios…"}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              style={{
-                background: "none",
-                border: "none",
-                outline: "none",
-                color: "var(--text-primary)",
-                fontSize: "12.5px",
-                width: "100%"
-              }}
-            />
-          </div>
+            {libraryScenarios.length > 0 ? `Library (${libraryScenarios.length})` : "Library"}
+          </button>
+          <button
+            onClick={() => {
+              setActiveSubTab("mine");
+              setSearchQuery("");
+            }}
+            className="focus-ring"
+            style={{
+              padding: "4px 12px",
+              borderRadius: "var(--radius-sm)",
+              fontSize: "12px",
+              fontWeight: activeSubTab === "mine" ? 600 : 450,
+              color: activeSubTab === "mine" ? "var(--text-primary)" : "var(--text-secondary)",
+              backgroundColor: activeSubTab === "mine" ? "var(--bg-control)" : "transparent",
+              cursor: "pointer",
+            }}
+          >
+            {mineScenarios.length > 0 ? `Mine (${mineScenarios.length})` : "Mine"}
+          </button>
+          <button
+            onClick={() => {
+              setActiveSubTab("personas");
+              setSearchQuery("");
+            }}
+            className="focus-ring"
+            style={{
+              padding: "4px 12px",
+              borderRadius: "var(--radius-sm)",
+              fontSize: "12px",
+              fontWeight: activeSubTab === "personas" ? 600 : 450,
+              color: activeSubTab === "personas" ? "var(--text-primary)" : "var(--text-secondary)",
+              backgroundColor: activeSubTab === "personas" ? "var(--bg-control)" : "transparent",
+              cursor: "pointer",
+            }}
+          >
+            {personas.length > 0 ? `Personas (${personas.length})` : "Personas"}
+          </button>
+        </div>
 
-          {/* Sort Dropdown for Scenarios */}
-          {activeSubTab !== "guests" && (
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-              style={{
-                height: "32px",
-                padding: "0 10px",
-                backgroundColor: "var(--bg-control)",
-                color: "var(--text-secondary)",
-                border: "1px solid var(--separator)",
-                borderRadius: "var(--radius-md)",
-                fontSize: "12px",
-                cursor: "pointer"
-              }}
-            >
-              <option value="recommended">Sort: Recommended</option>
-              <option value="difficulty">Sort: Difficulty</option>
-              <option value="duration">Sort: Duration</option>
-            </select>
-          )}
-
-          {/* Primary Create Button */}
-          {activeSubTab === "guests" ? (
-            <button
-              onClick={() => openStudio("guest")}
-              style={{
-                height: "32px",
-                padding: "0 12px",
-                borderRadius: "var(--radius-md)",
-                backgroundColor: "var(--accent-blue)",
-                color: "#ffffff",
-                fontSize: "12px",
-                fontWeight: 600,
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "5px",
-                border: "none",
-                cursor: "pointer"
-              }}
-            >
-              <Plus size={14} />
-              <span>New Guest</span>
-            </button>
-          ) : (
-            <button
-              onClick={() => openStudio("scenario")}
-              style={{
-                height: "32px",
-                padding: "0 12px",
-                borderRadius: "var(--radius-md)",
-                backgroundColor: "var(--accent-blue)",
-                color: "#ffffff",
-                fontSize: "12px",
-                fontWeight: 600,
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "5px",
-                border: "none",
-                cursor: "pointer"
-              }}
-            >
-              <Plus size={14} />
-              <span>New Scenario</span>
-            </button>
+        {/* Right Toolbar Action: Hidden when current tab list is 0 to prevent duplicate primary CTAs */}
+        <div>
+          {!isCurrentTabEmpty && (
+            activeSubTab === "personas" ? (
+              <button
+                onClick={() => openStudio("persona")}
+                className="mac-btn focus-ring"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "5px",
+                  padding: "5px 12px",
+                  borderRadius: "var(--radius-sm)",
+                  backgroundColor: "var(--accent-blue)",
+                  color: "#ffffff",
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                <Plus size={13} />
+                <span>New Persona</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => openStudio("scenario")}
+                className="mac-btn focus-ring"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "5px",
+                  padding: "5px 12px",
+                  borderRadius: "var(--radius-sm)",
+                  backgroundColor: "var(--accent-blue)",
+                  color: "#ffffff",
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                <Plus size={13} />
+                <span>New Scenario</span>
+              </button>
+            )
           )}
         </div>
       </div>
 
-      {/* Category Filter Chips (Only for Scenarios) */}
-      {activeSubTab !== "guests" && (
+      {/* Main Body */}
+      {isCurrentTabEmpty ? (
+        /* =================================================================== */
+        /* ONE CENTERED, FULL-WIDTH EMPTY STATE (No split view, no duplicate CTA) */
+        /* =================================================================== */
         <div
           style={{
+            flex: 1,
+            minHeight: 0,
             display: "flex",
             alignItems: "center",
-            gap: "8px",
-            marginBottom: "24px",
-            overflowX: "auto",
-            paddingBottom: "4px"
+            justifyContent: "center",
+            padding: "32px 24px",
+            backgroundColor: "var(--bg-window)",
           }}
         >
-          {categoryOptions.map((opt) => {
-            const isSelected = selectedCategory === opt.label;
-            return (
-              <button
-                key={opt.label}
-                onClick={() => setSelectedCategory(opt.label)}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  padding: "5px 12px",
-                  borderRadius: "var(--radius-full)",
-                  fontSize: "12px",
-                  fontWeight: isSelected ? 600 : 450,
-                  color: isSelected ? "#ffffff" : "var(--text-secondary)",
-                  backgroundColor: isSelected ? "var(--bg-control)" : "transparent",
-                  border: isSelected ? "1px solid rgba(255, 255, 255, 0.2)" : "1px solid var(--separator)",
-                  boxShadow: isSelected ? "0 1px 3px rgba(0, 0, 0, 0.3)" : "none",
-                  transition: "all 0.12s ease",
-                  whiteSpace: "nowrap",
-                  cursor: "pointer"
-                }}
-              >
-                {opt.type && <CategoryIcon category={opt.type} size={14} />}
-                <span>{opt.label}</span>
-              </button>
-            );
-          })}
+          {activeSubTab === "personas" ? (
+            <EmptyState
+              icon={<User size={28} />}
+              title="No personas yet"
+              description="A persona defines who you practice with. Create your first persona to begin."
+              primaryAction={{
+                label: "New persona",
+                icon: <Plus size={13} />,
+                onClick: () => openStudio("persona"),
+              }}
+            />
+          ) : activeSubTab === "mine" ? (
+            <EmptyState
+              icon={<FolderPlus size={28} />}
+              title="No scenarios of your own yet"
+              description="Create a scenario for a conversation you are preparing for."
+              primaryAction={{
+                label: "New scenario",
+                icon: <Plus size={13} />,
+                onClick: () => openStudio("scenario"),
+              }}
+            />
+          ) : (
+            <EmptyState
+              icon={<Compass size={28} />}
+              title="No scenarios available"
+              description="The shared library is empty right now. Create your own scenario to get started."
+              primaryAction={{
+                label: "New scenario",
+                icon: <Plus size={13} />,
+                onClick: () => openStudio("scenario"),
+              }}
+            />
+          )}
         </div>
-      )}
-
-      {/* ================================================================ */}
-      {/* GUESTS TAB CONTENT */}
-      {/* ================================================================ */}
-      {activeSubTab === "guests" && (
+      ) : (
+        /* =================================================================== */
+        /* SPLIT VIEW (When items exist)                                       */
+        /* =================================================================== */
         <div
           style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
-            gap: "20px"
+            flex: 1,
+            minHeight: 0,
+            display: "flex",
+            overflow: "hidden",
           }}
         >
-          {filteredGuests.map((guest) => {
-            const isMenuOpen = activeMenuId === guest.id;
-            return (
+          {/* LEFT PANE: Search, Category Dropdown & Scrollable Row List */}
+          <div
+            style={{
+              width: "380px",
+              minWidth: "340px",
+              borderRight: "1px solid var(--separator)",
+              display: "flex",
+              flexDirection: "column",
+              overflow: "hidden",
+              backgroundColor: "var(--bg-content)",
+            }}
+          >
+            {/* Top Search & Filter Bar */}
+            <div
+              style={{
+                padding: "12px 14px",
+                borderBottom: "1px solid var(--separator)",
+                display: "flex",
+                flexDirection: "column",
+                gap: "8px",
+              }}
+            >
               <div
-                key={guest.id}
-                className="glass-surface"
                 style={{
-                  borderRadius: "var(--radius-lg)",
-                  padding: "20px",
                   display: "flex",
-                  flexDirection: "column",
-                  justifyContent: "space-between",
-                  minHeight: "240px",
+                  alignItems: "center",
+                  gap: "8px",
+                  backgroundColor: "var(--bg-control)",
+                  padding: "6px 10px",
+                  borderRadius: "var(--radius-sm)",
                   border: "1px solid var(--separator)",
-                  position: "relative"
                 }}
               >
-                <div>
-                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "14px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                      <div
-                        style={{
-                          width: "48px",
-                          height: "48px",
-                          borderRadius: "50%",
-                          overflow: "hidden",
-                          border: "1px solid var(--separator)",
-                          backgroundColor: "var(--bg-control)",
-                          display: "grid",
-                          placeItems: "center"
-                        }}
-                      >
-                        {guest.avatarUrl ? (
-                          <img src={guest.avatarUrl} alt={guest.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                        ) : (
-                          <span style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-secondary)" }}>
-                            {guest.monogram}
-                          </span>
-                        )}
-                      </div>
-
-                      <div>
-                        <h3 style={{ fontSize: "15.5px", fontWeight: 600, color: "var(--text-primary)", margin: 0 }}>
-                          {guest.name}
-                        </h3>
-                        <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-                          {guest.title}
-                        </div>
-                        <div style={{ fontSize: "11px", color: "var(--accent-blue)", fontWeight: 500 }}>
-                          {formatRoomNumber(guest.roomNumber)} · {guest.loyaltyTier}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Context ⋯ Menu */}
-                    <div style={{ position: "relative" }}>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setActiveMenuId(isMenuOpen ? null : guest.id);
-                        }}
-                        style={{
-                          width: "28px",
-                          height: "28px",
-                          borderRadius: "var(--radius-sm)",
-                          background: "none",
-                          border: "none",
-                          color: "var(--text-tertiary)",
-                          display: "grid",
-                          placeItems: "center",
-                          cursor: "pointer"
-                        }}
-                        className="hover-subtle"
-                      >
-                        <MoreHorizontal size={15} />
-                      </button>
-
-                      {isMenuOpen && (
-                        <div
-                          className="glass-surface animate-sheet-in"
-                          style={{
-                            position: "absolute",
-                            top: "30px",
-                            right: 0,
-                            width: "180px",
-                            padding: "4px",
-                            borderRadius: "var(--radius-md)",
-                            boxShadow: "var(--shadow-dropdown)",
-                            border: "1px solid var(--separator)",
-                            zIndex: 40
-                          }}
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <button
-                            onClick={() => {
-                              setActiveMenuId(null);
-                              openStudio("scenario");
-                            }}
-                            style={{ width: "100%", padding: "6px 8px", fontSize: "12px", textAlign: "left", borderRadius: "4px" }}
-                            className="hover-subtle"
-                          >
-                            Create Scenario with Guest
-                          </button>
-                          <button
-                            onClick={() => {
-                              const res = deleteGuest(guest.id);
-                              if (!res.success) alert(res.reason);
-                              setActiveMenuId(null);
-                            }}
-                            style={{ width: "100%", padding: "6px 8px", fontSize: "12px", textAlign: "left", borderRadius: "4px", color: "var(--accent-red)" }}
-                            className="hover-subtle"
-                          >
-                            Delete Guest
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Temperament Traits */}
-                  <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "12px" }}>
-                    {guest.temperamentTraits.map((t, idx) => (
-                      <span
-                        key={idx}
-                        style={{
-                          fontSize: "10.5px",
-                          padding: "2px 7px",
-                          borderRadius: "var(--radius-sm)",
-                          backgroundColor: "rgba(255, 159, 10, 0.12)",
-                          color: "var(--accent-orange)",
-                          fontWeight: 500,
-                          border: "1px solid rgba(255, 159, 10, 0.25)"
-                        }}
-                      >
-                        {t}
-                      </span>
-                    ))}
-                    <span
-                      style={{
-                        fontSize: "10.5px",
-                        padding: "2px 7px",
-                        borderRadius: "var(--radius-sm)",
-                        backgroundColor: "var(--bg-control)",
-                        color: "var(--text-secondary)"
-                      }}
-                    >
-                      {guest.language}
-                    </span>
-                  </div>
-
-                  <p style={{ fontSize: "12px", color: "var(--text-secondary)", lineHeight: 1.45, margin: 0 }}>
-                    {guest.backstory}
-                  </p>
-                </div>
-
-                {/* Footer: Used count & voice */}
-                <div
+                <Search size={14} style={{ color: "var(--text-tertiary)" }} />
+                <input
+                  type="text"
+                  placeholder={activeSubTab === "personas" ? "Filter personas…" : "Filter scenarios…"}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
                   style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    paddingTop: "12px",
-                    borderTop: "1px solid var(--separator)",
-                    marginTop: "14px",
-                    fontSize: "11.5px",
-                    color: "var(--text-tertiary)"
+                    width: "100%",
+                    backgroundColor: "transparent",
+                    border: "none",
+                    outline: "none",
+                    color: "var(--text-primary)",
+                    fontSize: "12.5px",
                   }}
-                >
-                  <span>Used in {guest.scenariosCount} scenario{guest.scenariosCount !== 1 ? "s" : ""}</span>
-                  <span>Voice: {guest.voice.split(" ")[0]}</span>
-                </div>
+                />
               </div>
-            );
-          })}
-        </div>
-      )}
 
-      {/* ================================================================ */}
-      {/* SCENARIOS TAB CONTENT (LIBRARY / MINE) */}
-      {/* ================================================================ */}
-      {activeSubTab !== "guests" && (
-        <>
-          {/* Empty state for Mine */}
-          {activeSubTab === "mine" && mineScenarios.length === 0 ? (
-            <div
-              style={{
-                backgroundColor: "var(--bg-elevated)",
-                borderRadius: "var(--radius-lg)",
-                border: "1px solid var(--separator)",
-                padding: "60px 24px",
-                textAlign: "center"
-              }}
-            >
-              <div
-                style={{
-                  width: "48px",
-                  height: "48px",
-                  borderRadius: "50%",
-                  backgroundColor: "rgba(10, 132, 255, 0.12)",
-                  color: "var(--accent-blue)",
-                  display: "grid",
-                  placeItems: "center",
-                  margin: "0 auto 16px auto"
-                }}
-              >
-                <Plus size={24} />
-              </div>
-              <h3 style={{ fontSize: "18px", fontWeight: 600, color: "var(--text-primary)", margin: "0 0 6px 0" }}>
-                Create your first scenario
-              </h3>
-              <p style={{ fontSize: "13px", color: "var(--text-secondary)", maxWidth: "420px", margin: "0 auto 20px auto" }}>
-                Tailor private practice situations for challenging guest moments, or submit them to the Hotel Library.
-              </p>
-              <button
-                onClick={() => openStudio("scenario")}
-                style={{
-                  height: "36px",
-                  padding: "0 18px",
-                  borderRadius: "var(--radius-md)",
-                  backgroundColor: "var(--accent-blue)",
-                  color: "#ffffff",
-                  fontSize: "13px",
-                  fontWeight: 600,
-                  border: "none",
-                  cursor: "pointer"
-                }}
-              >
-                New Scenario
-              </button>
-            </div>
-          ) : (
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
-                gap: "20px"
-              }}
-            >
-              {sortedScenarios.map((scenario) => {
-                const isMenuOpen = activeMenuId === scenario.id;
-                const isMine = scenario.source === "Mine";
-
-                return (
-                  <div
-                    key={scenario.id}
-                    onClick={() => openBriefing(scenario)}
-                    className="glass-surface mac-card-hoverable"
+              {/* Single "Category: All" Dropdown Button + Popover (Never clipped) */}
+              {activeSubTab !== "personas" && (
+                <div style={{ position: "relative" }} ref={categoryDropdownRef}>
+                  <button
+                    onClick={() => setIsCategoryPopoverOpen((prev) => !prev)}
+                    className="focus-ring hover-subtle"
                     style={{
-                      borderRadius: "var(--radius-lg)",
-                      padding: "20px",
-                      display: "flex",
-                      flexDirection: "column",
-                      justifyContent: "space-between",
-                      minHeight: "260px",
-                      cursor: "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      padding: "4px 10px",
+                      backgroundColor: "var(--bg-control)",
                       border: "1px solid var(--separator)",
-                      position: "relative"
+                      borderRadius: "var(--radius-sm)",
+                      fontSize: "11.5px",
+                      fontWeight: 500,
+                      color: "var(--text-primary)",
+                      cursor: "pointer",
+                      width: "fit-content",
                     }}
                   >
-                    {/* Top Row: Category + Duration + Menu Button */}
-                    <div>
+                    {selectedCategoryObj.icon && (
+                      <span style={{ display: "inline-flex", alignItems: "center", color: "var(--text-secondary)" }}>
+                        {selectedCategoryObj.icon}
+                      </span>
+                    )}
+                    <span>Category: {selectedCategory}</span>
+                    <ChevronDown size={11} style={{ opacity: 0.6, marginLeft: "2px" }} />
+                  </button>
+
+                  {isCategoryPopoverOpen && (
+                    <div
+                      className="glass-surface animate-sheet-in"
+                      style={{
+                        position: "absolute",
+                        top: "30px",
+                        left: 0,
+                        width: "220px",
+                        borderRadius: "var(--radius-md)",
+                        boxShadow: "var(--shadow-dropdown)",
+                        border: "1px solid var(--separator)",
+                        backgroundColor: "var(--bg-elevated)",
+                        padding: "4px",
+                        zIndex: 60,
+                      }}
+                    >
+                      {categoryOptions.map((cat) => {
+                        const isSelected = selectedCategory === cat.label;
+                        return (
+                          <button
+                            key={cat.label}
+                            onClick={() => {
+                              setSelectedCategory(cat.label);
+                              setIsCategoryPopoverOpen(false);
+                            }}
+                            className="hover-subtle focus-ring"
+                            style={{
+                              width: "100%",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              padding: "6px 8px",
+                              borderRadius: "var(--radius-xs)",
+                              fontSize: "12px",
+                              color: isSelected ? "var(--text-primary)" : "var(--text-secondary)",
+                              backgroundColor: isSelected ? "var(--bg-hover)" : "transparent",
+                              border: "none",
+                              cursor: "pointer",
+                              textAlign: "left",
+                            }}
+                          >
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                              {cat.icon || <Layers size={12} style={{ opacity: 0.4 }} />}
+                              <span style={{ fontWeight: isSelected ? 600 : 450 }}>{cat.label}</span>
+                            </div>
+                            {isSelected && <Check size={12} style={{ color: "var(--accent-blue)" }} />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Scrollable Rows Pane */}
+            <div
+              className="custom-scroll"
+              style={{
+                flex: 1,
+                minHeight: 0,
+                padding: "6px",
+                display: "flex",
+                flexDirection: "column",
+                overflowY: "auto",
+              }}
+            >
+              {activeSubTab === "personas" ? (
+                filteredPersonas.length === 0 ? (
+                  <EmptyState
+                    icon={<Search size={18} />}
+                    title="No matching results"
+                    description="Try a different search term or clear your filters."
+                    primaryAction={{
+                      label: "Clear filters",
+                      onClick: () => setSearchQuery(""),
+                    }}
+                  />
+                ) : (
+                  filteredPersonas.map((p) => {
+                    const isSelected = p.id === activePersona?.id;
+                    return (
                       <div
+                        key={p.id}
+                        onClick={() => setSelectedPersonaId(p.id)}
+                        className="mac-list-row"
                         style={{
+                          padding: "10px 12px",
+                          borderRadius: "var(--radius-md)",
+                          backgroundColor: isSelected ? "var(--bg-hover)" : "transparent",
+                          borderLeft: isSelected ? "3px solid var(--accent-blue)" : "3px solid transparent",
+                          marginBottom: "3px",
+                          cursor: "pointer",
                           display: "flex",
                           alignItems: "center",
-                          justifyContent: "space-between",
-                          marginBottom: "10px"
+                          gap: "12px",
                         }}
                       >
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                          <CategoryIcon category={scenario.interactionType} size={15} />
-                          <Badge variant="neutral" size="sm">
-                            {scenario.interactionType}
-                          </Badge>
-
-                          {isMine && scenario.submissionStatus && (
-                            <span
-                              style={{
-                                fontSize: "10px",
-                                fontWeight: 650,
-                                padding: "2px 6px",
-                                borderRadius: "var(--radius-xs)",
-                                backgroundColor:
-                                  scenario.submissionStatus === "Approved"
-                                    ? "rgba(48, 209, 88, 0.15)"
-                                    : scenario.submissionStatus === "Pending"
-                                    ? "rgba(255, 159, 10, 0.15)"
-                                    : "rgba(255, 255, 255, 0.08)",
-                                color:
-                                  scenario.submissionStatus === "Approved"
-                                    ? "var(--accent-green)"
-                                    : scenario.submissionStatus === "Pending"
-                                    ? "var(--accent-orange)"
-                                    : "var(--text-tertiary)"
-                              }}
-                            >
-                              {scenario.submissionStatus}
-                            </span>
+                        <div
+                          style={{
+                            width: "36px",
+                            height: "36px",
+                            borderRadius: "50%",
+                            backgroundColor: "var(--bg-control)",
+                            display: "grid",
+                            placeItems: "center",
+                            fontSize: "12px",
+                            fontWeight: 650,
+                            color: "var(--text-primary)",
+                            overflow: "hidden",
+                            border: "1px solid var(--separator)",
+                            flexShrink: 0,
+                          }}
+                        >
+                          {p.avatarUrl ? (
+                            <img src={p.avatarUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          ) : (
+                            p.monogram || p.name.slice(0, 2)
                           )}
                         </div>
-
-                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                          <span style={{ fontSize: "11.5px", color: "var(--text-tertiary)", fontWeight: 500 }}>
-                            ~{scenario.durationMinutes} min
-                          </span>
-
-                          {/* "⋯" Card Menu */}
-                          <div style={{ position: "relative" }}>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setActiveMenuId(isMenuOpen ? null : scenario.id);
-                              }}
-                              style={{
-                                width: "24px",
-                                height: "24px",
-                                borderRadius: "var(--radius-xs)",
-                                background: "none",
-                                border: "none",
-                                color: "var(--text-tertiary)",
-                                display: "grid",
-                                placeItems: "center",
-                                cursor: "pointer"
-                              }}
-                              className="hover-subtle"
-                            >
-                              <MoreHorizontal size={14} />
-                            </button>
-
-                            {isMenuOpen && (
-                              <div
-                                className="glass-surface animate-sheet-in"
-                                style={{
-                                  position: "absolute",
-                                  top: "26px",
-                                  right: 0,
-                                  width: "190px",
-                                  padding: "4px",
-                                  borderRadius: "var(--radius-md)",
-                                  boxShadow: "var(--shadow-dropdown)",
-                                  border: "1px solid var(--separator)",
-                                  zIndex: 40
-                                }}
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <button
-                                  onClick={() => {
-                                    duplicateScenario(scenario.id);
-                                    setActiveMenuId(null);
-                                  }}
-                                  style={{ width: "100%", padding: "6px 8px", fontSize: "12px", textAlign: "left", borderRadius: "4px" }}
-                                  className="hover-subtle"
-                                >
-                                  Duplicate to Mine
-                                </button>
-
-                                {isMine && scenario.submissionStatus !== "Pending" && (
-                                  <button
-                                    onClick={() => {
-                                      submitScenarioToLibrary(scenario.id);
-                                      setActiveMenuId(null);
-                                    }}
-                                    style={{ width: "100%", padding: "6px 8px", fontSize: "12px", textAlign: "left", borderRadius: "4px" }}
-                                    className="hover-subtle"
-                                  >
-                                    Submit to Hotel Library
-                                  </button>
-                                )}
-
-                                {isMine && (
-                                  <button
-                                    onClick={() => {
-                                      deleteScenario(scenario.id);
-                                      setActiveMenuId(null);
-                                    }}
-                                    style={{ width: "100%", padding: "6px 8px", fontSize: "12px", textAlign: "left", borderRadius: "4px", color: "var(--accent-red)" }}
-                                    className="hover-subtle"
-                                  >
-                                    Delete Scenario
-                                  </button>
-                                )}
-                              </div>
-                            )}
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
+                            {p.name}
+                          </div>
+                          <div style={{ fontSize: "11.5px", color: "var(--text-secondary)", marginTop: "1px", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
+                            {p.title} · {formatContextSetting(p.contextSetting)}
                           </div>
                         </div>
                       </div>
-
-                      <h3
-                        style={{
-                          fontSize: "16px",
-                          fontWeight: 650,
-                          color: "var(--text-primary)",
-                          margin: "0 0 4px 0",
-                          letterSpacing: "-0.015em"
-                        }}
-                      >
-                        {scenario.title}
-                      </h3>
-
-                      <div
-                        style={{
-                          fontSize: "12.5px",
-                          color: "var(--text-secondary)",
-                          marginBottom: "8px",
-                          fontWeight: 500
-                        }}
-                      >
-                        {scenario.guestName} ({formatRoomNumber(scenario.roomNumber)}) • {scenario.loyaltyTier}
-                      </div>
-
-                      <p
-                        style={{
-                          fontSize: "12.5px",
-                          color: "var(--text-secondary)",
-                          lineHeight: 1.45,
-                          margin: 0,
-                          display: "-webkit-box",
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: "vertical",
-                          overflow: "hidden"
-                        }}
-                      >
-                        {scenario.summary}
-                      </p>
-                    </div>
-
-                    {/* Pinned Footer */}
+                    );
+                  })
+                )
+              ) : sortedScenarios.length === 0 ? (
+                <EmptyState
+                  icon={<Search size={18} />}
+                  title="No matching results"
+                  description="Try a different search term or clear your filters."
+                  primaryAction={{
+                    label: "Clear filters",
+                    onClick: () => {
+                      setSearchQuery("");
+                      setSelectedCategory("All");
+                    },
+                  }}
+                />
+              ) : (
+                sortedScenarios.map((sc) => {
+                  const isSelected = sc.id === activeScenario?.id;
+                  return (
                     <div
+                      key={sc.id}
+                      onClick={() => setSelectedScenarioId(sc.id)}
+                      className="mac-list-row"
                       style={{
+                        padding: "10px 12px",
+                        borderRadius: "var(--radius-md)",
+                        backgroundColor: isSelected ? "var(--bg-hover)" : "transparent",
+                        borderLeft: isSelected ? "3px solid var(--accent-blue)" : "3px solid transparent",
+                        marginBottom: "3px",
+                        cursor: "pointer",
                         display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        paddingTop: "12px",
-                        borderTop: "1px solid var(--separator)",
-                        marginTop: "12px"
+                        alignItems: "flex-start",
+                        gap: "10px",
                       }}
                     >
-                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                        <span style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>
-                          Mood:
-                        </span>
-                        <span style={{ fontSize: "11px", color: "var(--text-secondary)", fontWeight: 500 }}>
-                          {scenario.guestMood}
-                        </span>
+                      <div style={{ marginTop: "2px", flexShrink: 0 }}>
+                        <CategoryIcon category={sc.interactionType} size={15} />
                       </div>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
+                          {sc.title}
+                        </div>
+                        <div style={{ fontSize: "11.5px", color: "var(--text-secondary)", marginTop: "2px", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
+                          With {sc.personaName || sc.guestName || "Counterpart"} ({formatContextSetting(sc.contextSetting)})
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "6px" }}>
+                          <span style={{ fontSize: "10px", padding: "1px 6px", borderRadius: "3px", backgroundColor: "var(--bg-control)", color: "var(--text-tertiary)" }}>
+                            {sc.difficulty}
+                          </span>
+                          <span style={{ fontSize: "10px", color: "var(--text-tertiary)" }}>
+                            ~{sc.durationMinutes}m
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
 
-                      <span
-                        style={{
-                          fontSize: "12px",
-                          fontWeight: 600,
-                          color: "var(--accent-blue)",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "4px"
-                        }}
-                      >
-                        <Play size={11} fill="currentColor" />
-                        <span>Practice</span>
-                      </span>
+          {/* RIGHT PANE: Detail View or Quiet Placeholder when search yields 0 matches */}
+          <div
+            className="custom-scroll"
+            style={{
+              flex: 1,
+              minHeight: 0,
+              overflowY: "auto",
+              backgroundColor: "var(--bg-window)",
+              padding: "24px 32px",
+            }}
+          >
+            {activeSubTab === "personas" ? (
+              activePersona ? (
+                /* Persona Detail View */
+                <div style={{ maxWidth: "680px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: "18px" }}>
+                    <div
+                      style={{
+                        width: "60px",
+                        height: "60px",
+                        borderRadius: "50%",
+                        backgroundColor: "var(--bg-control)",
+                        display: "grid",
+                        placeItems: "center",
+                        fontSize: "18px",
+                        fontWeight: 700,
+                        color: "var(--text-primary)",
+                        overflow: "hidden",
+                        border: "1.5px solid var(--separator)",
+                        flexShrink: 0,
+                      }}
+                    >
+                      {activePersona.avatarUrl ? (
+                        <img src={activePersona.avatarUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      ) : (
+                        activePersona.monogram || activePersona.name.slice(0, 2)
+                      )}
+                    </div>
+                    <div>
+                      <h2 style={{ fontSize: "20px", fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>
+                        {activePersona.name}
+                      </h2>
+                      <div style={{ fontSize: "13px", color: "var(--text-secondary)", marginTop: "2px" }}>
+                        {activePersona.title} · {formatContextSetting(activePersona.contextSetting)} · {activePersona.seniority}
+                      </div>
+                      <div style={{ display: "flex", gap: "6px", marginTop: "8px" }}>
+                        <Badge variant="neutral">{activePersona.seniority}</Badge>
+                        {activePersona.pressureLevel && (
+                          <Badge variant={activePersona.pressureLevel === "Intense" ? "red" : activePersona.pressureLevel === "High" ? "orange" : "blue"}>
+                            {activePersona.pressureLevel} Pressure
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </>
+
+                  {/* Persona Traits */}
+                  <div style={{ marginBottom: "20px" }}>
+                    <div style={{ fontSize: "11px", fontWeight: 650, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--text-tertiary)", marginBottom: "6px" }}>
+                      Temperament & Behavioral Traits
+                    </div>
+                    <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                      {(activePersona.temperamentTraits || []).map((t) => (
+                        <span
+                          key={t}
+                          style={{
+                            fontSize: "11.5px",
+                            padding: "3px 8px",
+                            borderRadius: "var(--radius-xs)",
+                            backgroundColor: "var(--bg-control)",
+                            color: "var(--text-primary)",
+                            border: "1px solid var(--separator)",
+                          }}
+                        >
+                          {t}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Backstory */}
+                  <div style={{ marginBottom: "20px" }}>
+                    <div style={{ fontSize: "11px", fontWeight: 650, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--text-tertiary)", marginBottom: "6px" }}>
+                      Professional Background
+                    </div>
+                    <p style={{ fontSize: "13px", color: "var(--text-secondary)", lineHeight: 1.5, margin: 0 }}>
+                      {activePersona.backstory}
+                    </p>
+                  </div>
+
+                  {/* Behavior Notes */}
+                  <div style={{ marginBottom: "24px" }}>
+                    <div style={{ fontSize: "11px", fontWeight: 650, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--text-tertiary)", marginBottom: "6px" }}>
+                      Dialogue & Rehearsal Dynamics
+                    </div>
+                    <div
+                      style={{
+                        padding: "12px 14px",
+                        borderRadius: "var(--radius-sm)",
+                        backgroundColor: "var(--bg-elevated)",
+                        border: "1px solid var(--separator)",
+                        fontSize: "12.5px",
+                        color: "var(--text-primary)",
+                        lineHeight: 1.45,
+                      }}
+                    >
+                      {activePersona.communicationNotes}
+                    </div>
+                  </div>
+
+                  {/* Compatible Scenarios to Practice */}
+                  <div>
+                    <div style={{ fontSize: "11px", fontWeight: 650, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--text-tertiary)", marginBottom: "10px" }}>
+                      Scenarios Featuring {activePersona.name}
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                      {scenarios
+                        .filter((s) => s.personaId === activePersona.id || s.personaName === activePersona.name)
+                        .map((sc) => (
+                          <div
+                            key={sc.id}
+                            style={{
+                              padding: "10px 14px",
+                              borderRadius: "var(--radius-md)",
+                              backgroundColor: "var(--bg-elevated)",
+                              border: "1px solid var(--separator)",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                            }}
+                          >
+                            <div>
+                              <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)" }}>
+                                {sc.title}
+                              </div>
+                              <div style={{ fontSize: "11.5px", color: "var(--text-secondary)" }}>
+                                {sc.interactionType} · ~{sc.durationMinutes}m
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => openBriefing(sc)}
+                              className="mac-btn focus-ring"
+                              style={{
+                                padding: "6px 12px",
+                                borderRadius: "var(--radius-sm)",
+                                backgroundColor: "var(--accent-blue)",
+                                color: "#ffffff",
+                                fontSize: "12px",
+                                fontWeight: 600,
+                                cursor: "pointer",
+                              }}
+                            >
+                              Practice
+                            </button>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                /* Quiet non-interactive placeholder (icon + line, no button) */
+                <div
+                  style={{
+                    height: "100%",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "8px",
+                    color: "var(--text-tertiary)",
+                    userSelect: "none",
+                  }}
+                >
+                  <Search size={22} style={{ opacity: 0.35 }} />
+                  <span style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>
+                    No persona selected
+                  </span>
+                </div>
+              )
+            ) : activeScenario ? (
+              /* Scenario Detail View */
+              <div style={{ maxWidth: "700px" }}>
+                {/* Header Action Row */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <CategoryIcon category={activeScenario.interactionType} size={18} />
+                    <Badge variant="neutral">{activeScenario.interactionType}</Badge>
+                    <Badge variant={activeScenario.difficulty === "Advanced" ? "red" : activeScenario.difficulty === "Intermediate" ? "orange" : "blue"}>
+                      {activeScenario.difficulty}
+                    </Badge>
+                    <span style={{ fontSize: "12px", color: "var(--text-tertiary)", display: "flex", alignItems: "center", gap: "4px" }}>
+                      <Clock size={12} />
+                      ~{activeScenario.durationMinutes} min
+                    </span>
+                  </div>
+
+                  <button
+                    onClick={() => openBriefing(activeScenario)}
+                    className="mac-btn focus-ring"
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      padding: "8px 18px",
+                      borderRadius: "var(--radius-sm)",
+                      backgroundColor: "var(--accent-blue)",
+                      color: "#ffffff",
+                      fontSize: "13px",
+                      fontWeight: 600,
+                      boxShadow: "0 1px 3px rgba(10, 132, 255, 0.4)",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <span>Start Practice</span>
+                    <ArrowRight size={13} />
+                  </button>
+                </div>
+
+                <h1 style={{ fontSize: "22px", fontWeight: 700, color: "var(--text-primary)", margin: "0 0 8px 0" }}>
+                  {activeScenario.title}
+                </h1>
+                <p style={{ fontSize: "13px", color: "var(--text-secondary)", lineHeight: 1.5, margin: "0 0 24px 0" }}>
+                  {activeScenario.summary}
+                </p>
+
+                {/* Counterpart Card */}
+                <div
+                  style={{
+                    padding: "14px 16px",
+                    borderRadius: "var(--radius-md)",
+                    backgroundColor: "var(--bg-elevated)",
+                    border: "1px solid var(--separator)",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "14px",
+                    marginBottom: "24px",
+                  }}
+                >
+                  <div
+                    style={{
+                      width: "42px",
+                      height: "42px",
+                      borderRadius: "50%",
+                      backgroundColor: "var(--bg-control)",
+                      display: "grid",
+                      placeItems: "center",
+                      fontSize: "13px",
+                      fontWeight: 650,
+                      color: "var(--text-primary)",
+                      overflow: "hidden",
+                      border: "1px solid var(--separator)",
+                      flexShrink: 0,
+                    }}
+                  >
+                    {activeScenario.personaAvatarUrl ? (
+                      <img src={activeScenario.personaAvatarUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    ) : (
+                      (activeScenario.personaName || activeScenario.guestName || "C").slice(0, 2)
+                    )}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: "13.5px", fontWeight: 650, color: "var(--text-primary)" }}>
+                      {activeScenario.personaName || activeScenario.guestName || "Counterpart"}
+                    </div>
+                    <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginTop: "1px" }}>
+                      {activeScenario.seniority || "Participant"} · {formatContextSetting(activeScenario.contextSetting)} · {activeScenario.personaMood}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Learning Objectives */}
+                <div style={{ marginBottom: "24px" }}>
+                  <div style={{ fontSize: "11px", fontWeight: 650, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--text-tertiary)", marginBottom: "8px" }}>
+                    Learning Objectives
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    {(activeScenario.learningObjectives || []).map((obj, i) => (
+                      <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
+                        <Target size={13} style={{ color: "var(--accent-blue)", marginTop: "2px", flexShrink: 0 }} />
+                        <span style={{ fontSize: "12.5px", color: "var(--text-secondary)", lineHeight: 1.45 }}>
+                          {obj}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Key Challenges */}
+                <div style={{ marginBottom: "24px" }}>
+                  <div style={{ fontSize: "11px", fontWeight: 650, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--text-tertiary)", marginBottom: "8px" }}>
+                    Key Challenges
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    {(activeScenario.keyChallenges || []).map((ch, i) => (
+                      <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
+                        <span style={{ color: "var(--accent-orange)", fontSize: "13px", lineHeight: 1, marginTop: "2px" }}>•</span>
+                        <span style={{ fontSize: "12.5px", color: "var(--text-secondary)", lineHeight: 1.45 }}>
+                          {ch}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Recommended Phrases */}
+                {(activeScenario.recommendedPhrases || []).length > 0 && (
+                  <div style={{ marginBottom: "24px" }}>
+                    <div style={{ fontSize: "11px", fontWeight: 650, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--text-tertiary)", marginBottom: "8px" }}>
+                      Recommended Phrases & Framing
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      {(activeScenario.recommendedPhrases || []).map((phrase, i) => (
+                        <div
+                          key={i}
+                          style={{
+                            padding: "8px 12px",
+                            borderRadius: "var(--radius-sm)",
+                            backgroundColor: "var(--bg-control)",
+                            border: "1px solid var(--separator)",
+                            fontSize: "12px",
+                            fontStyle: "italic",
+                            color: "var(--text-primary)",
+                          }}
+                        >
+                          &ldquo;{phrase}&rdquo;
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Actions for Mine Scenarios */}
+                {activeSubTab === "mine" && (
+                  <div style={{ display: "flex", gap: "8px", marginTop: "24px", paddingTop: "16px", borderTop: "1px solid var(--separator)" }}>
+                    <button
+                      onClick={() => duplicateScenario(activeScenario.id)}
+                      className="focus-ring hover-subtle"
+                      style={{
+                        padding: "6px 12px",
+                        borderRadius: "var(--radius-sm)",
+                        backgroundColor: "var(--bg-control)",
+                        border: "1px solid var(--separator)",
+                        fontSize: "12px",
+                        color: "var(--text-primary)",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <Copy size={13} />
+                      <span>Duplicate</span>
+                    </button>
+                    <button
+                      onClick={() => deleteScenario(activeScenario.id)}
+                      className="focus-ring hover-subtle"
+                      style={{
+                        padding: "6px 12px",
+                        borderRadius: "var(--radius-sm)",
+                        backgroundColor: "var(--bg-control)",
+                        border: "1px solid var(--separator)",
+                        fontSize: "12px",
+                        color: "var(--accent-red)",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <Trash2 size={13} />
+                      <span>Delete</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* Quiet non-interactive placeholder (icon + line, no button) */
+              <div
+                style={{
+                  height: "100%",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "8px",
+                  color: "var(--text-tertiary)",
+                  userSelect: "none",
+                }}
+              >
+                <Search size={22} style={{ opacity: 0.35 }} />
+                <span style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>
+                  No scenario selected
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

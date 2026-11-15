@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, ipcMain } = require("electron");
+const { app, BrowserWindow, Menu, ipcMain, shell } = require("electron");
 const path = require("path");
 const fs = require("fs");
 
@@ -75,9 +75,9 @@ function buildMenu() {
           click: () => sendAction("new-scenario")
         },
         {
-          label: "New Guest…",
+          label: "New Persona…",
           accelerator: "CmdOrCtrl+Shift+N",
-          click: () => sendAction("new-guest")
+          click: () => sendAction("new-persona")
         },
         { type: "separator" },
         {
@@ -105,9 +105,9 @@ function buildMenu() {
       label: "View",
       submenu: [
         {
-          label: "Today",
+          label: "Home",
           accelerator: "CmdOrCtrl+1",
-          click: () => sendAction("tab-today")
+          click: () => sendAction("tab-home")
         },
         {
           label: "Scenarios",
@@ -187,8 +187,9 @@ function createWindow() {
     height: initialBounds.height || 860,
     x: initialBounds.x,
     y: initialBounds.y,
-    minWidth: 1000,
-    minHeight: 680,
+    minWidth: 1100,
+    minHeight: 700,
+    show: false,
     title: "mocktwo",
     titleBarStyle: "hiddenInset",
     trafficLightPosition: { x: 18, y: 18 },
@@ -198,9 +199,41 @@ function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      sandbox: true,
+      zoomFactor: 1.0,
+      navigateOnDragDrop: false
     }
   });
+
+  // Strict local permission handler: allow media for local camera/mic vitals only
+  mainWindow.webContents.session.setPermissionRequestHandler((webContents, permission, callback) => {
+    const url = webContents.getURL();
+    const isLocal =
+      url.startsWith("http://localhost:") ||
+      url.startsWith("http://127.0.0.1:") ||
+      url.startsWith("file://");
+    if (isLocal && (permission === "media" || permission === "notifications")) {
+      callback(true);
+    } else {
+      callback(false);
+    }
+  });
+
+  // Block unexpected new window creation
+  mainWindow.webContents.setWindowOpenHandler(() => {
+    return { action: "deny" };
+  });
+
+  mainWindow.once("ready-to-show", () => {
+    mainWindow.show();
+  });
+
+  mainWindow.webContents.on("will-navigate", (e) => {
+    e.preventDefault();
+  });
+
+  mainWindow.webContents.setVisualZoomLevelLimits(1, 1);
 
   mainWindow.on("resize", () => saveBounds(mainWindow));
   mainWindow.on("move", () => saveBounds(mainWindow));
@@ -225,8 +258,24 @@ app.on("activate", () => {
 });
 
 ipcMain.on("window-action", (_event, action) => {
-  if (!mainWindow) return;
-  if (action === "toggle-fullscreen") {
-    mainWindow.setFullScreen(!mainWindow.isFullScreen());
+  if (!mainWindow || typeof action !== "string") return;
+  const allowedActions = ["toggle-fullscreen"];
+  if (allowedActions.includes(action)) {
+    if (action === "toggle-fullscreen") {
+      mainWindow.setFullScreen(!mainWindow.isFullScreen());
+    }
   }
+});
+
+ipcMain.handle("open-system-settings", (_event, pane) => {
+  if (process.platform === "darwin") {
+    if (pane === "camera") {
+      shell.openExternal("x-apple.systempreferences:com.apple.preference.security?Privacy_Camera");
+      return true;
+    } else if (pane === "microphone") {
+      shell.openExternal("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone");
+      return true;
+    }
+  }
+  return false;
 });

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useApp } from "../../context";
 import { Button } from "./Button";
+import { EmptyState } from "./EmptyState";
 import {
   X,
   Sliders,
@@ -8,27 +9,34 @@ import {
   Bell,
   User,
   Shield,
-  Film
+  Film,
+  Activity,
 } from "lucide-react";
+import { WELLNESS_DISCLAIMER } from "../../services/biometrics";
+import type { AppSettings } from "../../types";
 
-const SettingsModalDialog: React.FC = () => {
+export const SettingsModal: React.FC = () => {
   const {
+    isSettingsOpen,
     closeSettings,
     settings,
     updateSettings,
-    employee,
-    updateEmployee,
+    user,
+    updateUser,
     openSignOutConfirm,
-    isDevMode,
-    toggleDevMode,
-    showToast
+    baseline,
+    measureBaseline,
+    showToast,
+    isAuthenticated,
+    navigateTo,
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<"general" | "hardware" | "notifications" | "recordings" | "account">("general");
-  const [name, setName] = useState(employee.name);
-  const [role, setRole] = useState(employee.role);
-  const [property, setProperty] = useState(employee.property);
+  const [name, setName] = useState(user.name);
+  const [role, setRole] = useState(user.role);
+  const [workspace, setWorkspace] = useState(user.workspace || "mocktwo Workspace");
   const [isTestingMic, setIsTestingMic] = useState(false);
+  const [isRecalibrating, setIsRecalibrating] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
 
   useEffect(() => {
@@ -42,37 +50,48 @@ const SettingsModalDialog: React.FC = () => {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [closeSettings]);
 
+  if (!isSettingsOpen) return null;
+
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
-    updateEmployee({ name, role, property });
+    updateUser({ name, role, workspace, property: workspace });
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 2000);
+  };
+
+  const handleRecalibrateBaseline = async () => {
+    setIsRecalibrating(true);
+    try {
+      await measureBaseline(30);
+    } finally {
+      setIsRecalibrating(false);
+    }
   };
 
   const cameraOptions = [
     "FaceTime HD Camera (Built-in)",
     "Studio Display Camera",
-    "External Webcam"
+    "External Webcam",
   ];
 
   const micOptions = [
     "MacBook Studio Microphone (Built-in)",
     "AirPods Pro",
-    "External USB Microphone"
+    "External USB Microphone",
   ];
 
   const speakerOptions = [
     "Internal MacBook Speakers",
     "AirPods Pro (Spatial Audio)",
-    "Studio Display Audio"
+    "Studio Display Audio",
   ];
 
   const tabs: { id: "general" | "hardware" | "notifications" | "recordings" | "account"; label: string; icon: React.ReactNode }[] = [
     { id: "general", label: "General", icon: <Sliders size={13} /> },
-    { id: "hardware", label: "Audio & Video", icon: <Mic size={13} /> },
+    { id: "hardware", label: "Audio, Video & Sensors", icon: <Mic size={13} /> },
     { id: "notifications", label: "Notifications", icon: <Bell size={13} /> },
     { id: "recordings", label: "Recordings", icon: <Film size={13} /> },
-    { id: "account", label: "Account", icon: <User size={13} /> }
+    { id: "account", label: "Account", icon: <User size={13} /> },
   ];
 
   return (
@@ -86,7 +105,7 @@ const SettingsModalDialog: React.FC = () => {
         WebkitBackdropFilter: "blur(10px)",
         display: "grid",
         placeItems: "center",
-        padding: "20px"
+        padding: "20px",
       }}
       onClick={closeSettings}
     >
@@ -94,19 +113,19 @@ const SettingsModalDialog: React.FC = () => {
         className="glass-surface animate-sheet-in"
         style={{
           width: "100%",
-          maxWidth: "680px",
-          height: "540px",
+          maxWidth: "700px",
+          height: "560px",
           borderRadius: "var(--radius-xl)",
           boxShadow: "var(--shadow-modal)",
           display: "flex",
           flexDirection: "column",
           overflow: "hidden",
-          border: "1px solid var(--separator)"
+          border: "1px solid var(--separator)",
         }}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
-        aria-label="mocktwo Settings"
+        aria-label="mocktwo Preferences"
       >
         {/* Settings Header Toolbar */}
         <div
@@ -120,12 +139,13 @@ const SettingsModalDialog: React.FC = () => {
             gap: "8px",
             borderBottom: "1px solid var(--separator)",
             backgroundColor: "rgba(42, 42, 44, 0.4)",
-            position: "relative"
+            position: "relative",
           }}
         >
           <button
             onClick={closeSettings}
             aria-label="Close"
+            className="hover-subtle focus-ring"
             style={{
               position: "absolute",
               top: "14px",
@@ -135,7 +155,7 @@ const SettingsModalDialog: React.FC = () => {
               borderRadius: "var(--radius-sm)",
               background: "none",
               border: "none",
-              cursor: "pointer"
+              cursor: "pointer",
             }}
           >
             <X size={15} />
@@ -154,7 +174,7 @@ const SettingsModalDialog: React.FC = () => {
               backgroundColor: "var(--bg-control)",
               padding: "2px",
               borderRadius: "var(--radius-md)",
-              border: "1px solid var(--separator)"
+              border: "1px solid var(--separator)",
             }}
           >
             {tabs.map((tab) => {
@@ -163,6 +183,7 @@ const SettingsModalDialog: React.FC = () => {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
+                  className="focus-ring"
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
@@ -176,7 +197,7 @@ const SettingsModalDialog: React.FC = () => {
                     boxShadow: isActive ? "0 1px 3px rgba(0, 0, 0, 0.35)" : "none",
                     border: "none",
                     cursor: "pointer",
-                    transition: "all 0.12s ease"
+                    transition: "all 0.12s ease",
                   }}
                 >
                   {tab.icon}
@@ -197,10 +218,10 @@ const SettingsModalDialog: React.FC = () => {
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <div>
                     <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", display: "block" }}>
-                      Primary Operational Language
+                      Language
                     </span>
                     <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-                      Language used for AI guest speech generation and coaching reports.
+                      Language used for counterpart voice generation and coaching reports.
                     </span>
                   </div>
                   <select
@@ -213,7 +234,7 @@ const SettingsModalDialog: React.FC = () => {
                       borderRadius: "var(--radius-sm)",
                       color: "var(--text-primary)",
                       fontSize: "12.5px",
-                      cursor: "pointer"
+                      cursor: "pointer",
                     }}
                   >
                     <option value="English (US)">English (US)</option>
@@ -224,15 +245,15 @@ const SettingsModalDialog: React.FC = () => {
                 </div>
               </div>
 
-              {/* Haptic Cues */}
+              {/* Turn-Taking Sounds */}
               <div style={{ borderTop: "1px solid var(--separator)", paddingTop: "16px" }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <div>
                     <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", display: "block" }}>
-                      Haptic Audio Cues
+                      Turn-taking sounds
                     </span>
                     <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-                      Subtle audio feedback when transitioning between dialogue turns.
+                      Subtle audio feedback when transitioning between dialogue speaking turns.
                     </span>
                   </div>
                   <input
@@ -246,7 +267,7 @@ const SettingsModalDialog: React.FC = () => {
             </div>
           )}
 
-          {/* AUDIO & VIDEO TAB */}
+          {/* AUDIO, VIDEO & SENSORS TAB */}
           {activeTab === "hardware" && (
             <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
               <div>
@@ -256,7 +277,15 @@ const SettingsModalDialog: React.FC = () => {
                 <select
                   value={settings.selectedCamera}
                   onChange={(e) => updateSettings({ selectedCamera: e.target.value })}
-                  style={{ width: "100%", padding: "8px 12px", backgroundColor: "var(--bg-control)", border: "1px solid var(--separator)", borderRadius: "var(--radius-sm)", color: "var(--text-primary)", fontSize: "13px" }}
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    backgroundColor: "var(--bg-control)",
+                    border: "1px solid var(--separator)",
+                    borderRadius: "var(--radius-sm)",
+                    color: "var(--text-primary)",
+                    fontSize: "13px",
+                  }}
                 >
                   {cameraOptions.map((c) => (
                     <option key={c} value={c}>{c}</option>
@@ -272,7 +301,15 @@ const SettingsModalDialog: React.FC = () => {
                   <select
                     value={settings.selectedMicrophone}
                     onChange={(e) => updateSettings({ selectedMicrophone: e.target.value })}
-                    style={{ flex: 1, padding: "8px 12px", backgroundColor: "var(--bg-control)", border: "1px solid var(--separator)", borderRadius: "var(--radius-sm)", color: "var(--text-primary)", fontSize: "13px" }}
+                    style={{
+                      flex: 1,
+                      padding: "8px 12px",
+                      backgroundColor: "var(--bg-control)",
+                      border: "1px solid var(--separator)",
+                      borderRadius: "var(--radius-sm)",
+                      color: "var(--text-primary)",
+                      fontSize: "13px",
+                    }}
                   >
                     {micOptions.map((m) => (
                       <option key={m} value={m}>{m}</option>
@@ -286,7 +323,7 @@ const SettingsModalDialog: React.FC = () => {
                       setTimeout(() => setIsTestingMic(false), 2000);
                     }}
                   >
-                    {isTestingMic ? "Testing (98%)..." : "Test Mic"}
+                    {isTestingMic ? "Testing (98%)…" : "Test Mic"}
                   </Button>
                 </div>
               </div>
@@ -298,12 +335,138 @@ const SettingsModalDialog: React.FC = () => {
                 <select
                   value={settings.selectedSpeaker}
                   onChange={(e) => updateSettings({ selectedSpeaker: e.target.value })}
-                  style={{ width: "100%", padding: "8px 12px", backgroundColor: "var(--bg-control)", border: "1px solid var(--separator)", borderRadius: "var(--radius-sm)", color: "var(--text-primary)", fontSize: "13px" }}
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    backgroundColor: "var(--bg-control)",
+                    border: "1px solid var(--separator)",
+                    borderRadius: "var(--radius-sm)",
+                    color: "var(--text-primary)",
+                    fontSize: "13px",
+                  }}
                 >
                   {speakerOptions.map((s) => (
                     <option key={s} value={s}>{s}</option>
                   ))}
                 </select>
+              </div>
+
+              {/* SENSORS SECTION: CAMERA PULSE MEASUREMENT */}
+              <div style={{ borderTop: "1px solid var(--separator)", paddingTop: "18px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                  <Activity size={15} style={{ color: "var(--accent-red)" }} />
+                  <span style={{ fontSize: "13px", fontWeight: 650, color: "var(--text-primary)" }}>
+                    Camera Pulse Measurement
+                  </span>
+                </div>
+                <p style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: "12px", lineHeight: 1.4 }}>
+                  Measures resting pulse rate, heart rate variability (HRV), and breathing using your built-in optical camera. No external straps or hardware required.
+                </p>
+
+                <div style={{ marginBottom: "12px" }}>
+                  <label style={{ fontSize: "12px", color: "var(--text-secondary)", display: "block", marginBottom: "4px" }}>
+                    Measurement Mode
+                  </label>
+                  <select
+                    value={settings.heartRateSource || "camera"}
+                    onChange={(e) => updateSettings({ heartRateSource: e.target.value as AppSettings["heartRateSource"] })}
+                    style={{
+                      width: "100%",
+                      padding: "8px 12px",
+                      backgroundColor: "var(--bg-control)",
+                      border: "1px solid var(--separator)",
+                      borderRadius: "var(--radius-sm)",
+                      color: "var(--text-primary)",
+                      fontSize: "13px",
+                    }}
+                  >
+                    <option value="camera">Optical Camera Pulse Measurement (Default)</option>
+                    <option value="mock">Precision Pulse Sensor (Simulated Hardware)</option>
+                    <option value="bluetooth">Bluetooth Strap / Apple Watch Bridge (BLE)</option>
+                    <option value="unavailable">Disabled / Do not measure biometrics</option>
+                  </select>
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "10px 14px",
+                    borderRadius: "var(--radius-md)",
+                    backgroundColor: "var(--bg-elevated)",
+                    border: "1px solid var(--separator)",
+                    marginBottom: "12px",
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: "12.5px", fontWeight: 600, color: "var(--text-primary)" }}>
+                      Resting Baseline Calibration
+                    </div>
+                    <div style={{ fontSize: "11.5px", color: "var(--text-secondary)", marginTop: "2px" }}>
+                      {baseline ? (
+                        <span>
+                          Current baseline: <strong>{baseline.restingPulse || baseline.restingHR} bpm</strong> · HRV {baseline.restingHrvRmssd || baseline.restingHRV} ms
+                        </span>
+                      ) : (
+                        "No baseline calibrated yet"
+                      )}
+                    </div>
+                  </div>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleRecalibrateBaseline}
+                    disabled={isRecalibrating}
+                  >
+                    {isRecalibrating ? "Measuring…" : "Recalibrate baseline"}
+                  </Button>
+                </div>
+
+                {/* Telemetry Toggle */}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "10px 14px",
+                    borderRadius: "var(--radius-md)",
+                    backgroundColor: "var(--bg-control)",
+                    border: "1px solid var(--separator)",
+                    marginBottom: "12px",
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: "12.5px", fontWeight: 600, color: "var(--text-primary)" }}>
+                      Anonymous Diagnostics &amp; Telemetry
+                    </div>
+                    <div style={{ fontSize: "11.5px", color: "var(--text-secondary)", marginTop: "2px" }}>
+                      Share anonymous crash logs and SDK calibration timing to improve mocktwo. Disabled by default.
+                    </div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={false}
+                    onChange={() => showToast("Telemetry preference saved (Disabled)")}
+                    style={{ width: "16px", height: "16px", cursor: "pointer" }}
+                  />
+                </div>
+
+                {/* Device-Only Privacy Notice */}
+                <div
+                  style={{
+                    padding: "10px 14px",
+                    borderRadius: "var(--radius-md)",
+                    backgroundColor: "rgba(10, 132, 255, 0.06)",
+                    border: "1px solid rgba(10, 132, 255, 0.2)",
+                    fontSize: "11.5px",
+                    color: "var(--text-secondary)",
+                    lineHeight: 1.45,
+                  }}
+                >
+                  <strong style={{ color: "var(--text-primary)" }}>Device-Only Privacy: </strong>
+                  Video is analyzed on your device. Results are stored locally. {WELLNESS_DISCLAIMER}
+                </div>
               </div>
             </div>
           )}
@@ -317,7 +480,7 @@ const SettingsModalDialog: React.FC = () => {
                     Daily Practice Reminders
                   </span>
                   <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-                    Receive a gentle reminder to complete your recommended scenario before your shift.
+                    Receive a notification before your workday to rehearse upcoming high-stakes talks.
                   </span>
                 </div>
                 <input type="checkbox" defaultChecked style={{ width: "16px", height: "16px" }} />
@@ -329,7 +492,7 @@ const SettingsModalDialog: React.FC = () => {
                     Streak Protection
                   </span>
                   <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-                    Notify if daily practice streak is at risk before 20:00.
+                    Notify if daily rehearsal streak is at risk before 20:00.
                   </span>
                 </div>
                 <input type="checkbox" defaultChecked style={{ width: "16px", height: "16px" }} />
@@ -358,7 +521,7 @@ const SettingsModalDialog: React.FC = () => {
                     border: "1px solid var(--separator)",
                     borderRadius: "var(--radius-sm)",
                     color: "var(--text-primary)",
-                    fontSize: "13px"
+                    fontSize: "13px",
                   }}
                 >
                   <option value={30}>Keep for 30 days, then delete</option>
@@ -377,16 +540,16 @@ const SettingsModalDialog: React.FC = () => {
                   border: "1px solid rgba(48, 209, 88, 0.25)",
                   display: "flex",
                   alignItems: "flex-start",
-                  gap: "12px"
+                  gap: "12px",
                 }}
               >
                 <Shield size={18} style={{ color: "var(--accent-green)", flexShrink: 0, marginTop: "2px" }} />
                 <div>
                   <div style={{ fontSize: "12.5px", fontWeight: 600, color: "var(--text-primary)" }}>
-                    Local macOS Sandbox Encryption
+                    Local macOS Application Storage
                   </div>
                   <div style={{ fontSize: "11.5px", color: "var(--text-secondary)", marginTop: "2px", lineHeight: 1.4 }}>
-                    All local video buffers and transcript utterances are encrypted at rest using macOS Keychain and AES-256 in accordance with Grand Palais employee privacy standards.
+                    Video buffers, body-signal metrics, and transcripts are stored locally inside the application sandbox on this Mac.
                   </div>
                 </div>
               </div>
@@ -405,6 +568,20 @@ const SettingsModalDialog: React.FC = () => {
 
           {/* ACCOUNT TAB */}
           {activeTab === "account" && (
+            !isAuthenticated || !user.email ? (
+              <EmptyState
+                icon={<User size={24} />}
+                title="Not signed in"
+                description="Sign in with your work email to access your workspace scenarios, records, and team settings."
+                primaryAction={{
+                  label: "Sign In",
+                  onClick: () => {
+                    closeSettings();
+                    navigateTo("sign-in");
+                  },
+                }}
+              />
+            ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
               <form onSubmit={handleSaveProfile} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
                 <div>
@@ -415,7 +592,15 @@ const SettingsModalDialog: React.FC = () => {
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    style={{ width: "100%", padding: "7px 10px", backgroundColor: "var(--bg-control)", border: "1px solid var(--separator)", borderRadius: "var(--radius-sm)", color: "var(--text-primary)", fontSize: "13px" }}
+                    style={{
+                      width: "100%",
+                      padding: "7px 10px",
+                      backgroundColor: "var(--bg-control)",
+                      border: "1px solid var(--separator)",
+                      borderRadius: "var(--radius-sm)",
+                      color: "var(--text-primary)",
+                      fontSize: "13px",
+                    }}
                   />
                 </div>
 
@@ -428,92 +613,67 @@ const SettingsModalDialog: React.FC = () => {
                       type="text"
                       value={role}
                       onChange={(e) => setRole(e.target.value)}
-                      style={{ width: "100%", padding: "7px 10px", backgroundColor: "var(--bg-control)", border: "1px solid var(--separator)", borderRadius: "var(--radius-sm)", color: "var(--text-primary)", fontSize: "13px" }}
+                      style={{
+                        width: "100%",
+                        padding: "7px 10px",
+                        backgroundColor: "var(--bg-control)",
+                        border: "1px solid var(--separator)",
+                        borderRadius: "var(--radius-sm)",
+                        color: "var(--text-primary)",
+                        fontSize: "13px",
+                      }}
                     />
                   </div>
 
                   <div>
                     <label style={{ fontSize: "12px", color: "var(--text-secondary)", display: "block", marginBottom: "4px" }}>
-                      Property Assignment
+                      Workspace
                     </label>
                     <input
                       type="text"
-                      value={property}
-                      onChange={(e) => setProperty(e.target.value)}
-                      style={{ width: "100%", padding: "7px 10px", backgroundColor: "var(--bg-control)", border: "1px solid var(--separator)", borderRadius: "var(--radius-sm)", color: "var(--text-primary)", fontSize: "13px" }}
+                      value={workspace}
+                      onChange={(e) => setWorkspace(e.target.value)}
+                      style={{
+                        width: "100%",
+                        padding: "7px 10px",
+                        backgroundColor: "var(--bg-control)",
+                        border: "1px solid var(--separator)",
+                        borderRadius: "var(--radius-sm)",
+                        color: "var(--text-primary)",
+                        fontSize: "13px",
+                      }}
                     />
                   </div>
                 </div>
 
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: "8px" }}>
                   <span style={{ fontSize: "11.5px", color: isSaved ? "var(--accent-green)" : "var(--text-tertiary)" }}>
-                    {isSaved ? "Saved" : `Employee ID: ${employee.employeeId}`}
+                    {isSaved ? "Saved" : `User ID: ${user.userId || "USR-0001"}`}
                   </span>
-                  <Button variant="secondary" size="sm" type="submit">
-                    Save Details
+                  <Button type="submit" variant="primary" size="sm">
+                    Save Profile
                   </Button>
                 </div>
               </form>
 
-              {/* Developer Diagnostics toggle */}
-              <div style={{ borderTop: "1px solid var(--separator)", marginTop: "20px", paddingTop: "16px" }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
-                  <div>
-                    <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", display: "block" }}>
-                      Hardware Sensor Diagnostics
-                    </span>
-                    <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-                      Show demonstration sensor metrics in performance reports (⌥⌘D).
-                    </span>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={isDevMode}
-                    onChange={toggleDevMode}
-                    style={{ width: "16px", height: "16px", cursor: "pointer" }}
-                  />
+              <div style={{ borderTop: "1px solid var(--separator)", paddingTop: "14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <span style={{ fontSize: "12.5px", fontWeight: 600, color: "var(--accent-red)", display: "block" }}>
+                    Sign Out of mocktwo
+                  </span>
+                  <span style={{ fontSize: "11.5px", color: "var(--text-secondary)" }}>
+                    Sign out of this workspace on this Mac.
+                  </span>
                 </div>
-
-                <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    onClick={() => {
-                      closeSettings();
-                      openSignOutConfirm();
-                    }}
-                  >
-                    Sign Out of mocktwo…
-                  </Button>
-                </div>
+                <Button variant="outline" size="sm" onClick={openSignOutConfirm} style={{ color: "var(--accent-red)" }}>
+                  Sign Out…
+                </Button>
               </div>
             </div>
+            )
           )}
-        </div>
-
-        {/* Settings Footer */}
-        <div
-          style={{
-            height: "52px",
-            padding: "0 24px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "flex-end",
-            borderTop: "1px solid var(--separator)",
-            backgroundColor: "rgba(42, 42, 44, 0.35)"
-          }}
-        >
-          <Button variant="primary" size="sm" onClick={closeSettings}>
-            Done
-          </Button>
         </div>
       </div>
     </div>
   );
-};
-
-export const SettingsModal: React.FC = () => {
-  const { isSettingsOpen } = useApp();
-  if (!isSettingsOpen) return null;
-  return <SettingsModalDialog />;
 };

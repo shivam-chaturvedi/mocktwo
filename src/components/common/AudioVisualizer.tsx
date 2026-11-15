@@ -22,9 +22,14 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
       return;
     }
 
+    let tick = 0;
     const interval = setInterval(() => {
+      tick += 1;
       setHeights(
-        Array.from({ length: barsCount }, () => Math.floor(Math.random() * 70) + 15)
+        Array.from({ length: barsCount }, (_, i) => {
+          const val = Math.sin((tick + i) * 0.7) * 35 + 50;
+          return Math.round(val);
+        })
       );
     }, 120);
 

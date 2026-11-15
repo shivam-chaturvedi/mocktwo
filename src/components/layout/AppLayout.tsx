@@ -7,7 +7,9 @@ import { QuickPracticeModal } from "../common/QuickPracticeModal";
 import { CommandPalette } from "../common/CommandPalette";
 import { SettingsModal } from "../common/SettingsModal";
 import { SignOutConfirmSheet } from "../common/SignOutConfirmSheet";
+import { BaselineSheet } from "../common/BaselineSheet";
 import { ToastNotification } from "../common/ToastNotification";
+import { ErrorBoundary } from "../common/ErrorBoundary";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -37,7 +39,11 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
             placeItems: "center"
           }}
         >
+          <ErrorBoundary>
+            <ErrorBoundary>
           {children}
+        </ErrorBoundary>
+          </ErrorBoundary>
         </main>
       </div>
     );
@@ -54,7 +60,9 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           overflow: "hidden"
         }}
       >
-        {children}
+        <ErrorBoundary>
+          {children}
+        </ErrorBoundary>
       </div>
     );
   }
@@ -74,24 +82,42 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
       <TitleBar />
 
       <main
+        className="app-shell-content"
         style={{
           flex: 1,
+          minHeight: 0,
           height: "calc(100vh - 52px)",
-          overflowY: "auto",
-          overflowX: "hidden",
+          overflow: "hidden",
           position: "relative"
         }}
       >
-        {children}
+        <ErrorBoundary>
+          {children}
+        </ErrorBoundary>
       </main>
 
-      {/* Global Native Sheets, Modals & Toast */}
-      <BriefingSheet />
-      <StudioSheet />
-      <QuickPracticeModal />
-      <CommandPalette />
-      <SettingsModal />
-      <SignOutConfirmSheet />
+      {/* Global Native Sheets, Modals & Toast (Protected by Error Boundaries) */}
+      <ErrorBoundary fallbackTitle="Session briefing encountered an error">
+        <BriefingSheet />
+      </ErrorBoundary>
+      <ErrorBoundary fallbackTitle="Studio encountered an error">
+        <StudioSheet />
+      </ErrorBoundary>
+      <ErrorBoundary fallbackTitle="Quick practice encountered an error">
+        <QuickPracticeModal />
+      </ErrorBoundary>
+      <ErrorBoundary fallbackTitle="Command palette encountered an error">
+        <CommandPalette />
+      </ErrorBoundary>
+      <ErrorBoundary fallbackTitle="Settings encountered an error">
+        <SettingsModal />
+      </ErrorBoundary>
+      <ErrorBoundary fallbackTitle="Confirmation encountered an error">
+        <SignOutConfirmSheet />
+      </ErrorBoundary>
+      <ErrorBoundary fallbackTitle="Baseline calibration encountered an error">
+        <BaselineSheet />
+      </ErrorBoundary>
       <ToastNotification />
     </div>
   );
