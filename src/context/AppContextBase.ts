@@ -33,8 +33,8 @@ export interface AppContextType {
   
   // Personas
   personas: Persona[];
-  addPersona: (persona: Persona) => void;
-  updatePersona: (persona: Persona) => void;
+  addPersona: (persona: Persona) => Promise<Persona>;
+  updatePersona: (persona: Persona) => Promise<Persona>;
   deletePersona: (id: string) => { success: boolean; reason?: string };
 
   // Scenarios

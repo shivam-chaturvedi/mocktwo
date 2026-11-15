@@ -1,38 +1,46 @@
-const { app, BrowserWindow, Menu, ipcMain, shell, dialog, screen, session, nativeImage } = require("electron");
+const { app, BrowserWindow, Menu, ipcMain, shell, dialog, screen, session, nativeImage, protocol, net } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const { fileURLToPath } = require("url");
 const { StorageManager } = require("./storage/storageManager.cjs");
 const { PermissionsService } = require("./permissions/permissionsService.cjs");
 
-// Load environment variables from .env or .env.example
+// Load environment variables with dotenv in dev mode only
 function loadEnvironment() {
-  const envPath = path.join(__dirname, "../.env");
-  const envExamplePath = path.join(__dirname, "../.env.example");
-  const target = fs.existsSync(envPath) ? envPath : (fs.existsSync(envExamplePath) ? envExamplePath : null);
-
-  if (target) {
-    try {
-      const content = fs.readFileSync(target, "utf8");
-      for (const line of content.split("\n")) {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith("#")) continue;
-        const eqIdx = trimmed.indexOf("=");
-        if (eqIdx !== -1) {
-          const key = trimmed.slice(0, eqIdx).trim();
-          const val = trimmed.slice(eqIdx + 1).trim().replace(/^["']|["']$/g, "");
-          if (!process.env[key]) {
-            process.env[key] = val;
-          }
-        }
-      }
-    } catch {
-      // fallback
+  if (app && app.isPackaged) {
+    return;
+  }
+  try {
+    const dotenv = require("dotenv");
+    const envPath = path.join(__dirname, "../.env");
+    const envExamplePath = path.join(__dirname, "../.env.example");
+    if (fs.existsSync(envPath)) {
+      dotenv.config({ path: envPath });
+    } else if (fs.existsSync(envExamplePath)) {
+      dotenv.config({ path: envExamplePath });
     }
+  } catch (err) {
+    console.error("[main] Failed to load .env:", err);
   }
 }
 
 loadEnvironment();
+
+// Register custom asset protocol scheme before app is ready
+if (protocol && typeof protocol.registerSchemesAsPrivileged === "function") {
+  protocol.registerSchemesAsPrivileged([
+    {
+      scheme: "mocktwo-asset",
+      privileges: {
+        standard: true,
+        secure: true,
+        supportFetchAPI: true,
+        corsEnabled: true,
+        stream: true,
+      },
+    },
+  ]);
+}
 
 const APP_NAME = process.env.APP_NAME || "mocktwo";
 const APP_VERSION = process.env.APP_VERSION || "1.0.0";
@@ -56,6 +64,8 @@ const appIconPath = path.join(__dirname, "../build/icon.png");
 let mainWindow = null;
 let storageManager = null;
 let permissionsService = null;
+let syncService = null;
+let tavusClient = null;
 const boundsFilePath = path.join(app.getPath("userData"), "window-bounds.json");
 const logsDir = path.join(app.getPath("userData"), "logs");
 const primaryLogPath = path.join(logsDir, "mocktwo.log");
@@ -95,6 +105,27 @@ function rotateLogsIfNeeded() {
   }
 }
 
+function redactSecrets(obj) {
+  if (typeof obj === "string") {
+    return obj
+      .replace(/tvsk_[a-zA-Z0-9_-]+/g, "tvsk_***REDACTED***")
+      .replace(/(x-api-key\s*[:=]\s*)[^\s,]+/gi, "$1***REDACTED***")
+      .replace(/(authorization\s*[:=]\s*Bearer\s+)[^\s,]+/gi, "$1***REDACTED***");
+  }
+  if (!obj || typeof obj !== "object") return obj;
+  if (Array.isArray(obj)) return obj.map(redactSecrets);
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) {
+    const lk = k.toLowerCase();
+    if (lk.includes("key") || lk.includes("secret") || lk.includes("token") || lk.includes("auth")) {
+      out[k] = "***REDACTED***";
+    } else {
+      out[k] = redactSecrets(v);
+    }
+  }
+  return out;
+}
+
 function writeLogEntry(level, tag, message, extra = {}) {
   const now = Date.now();
   if (now - lastLogResetTime > 60000) {
@@ -110,8 +141,8 @@ function writeLogEntry(level, tag, message, extra = {}) {
     timestamp: new Date().toISOString(),
     level,
     tag,
-    message,
-    ...extra,
+    message: redactSecrets(message),
+    ...redactSecrets(extra),
   };
 
   const line = JSON.stringify(entry) + "\n";
@@ -437,8 +468,8 @@ function configureSessionSecurity() {
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     const isDev = !app.isPackaged;
     const csp = isDev
-      ? `default-src 'self' ${DEV_SERVER_URL}; script-src 'self' 'unsafe-inline' 'unsafe-eval' ${DEV_SERVER_URL}; style-src 'self' 'unsafe-inline' ${DEV_SERVER_URL}; font-src 'self' data: ${DEV_SERVER_URL}; img-src 'self' data: blob: https: ${DEV_SERVER_URL}; media-src 'self' blob:; worker-src 'self' blob:; connect-src 'self' ws://${DEV_HOST}:${DEV_PORT} ${DEV_SERVER_URL}; object-src 'none'; base-uri 'none'; frame-ancestors 'none';`
-      : `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; media-src 'self' blob:; worker-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none';`;
+      ? `default-src 'self' ${DEV_SERVER_URL}; script-src 'self' 'unsafe-inline' 'unsafe-eval' ${DEV_SERVER_URL}; style-src 'self' 'unsafe-inline' ${DEV_SERVER_URL}; font-src 'self' data: ${DEV_SERVER_URL}; img-src 'self' data: blob: https: mocktwo-asset: ${DEV_SERVER_URL}; media-src 'self' blob: https: mocktwo-asset:; worker-src 'self' blob:; connect-src 'self' ws://${DEV_HOST}:${DEV_PORT} ${DEV_SERVER_URL} https://tavusapi.com; object-src 'none'; base-uri 'none'; frame-ancestors 'none';`
+      : `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https: mocktwo-asset:; media-src 'self' blob: https: mocktwo-asset:; worker-src 'self' blob:; connect-src 'self' https://tavusapi.com; object-src 'none'; base-uri 'none'; frame-ancestors 'none';`;
 
     callback({
       responseHeaders: {
@@ -631,8 +662,36 @@ app.whenReady().then(() => {
     iconPath: appIconPath,
   });
 
+  // Handle mocktwo-asset:// protocol safely
+  if (protocol && typeof protocol.handle === "function") {
+    protocol.handle("mocktwo-asset", async (request) => {
+      try {
+        const url = new URL(request.url);
+        const relative = path.join(url.host || "", url.pathname || "");
+        const { resolveAssetPath } = require("./tavus/assetStore.cjs");
+        const safePath = resolveAssetPath(app.getPath("userData"), relative);
+        if (!safePath || !fs.existsSync(safePath)) {
+          return new Response("Not found", { status: 404 });
+        }
+        return net.fetch(pathToFileURL(safePath).toString());
+      } catch (err) {
+        writeLogEntry("warn", "protocol:mocktwo-asset", `Failed to serve asset: ${err.message}`);
+        return new Response("Internal error", { status: 500 });
+      }
+    });
+  }
+
   storageManager = new StorageManager(app.getPath("userData"));
   permissionsService = new PermissionsService(storageManager, () => mainWindow);
+
+  try {
+    const { TavusClient } = require("./tavus/tavusClient.cjs");
+    const { SyncService } = require("./tavus/syncService.cjs");
+    tavusClient = new TavusClient();
+    syncService = new SyncService(storageManager, { tavusClient });
+  } catch (err) {
+    writeLogEntry("error", "main:syncServiceInit", `Failed to initialize Tavus SyncService: ${err.message}`);
+  }
   createWindow();
 });
 
@@ -748,26 +807,53 @@ ipcMain.handle("storage:get-personas", async (event) => {
 ipcMain.handle("storage:create-persona", async (event, persona) => {
   try {
     if (!isValidSender(event) || !storageManager) return null;
-    return await storageManager.execute("personas:create", persona);
+    const { PersonaInputSchema } = require("./tavus/validation.cjs");
+    const validated = PersonaInputSchema.parse(persona);
+    const created = await storageManager.execute("personas:create", validated);
+    if (syncService && created && created.id) {
+      if (process.env.TAVUS_API_KEY && validated.tavusFaceId) {
+        try {
+          return await syncService.syncPersona(created.id);
+        } catch {
+          return await storageManager.execute("personas:get", created.id);
+        }
+      }
+    }
+    return created;
   } catch (err) {
     writeLogEntry("warn", "ipc:storage:create-persona", err.message);
-    return null;
+    throw new Error(err.message || "Failed to create persona");
   }
 });
 
 ipcMain.handle("storage:update-persona", async (event, payload) => {
   try {
     if (!isValidSender(event) || !storageManager) return null;
-    return await storageManager.execute("personas:update", payload);
+    const { PersonaUpdateSchema } = require("./tavus/validation.cjs");
+    const validated = PersonaUpdateSchema.parse(payload);
+    const updated = await storageManager.execute("personas:update", validated);
+    if (syncService && updated && updated.id) {
+      if (process.env.TAVUS_API_KEY && (updated.tavusFaceId || validated.persona.tavusFaceId)) {
+        try {
+          return await syncService.syncPersona(updated.id);
+        } catch {
+          return await storageManager.execute("personas:get", updated.id);
+        }
+      }
+    }
+    return updated;
   } catch (err) {
     writeLogEntry("warn", "ipc:storage:update-persona", err.message);
-    return null;
+    throw new Error(err.message || "Failed to update persona");
   }
 });
 
-ipcMain.handle("storage:delete-persona", async (event, id) => {
+ipcMain.handle("storage:delete-persona", async (event, id, options = {}) => {
   try {
     if (!isValidSender(event) || !storageManager || typeof id !== "string" || !id.trim()) return false;
+    if (syncService) {
+      return await syncService.deletePersona(id.trim(), options);
+    }
     return await storageManager.execute("personas:delete", id.trim());
   } catch (err) {
     writeLogEntry("warn", "ipc:storage:delete-persona", err.message);
@@ -995,6 +1081,115 @@ ipcMain.handle("permissions:request", async (event, resource) => {
   } catch (err) {
     writeLogEntry("warn", "ipc:permissions:request", err.message);
     return false;
+  }
+});
+
+// Tavus Integration Handlers
+ipcMain.handle("tavus:get-status", async (event) => {
+  try {
+    if (!isValidSender(event)) return { configured: false };
+    const hasKey = Boolean(process.env.TAVUS_API_KEY && process.env.TAVUS_API_KEY.trim().length > 0);
+    return { configured: hasKey };
+  } catch (err) {
+    writeLogEntry("warn", "ipc:tavus:get-status", err.message);
+    return { configured: false };
+  }
+});
+
+ipcMain.handle("tavus:sync-persona", async (event, id) => {
+  try {
+    if (!isValidSender(event) || !syncService || typeof id !== "string" || !id.trim()) return null;
+    return await syncService.syncPersona(id.trim());
+  } catch (err) {
+    writeLogEntry("warn", "ipc:tavus:sync-persona", err.message);
+    throw new Error(err.message || "Sync failed");
+  }
+});
+
+ipcMain.handle("tavus:preview-prompt", async (event, draft) => {
+  try {
+    if (!isValidSender(event)) return null;
+    const { buildSystemPrompt } = require("./tavus/promptBuilder.cjs");
+    return buildSystemPrompt(draft || {});
+  } catch (err) {
+    writeLogEntry("warn", "ipc:tavus:preview-prompt", err.message);
+    return null;
+  }
+});
+
+ipcMain.handle("tavus:list-faces", async (event, options = {}) => {
+  try {
+    if (!isValidSender(event) || !storageManager) return { data: [], total_count: 0 };
+    const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+    const force = Boolean(options && options.forceRefresh);
+
+    if (!force) {
+      const cached = await storageManager.execute("tavus:cache:get", "faces");
+      if (cached && cached.payload && cached.fetchedAt) {
+        const age = Date.now() - new Date(cached.fetchedAt).getTime();
+        if (age < CACHE_TTL_MS) {
+          return cached.payload;
+        }
+      }
+    }
+
+    if (!tavusClient) {
+      const { TavusClient } = require("./tavus/tavusClient.cjs");
+      tavusClient = new TavusClient();
+    }
+
+    const result = await tavusClient.listFaces();
+    if (result && Array.isArray(result.data)) {
+      await storageManager.execute("tavus:cache:set", { kind: "faces", payload: result });
+    }
+    return result;
+  } catch (err) {
+    writeLogEntry("warn", "ipc:tavus:list-faces", err.message);
+    try {
+      const cached = await storageManager.execute("tavus:cache:get", "faces");
+      if (cached && cached.payload) return cached.payload;
+    } catch {
+      // ignore
+    }
+    throw new Error(err.message || "Failed to list faces");
+  }
+});
+
+ipcMain.handle("tavus:list-voices", async (event, options = {}) => {
+  try {
+    if (!isValidSender(event) || !storageManager) return { data: [], total_count: 0 };
+    const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+    const force = Boolean(options && options.forceRefresh);
+
+    if (!force) {
+      const cached = await storageManager.execute("tavus:cache:get", "voices");
+      if (cached && cached.payload && cached.fetchedAt) {
+        const age = Date.now() - new Date(cached.fetchedAt).getTime();
+        if (age < CACHE_TTL_MS) {
+          return cached.payload;
+        }
+      }
+    }
+
+    if (!tavusClient) {
+      const { TavusClient } = require("./tavus/tavusClient.cjs");
+      tavusClient = new TavusClient();
+    }
+
+    const result = await tavusClient.listVoices();
+    if (result && Array.isArray(result.data)) {
+      await storageManager.execute("tavus:cache:set", { kind: "voices", payload: result });
+    }
+    return result;
+  } catch (err) {
+    writeLogEntry("warn", "ipc:tavus:list-voices", err.message);
+    try {
+      const cached = await storageManager.execute("tavus:cache:get", "voices");
+      if (cached && cached.payload) return cached.payload;
+    } catch {
+      // ignore
+    }
+    throw new Error(err.message || "Failed to list voices");
   }
 });
 

@@ -325,20 +325,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // Persona Management
   const addPersona = useCallback((persona: Persona) => {
-    serviceRegistry.personas.createPersona(persona).then((created) => {
+    return serviceRegistry.personas.createPersona(persona).then((created) => {
       setPersonas((prev) => [created, ...prev]);
       setActiveSessionPersona(created);
       showToast(`Persona "${created.name}" created`);
+      return created;
     });
   }, [showToast]);
 
   const updatePersona = useCallback((updated: Persona) => {
-    serviceRegistry.personas.updatePersona(updated.id, updated).then((saved) => {
+    return serviceRegistry.personas.updatePersona(updated.id, updated).then((saved) => {
       setPersonas((prev) => prev.map((p) => (p.id === saved.id ? saved : p)));
       if (activeSessionPersona?.id === saved.id) {
         setActiveSessionPersona(saved);
       }
       showToast(`Persona "${saved.name}" updated`);
+      return saved;
     });
   }, [activeSessionPersona?.id, showToast]);
 

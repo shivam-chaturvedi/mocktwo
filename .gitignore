@@ -15,10 +15,16 @@ tmp_test_*
 .env*.local
 !.env.example
 
+# Planning and notes
+PLAN*
+desc.md
+
 node_modules
 dist
 dist-ssr
 release
+out
+*.tsbuildinfo
 *.local
 
 # Editor directories and files

@@ -9,7 +9,7 @@ import {
   Search,
   Compass,
   ChevronDown,
-  Sparkles,
+  Sliders,
 } from "lucide-react";
 import type { PracticeScenario } from "../../types";
 
@@ -514,7 +514,7 @@ export const QuickPracticeModal: React.FC = () => {
                     gap: "4px",
                   }}
                 >
-                  <Sparkles size={11} style={{ color: "var(--accent-orange)" }} />
+                  <Sliders size={11} style={{ color: "var(--accent-orange)" }} />
                   <span>Topic suggestions</span>
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>

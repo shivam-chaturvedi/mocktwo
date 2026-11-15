@@ -24,7 +24,7 @@ import {
   ChevronDown,
   Check,
   Layers,
-  Sparkles,
+  FilePlus,
 } from "lucide-react";
 import { formatContextSetting, type InteractionType, type PracticeScenario, type Persona } from "../types";
 
@@ -36,6 +36,7 @@ export const ScenariosScreen: React.FC = () => {
     openStudio,
     duplicateScenario,
     deleteScenario,
+    updatePersona,
   } = useApp();
 
   const [activeSubTab, setActiveSubTab] = useState<"library" | "mine" | "personas">("library");
@@ -49,6 +50,7 @@ export const ScenariosScreen: React.FC = () => {
   const [selectedScenarioId, setSelectedScenarioId] = useState<string>("");
   const [selectedPersonaId, setSelectedPersonaId] = useState<string>("");
   const [scenarioToDelete, setScenarioToDelete] = useState<PracticeScenario | null>(null);
+  const [isRetryingSync, setIsRetryingSync] = useState(false);
 
   // Close category popover on click outside
   useEffect(() => {
@@ -530,8 +532,25 @@ export const ScenariosScreen: React.FC = () => {
                           )}
                         </div>
                         <div style={{ minWidth: 0, flex: 1 }}>
-                          <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
-                            {p.name}
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "6px" }}>
+                            <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
+                              {p.name}
+                            </div>
+                            {p.syncStatus === "synced" && (
+                              <span style={{ fontSize: "10px", padding: "1px 6px", borderRadius: "8px", backgroundColor: "rgba(48, 209, 88, 0.15)", color: "var(--accent-green)", fontWeight: 600, flexShrink: 0 }}>
+                                Synced
+                              </span>
+                            )}
+                            {p.syncStatus === "syncing" && (
+                              <span style={{ fontSize: "10px", padding: "1px 6px", borderRadius: "8px", backgroundColor: "rgba(10, 132, 255, 0.15)", color: "var(--accent-blue)", fontWeight: 600, flexShrink: 0 }}>
+                                Syncing…
+                              </span>
+                            )}
+                            {p.syncStatus === "failed" && (
+                              <span style={{ fontSize: "10px", padding: "1px 6px", borderRadius: "8px", backgroundColor: "rgba(255, 69, 58, 0.15)", color: "var(--accent-red)", fontWeight: 600, flexShrink: 0 }}>
+                                Failed
+                              </span>
+                            )}
                           </div>
                           <div style={{ fontSize: "11.5px", color: "var(--text-secondary)", marginTop: "1px", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
                             {p.title} · {formatContextSetting(p.contextSetting)}
@@ -543,7 +562,7 @@ export const ScenariosScreen: React.FC = () => {
                 )
               ) : scenarios.length === 0 ? (
                 <EmptyState
-                  icon={<Sparkles size={18} />}
+                  icon={<FilePlus size={18} />}
                   title="No scenarios yet"
                   description="Create a practice scenario in Studio to begin rehearsing."
                   primaryAction={{
@@ -655,16 +674,69 @@ export const ScenariosScreen: React.FC = () => {
                       <div style={{ fontSize: "13px", color: "var(--text-secondary)", marginTop: "2px" }}>
                         {activePersona.title} · {formatContextSetting(activePersona.contextSetting)} · {activePersona.seniority}
                       </div>
-                      <div style={{ display: "flex", gap: "6px", marginTop: "8px" }}>
+                      <div style={{ display: "flex", gap: "6px", marginTop: "8px", flexWrap: "wrap", alignItems: "center" }}>
                         <Badge variant="neutral">{activePersona.seniority}</Badge>
                         {activePersona.pressureLevel && (
                           <Badge variant={activePersona.pressureLevel === "Intense" ? "red" : activePersona.pressureLevel === "High" ? "orange" : "blue"}>
                             {activePersona.pressureLevel} Pressure
                           </Badge>
                         )}
+                        {activePersona.syncStatus === "synced" && (
+                          <Badge variant="green">
+                            Tavus PAL: {activePersona.tavusPalId || "Ready"}
+                          </Badge>
+                        )}
+                        {activePersona.syncStatus === "syncing" && (
+                          <Badge variant="blue">Syncing to Tavus…</Badge>
+                        )}
+                        {activePersona.syncStatus === "failed" && (
+                          <div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                            <Badge variant="red">PAL Sync Failed</Badge>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                if (!activePersona.id) return;
+                                setIsRetryingSync(true);
+                                try {
+                                  const res = await window.electronAPI?.personaRetrySync?.(activePersona.id);
+                                  if (res) updatePersona(res);
+                                } finally {
+                                  setIsRetryingSync(false);
+                                }
+                              }}
+                              disabled={isRetryingSync}
+                              style={{
+                                fontSize: "11px",
+                                padding: "2px 8px",
+                                borderRadius: "var(--radius-xs)",
+                                backgroundColor: "var(--bg-control)",
+                                border: "1px solid var(--separator)",
+                                color: "var(--text-primary)",
+                                cursor: "pointer",
+                              }}
+                            >
+                              {isRetryingSync ? "Retrying…" : "Retry Sync"}
+                            </button>
+                          </div>
+                        )}
+                        {activePersona.syncStatus === "draft" && (
+                          <Badge variant="neutral">Draft (Local)</Badge>
+                        )}
                       </div>
                     </div>
                   </div>
+
+                  {/* Greeting (if configured) */}
+                  {activePersona.greeting && (
+                    <div style={{ marginBottom: "20px" }}>
+                      <div style={{ fontSize: "11px", fontWeight: 650, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--text-tertiary)", marginBottom: "6px" }}>
+                        Opening Line (Greeting)
+                      </div>
+                      <p style={{ fontSize: "13px", color: "var(--text-primary)", fontStyle: "italic", margin: 0 }}>
+                        &ldquo;{activePersona.greeting}&rdquo;
+                      </p>
+                    </div>
+                  )}
 
                   {/* Persona Traits */}
                   <div style={{ marginBottom: "20px" }}>

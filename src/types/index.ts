@@ -282,6 +282,26 @@ export interface Persona {
   scenariosCount: number;
   pressureLevel?: "Moderate" | "High" | "Intense";
   source?: "Library" | "Mine" | "Hotel Library";
+  // Tavus Integration fields (Migration V2)
+  tavusPalId?: string;
+  tavusFaceId?: string;
+  tavusVoiceId?: string;
+  faceName?: string;
+  faceImagePath?: string;
+  greeting?: string;
+  compiledSystemPrompt?: string;
+  palSettings?: {
+    turnTakingPatience?: "low" | "medium" | "high";
+    palInterruptibility?: "low" | "medium" | "high";
+    perceptionModel?: "off" | "standard";
+  };
+  syncStatus?: "draft" | "syncing" | "synced" | "failed";
+  syncErrorCode?: string;
+  syncError?: string;
+  syncHash?: string;
+  syncAttemptAt?: string;
+  lastSyncedAt?: string;
+  hidden?: boolean;
 }
 
 export type Guest = Persona;

@@ -50,6 +50,19 @@ function initDatabase() {
   db.pragma("foreign_keys = ON");
 
   runMigrations();
+
+  // Startup recovery: any persona left in 'syncing' becomes 'failed' with code 'interrupted'
+  try {
+    db.prepare(`
+      UPDATE personas
+      SET sync_status = 'failed',
+          sync_error_code = 'interrupted',
+          sync_error = 'Sync was interrupted by application shutdown'
+      WHERE sync_status = 'syncing'
+    `).run();
+  } catch (err) {
+    console.error("Failed to run startup sync recovery:", err);
+  }
 }
 
 function runMigrations() {
@@ -61,7 +74,7 @@ function runMigrations() {
   `);
 
   const currentVersionRow = db.prepare("SELECT MAX(version) AS version FROM schema_migrations").get();
-  const currentVersion = currentVersionRow && currentVersionRow.version ? currentVersionRow.version : 0;
+  let currentVersion = currentVersionRow && currentVersionRow.version ? currentVersionRow.version : 0;
 
   if (currentVersion < 1) {
     const migrateV1 = db.transaction(() => {
@@ -216,6 +229,55 @@ function runMigrations() {
     });
 
     migrateV1();
+    currentVersion = 1;
+  }
+
+  if (currentVersion < 2) {
+    try {
+      if (fs.existsSync(dbPath)) {
+        const backupPath = `${dbPath}.v1.bak.${Date.now()}`;
+        fs.copyFileSync(dbPath, backupPath);
+      }
+    } catch (err) {
+      console.error("Failed to backup db before v2 migration:", err);
+    }
+
+    const migrateV2 = db.transaction(() => {
+      db.exec(`
+        ALTER TABLE personas ADD COLUMN tavus_pal_id TEXT;
+        ALTER TABLE personas ADD COLUMN tavus_face_id TEXT;
+        ALTER TABLE personas ADD COLUMN tavus_voice_id TEXT;
+        ALTER TABLE personas ADD COLUMN face_name TEXT;
+        ALTER TABLE personas ADD COLUMN face_image_path TEXT;
+        ALTER TABLE personas ADD COLUMN greeting TEXT;
+        ALTER TABLE personas ADD COLUMN compiled_system_prompt TEXT;
+        ALTER TABLE personas ADD COLUMN pal_settings TEXT;
+        ALTER TABLE personas ADD COLUMN sync_status TEXT NOT NULL DEFAULT 'draft';
+        ALTER TABLE personas ADD COLUMN sync_error_code TEXT;
+        ALTER TABLE personas ADD COLUMN sync_error TEXT;
+        ALTER TABLE personas ADD COLUMN sync_hash TEXT;
+        ALTER TABLE personas ADD COLUMN sync_attempt_at TEXT;
+        ALTER TABLE personas ADD COLUMN last_synced_at TEXT;
+        ALTER TABLE personas ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0;
+
+        CREATE INDEX IF NOT EXISTS idx_personas_pal_id ON personas(tavus_pal_id);
+        CREATE INDEX IF NOT EXISTS idx_personas_sync_status ON personas(sync_status);
+
+        CREATE TABLE IF NOT EXISTS tavus_catalog_cache (
+          kind TEXT PRIMARY KEY,
+          payload TEXT NOT NULL,
+          fetched_at TEXT NOT NULL
+        );
+      `);
+
+      db.prepare("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)").run(
+        2,
+        new Date().toISOString()
+      );
+    });
+
+    migrateV2();
+    currentVersion = 2;
   }
 }
 
@@ -298,7 +360,7 @@ parentPort.on("message", ({ id, type, payload }) => {
 
       // Personas
       case "personas:list": {
-        const rows = db.prepare("SELECT * FROM personas ORDER BY name ASC").all();
+        const rows = db.prepare("SELECT * FROM personas WHERE hidden = 0 ORDER BY name ASC").all();
         result = rows.map((r) => ({
           id: r.id,
           name: r.name,
@@ -315,21 +377,86 @@ parentPort.on("message", ({ id, type, payload }) => {
           scenariosCount: r.scenarios_count,
           pressureLevel: r.pressure_level || "Moderate",
           source: r.source,
+          tavusPalId: r.tavus_pal_id || undefined,
+          tavusFaceId: r.tavus_face_id || undefined,
+          tavusVoiceId: r.tavus_voice_id || undefined,
+          faceName: r.face_name || undefined,
+          faceImagePath: r.face_image_path || undefined,
+          greeting: r.greeting || "",
+          compiledSystemPrompt: r.compiled_system_prompt || "",
+          palSettings: r.pal_settings ? JSON.parse(r.pal_settings) : null,
+          syncStatus: r.sync_status || "draft",
+          syncErrorCode: r.sync_error_code || undefined,
+          syncError: r.sync_error || undefined,
+          syncHash: r.sync_hash || undefined,
+          syncAttemptAt: r.sync_attempt_at || undefined,
+          lastSyncedAt: r.last_synced_at || undefined,
+          hidden: Boolean(r.hidden),
         }));
+        break;
+      }
+
+      case "personas:get": {
+        const targetId = typeof payload === "string" ? payload.trim() : (payload && payload.id);
+        if (!targetId) {
+          result = null;
+          break;
+        }
+        const r = db.prepare("SELECT * FROM personas WHERE id = ?").get(targetId);
+        if (!r) {
+          result = null;
+          break;
+        }
+        result = {
+          id: r.id,
+          name: r.name,
+          avatarUrl: r.avatar_url || undefined,
+          monogram: r.monogram,
+          title: r.title,
+          contextSetting: r.context_setting,
+          seniority: r.seniority,
+          language: r.language,
+          temperamentTraits: JSON.parse(r.temperament_traits || "[]"),
+          voice: r.voice,
+          backstory: r.backstory,
+          communicationNotes: r.communication_notes,
+          scenariosCount: r.scenarios_count,
+          pressureLevel: r.pressure_level || "Moderate",
+          source: r.source,
+          tavusPalId: r.tavus_pal_id || undefined,
+          tavusFaceId: r.tavus_face_id || undefined,
+          tavusVoiceId: r.tavus_voice_id || undefined,
+          faceName: r.face_name || undefined,
+          faceImagePath: r.face_image_path || undefined,
+          greeting: r.greeting || "",
+          compiledSystemPrompt: r.compiled_system_prompt || "",
+          palSettings: r.pal_settings ? JSON.parse(r.pal_settings) : null,
+          syncStatus: r.sync_status || "draft",
+          syncErrorCode: r.sync_error_code || undefined,
+          syncError: r.sync_error || undefined,
+          syncHash: r.sync_hash || undefined,
+          syncAttemptAt: r.sync_attempt_at || undefined,
+          lastSyncedAt: r.last_synced_at || undefined,
+          hidden: Boolean(r.hidden),
+        };
         break;
       }
 
       case "personas:create": {
         const item = payload;
         const now = new Date().toISOString();
-        const id = item.id || `persona-${Date.now()}`;
+        const id = item.id || `persona-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         const monogram = item.monogram || (item.name ? item.name.slice(0, 2).toUpperCase() : "PA");
         db.prepare(`
           INSERT INTO personas (
             id, name, avatar_url, monogram, title, context_setting, seniority,
             language, temperament_traits, voice, backstory, communication_notes,
-            scenarios_count, pressure_level, source, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            scenarios_count, pressure_level, source,
+            tavus_pal_id, tavus_face_id, tavus_voice_id, face_name, face_image_path,
+            greeting, compiled_system_prompt, pal_settings, sync_status,
+            sync_error_code, sync_error, sync_hash, sync_attempt_at, last_synced_at, hidden,
+            created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           id,
           item.name || "Practice Partner",
@@ -338,7 +465,7 @@ parentPort.on("message", ({ id, type, payload }) => {
           item.title || item.role || "Specialist",
           item.contextSetting || item.setting || "General Rehearsal",
           item.seniority || "Professional",
-          item.language || "English (US)",
+          item.language || "en",
           JSON.stringify(item.temperamentTraits || []),
           item.voice || "Default",
           item.backstory || "",
@@ -346,10 +473,31 @@ parentPort.on("message", ({ id, type, payload }) => {
           item.scenariosCount || 0,
           item.pressureLevel || "Moderate",
           item.source || "Mine",
+          item.tavusPalId || null,
+          item.tavusFaceId || null,
+          item.tavusVoiceId || null,
+          item.faceName || null,
+          item.faceImagePath || null,
+          item.greeting || null,
+          item.compiledSystemPrompt || null,
+          item.palSettings ? JSON.stringify(item.palSettings) : null,
+          item.syncStatus || "draft",
+          item.syncErrorCode || null,
+          item.syncError || null,
+          item.syncHash || null,
+          item.syncAttemptAt || null,
+          item.lastSyncedAt || null,
+          item.hidden ? 1 : 0,
           now,
           now
         );
-        result = { ...item, id, monogram };
+        result = {
+          ...item,
+          id,
+          monogram,
+          syncStatus: item.syncStatus || "draft",
+          hidden: Boolean(item.hidden),
+        };
         break;
       }
 
@@ -382,27 +530,133 @@ parentPort.on("message", ({ id, type, payload }) => {
             scenarios_count = ?,
             pressure_level = ?,
             source = ?,
+            tavus_pal_id = ?,
+            tavus_face_id = ?,
+            tavus_voice_id = ?,
+            face_name = ?,
+            face_image_path = ?,
+            greeting = ?,
+            compiled_system_prompt = ?,
+            pal_settings = ?,
+            sync_status = ?,
+            sync_error_code = ?,
+            sync_error = ?,
+            sync_hash = ?,
+            sync_attempt_at = ?,
+            last_synced_at = ?,
+            hidden = ?,
             updated_at = ?
           WHERE id = ?
         `).run(
-          p.name || existing.name,
+          p.name !== undefined ? p.name : existing.name,
           p.avatarUrl !== undefined ? p.avatarUrl : existing.avatar_url,
           monogram,
-          p.title || existing.title || "Specialist",
-          p.contextSetting || existing.context_setting || "Meeting",
-          p.seniority || existing.seniority || "Mid-Level",
-          p.language || existing.language || "English (US)",
-          JSON.stringify(p.temperamentTraits || JSON.parse(existing.temperament_traits || "[]")),
-          p.voice || existing.voice || "Default",
+          p.title !== undefined ? p.title : existing.title,
+          p.contextSetting !== undefined ? p.contextSetting : existing.context_setting,
+          p.seniority !== undefined ? p.seniority : existing.seniority,
+          p.language !== undefined ? p.language : existing.language,
+          JSON.stringify(p.temperamentTraits !== undefined ? p.temperamentTraits : JSON.parse(existing.temperament_traits || "[]")),
+          p.voice !== undefined ? p.voice : existing.voice,
           p.backstory !== undefined ? p.backstory : existing.backstory,
           p.communicationNotes !== undefined ? p.communicationNotes : existing.communication_notes,
           p.scenariosCount !== undefined ? p.scenariosCount : existing.scenarios_count,
-          p.pressureLevel || existing.pressure_level || "Moderate",
-          p.source || existing.source || "Mine",
+          p.pressureLevel !== undefined ? p.pressureLevel : existing.pressure_level,
+          p.source !== undefined ? p.source : existing.source,
+          p.tavusPalId !== undefined ? p.tavusPalId : existing.tavus_pal_id,
+          p.tavusFaceId !== undefined ? p.tavusFaceId : existing.tavus_face_id,
+          p.tavusVoiceId !== undefined ? p.tavusVoiceId : existing.tavus_voice_id,
+          p.faceName !== undefined ? p.faceName : existing.face_name,
+          p.faceImagePath !== undefined ? p.faceImagePath : existing.face_image_path,
+          p.greeting !== undefined ? p.greeting : existing.greeting,
+          p.compiledSystemPrompt !== undefined ? p.compiledSystemPrompt : existing.compiled_system_prompt,
+          p.palSettings !== undefined ? (p.palSettings ? JSON.stringify(p.palSettings) : null) : existing.pal_settings,
+          p.syncStatus !== undefined ? p.syncStatus : existing.sync_status,
+          p.syncErrorCode !== undefined ? p.syncErrorCode : existing.sync_error_code,
+          p.syncError !== undefined ? p.syncError : existing.sync_error,
+          p.syncHash !== undefined ? p.syncHash : existing.sync_hash,
+          p.syncAttemptAt !== undefined ? p.syncAttemptAt : existing.sync_attempt_at,
+          p.lastSyncedAt !== undefined ? p.lastSyncedAt : existing.last_synced_at,
+          p.hidden !== undefined ? (p.hidden ? 1 : 0) : existing.hidden,
           now,
           targetId
         );
         result = { ...existing, ...p, id: targetId, monogram };
+        break;
+      }
+
+      case "personas:update-sync": {
+        const p = payload || {};
+        if (!p.id) {
+          result = false;
+          break;
+        }
+        const existing = db.prepare("SELECT * FROM personas WHERE id = ?").get(p.id);
+        if (!existing) {
+          result = false;
+          break;
+        }
+        const now = new Date().toISOString();
+        db.prepare(`
+          UPDATE personas SET
+            sync_status = COALESCE(?, sync_status),
+            sync_error_code = ?,
+            sync_error = ?,
+            sync_hash = COALESCE(?, sync_hash),
+            sync_attempt_at = COALESCE(?, sync_attempt_at),
+            last_synced_at = COALESCE(?, last_synced_at),
+            tavus_pal_id = COALESCE(?, tavus_pal_id),
+            compiled_system_prompt = COALESCE(?, compiled_system_prompt),
+            updated_at = ?
+          WHERE id = ?
+        `).run(
+          p.syncStatus !== undefined ? p.syncStatus : null,
+          p.syncErrorCode !== undefined ? p.syncErrorCode : existing.sync_error_code,
+          p.syncError !== undefined ? p.syncError : existing.sync_error,
+          p.syncHash !== undefined ? p.syncHash : null,
+          p.syncAttemptAt !== undefined ? p.syncAttemptAt : null,
+          p.lastSyncedAt !== undefined ? p.lastSyncedAt : null,
+          p.tavusPalId !== undefined ? p.tavusPalId : null,
+          p.compiledSystemPrompt !== undefined ? p.compiledSystemPrompt : null,
+          now,
+          p.id
+        );
+        result = true;
+        break;
+      }
+
+      case "tavus:cache:get": {
+        const row = db.prepare("SELECT * FROM tavus_catalog_cache WHERE kind = ?").get(payload);
+        if (!row) {
+          result = null;
+        } else {
+          try {
+            result = {
+              kind: row.kind,
+              payload: JSON.parse(row.payload),
+              fetchedAt: row.fetched_at,
+            };
+          } catch {
+            result = null;
+          }
+        }
+        break;
+      }
+
+      case "tavus:cache:set": {
+        const { kind, payload: cachePayload } = payload || {};
+        if (!kind || cachePayload === undefined) {
+          result = false;
+          break;
+        }
+        const now = new Date().toISOString();
+        db.prepare(`
+          INSERT INTO tavus_catalog_cache (kind, payload, fetched_at)
+          VALUES (?, ?, ?)
+          ON CONFLICT(kind) DO UPDATE SET
+            payload = excluded.payload,
+            fetched_at = excluded.fetched_at
+        `).run(kind, JSON.stringify(cachePayload), now);
+        result = true;
         break;
       }
 

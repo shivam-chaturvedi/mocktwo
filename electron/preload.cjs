@@ -33,6 +33,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
     return ipcRenderer.invoke("reveal-logs");
   },
 
+  tavusStatus: () => ipcRenderer.invoke("tavus:get-status"),
+  personaRetrySync: (id) => ipcRenderer.invoke("tavus:sync-persona", id),
+  personaPreviewPrompt: (draft) => ipcRenderer.invoke("tavus:preview-prompt", draft),
+  tavusListFaces: (options) => ipcRenderer.invoke("tavus:list-faces", options),
+  tavusListVoices: (options) => ipcRenderer.invoke("tavus:list-voices", options),
+
   // Storage API bridge (SQLite worker backed)
   storage: {
     getProfile: () => ipcRenderer.invoke("storage:get-profile"),
@@ -40,7 +46,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
     getPersonas: () => ipcRenderer.invoke("storage:get-personas"),
     createPersona: (p) => ipcRenderer.invoke("storage:create-persona", p),
     updatePersona: (id, persona) => ipcRenderer.invoke("storage:update-persona", { id, persona }),
-    deletePersona: (id) => ipcRenderer.invoke("storage:delete-persona", id),
+    deletePersona: (id, options) => ipcRenderer.invoke("storage:delete-persona", id, options),
     getScenarios: () => ipcRenderer.invoke("storage:get-scenarios"),
     createScenario: (sc) => ipcRenderer.invoke("storage:create-scenario", sc),
     deleteScenario: (id) => ipcRenderer.invoke("storage:delete-scenario", id),
