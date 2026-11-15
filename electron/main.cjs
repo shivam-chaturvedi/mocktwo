@@ -486,7 +486,9 @@ function createWindow() {
     mainWindow.show();
   });
 
-  mainWindow.webContents.setVisualZoomLevelLimits(1, 1);
+  mainWindow.webContents.on("did-finish-load", () => {
+    mainWindow.webContents.setVisualZoomLevelLimits(1, 1).catch(() => {});
+  });
 
   mainWindow.on("resize", () => debouncedSaveBounds(mainWindow));
   mainWindow.on("move", () => debouncedSaveBounds(mainWindow));
@@ -495,9 +497,13 @@ function createWindow() {
   buildMenu();
 
   if (app.isPackaged) {
-    mainWindow.loadFile(path.join(__dirname, "../dist/index.html"));
+    mainWindow.loadFile(path.join(__dirname, "../dist/index.html")).catch((err) => {
+      console.error("[main] Failed to load production index.html:", err);
+    });
   } else {
-    mainWindow.loadURL(DEV_SERVER_URL);
+    mainWindow.loadURL(DEV_SERVER_URL).catch((err) => {
+      console.warn("[main] Initial connection to dev server failed; will retry on did-fail-load:", err.message);
+    });
   }
 }
 
