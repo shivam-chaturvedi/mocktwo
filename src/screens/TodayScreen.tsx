@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useApp } from "../context";
+import { MocktwoLogo } from "../components/common/MocktwoLogo";
 import { formatContextSetting, getComposureTier, type Recording } from "../types";
 import { ScoreRing } from "../components/common/ScoreRing";
 import { MiniTrendSparkline, type SessionTrendItem } from "../components/common/MiniTrendSparkline";
@@ -425,17 +426,20 @@ export const TodayScreen: React.FC = () => {
                   boxSizing: "border-box",
                 }}
               >
-                <h2
-                  style={{
-                    fontSize: "16px",
-                    fontWeight: 650,
-                    color: "var(--text-primary)",
-                    margin: "0 0 6px 0",
-                    letterSpacing: "-0.015em",
-                  }}
-                >
-                  Welcome to mocktwo
-                </h2>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
+                  <MocktwoLogo size={28} />
+                  <h2
+                    style={{
+                      fontSize: "16px",
+                      fontWeight: 650,
+                      color: "var(--text-primary)",
+                      margin: 0,
+                      letterSpacing: "-0.015em",
+                    }}
+                  >
+                    Welcome to mocktwo
+                  </h2>
+                </div>
                 <p
                   style={{
                     fontSize: "13px",

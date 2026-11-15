@@ -1,19 +1,57 @@
-const { app, BrowserWindow, Menu, ipcMain, shell, dialog, screen, session } = require("electron");
+const { app, BrowserWindow, Menu, ipcMain, shell, dialog, screen, session, nativeImage } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const { fileURLToPath } = require("url");
 const { StorageManager } = require("./storage/storageManager.cjs");
 const { PermissionsService } = require("./permissions/permissionsService.cjs");
 
+// Load environment variables from .env or .env.example
+function loadEnvironment() {
+  const envPath = path.join(__dirname, "../.env");
+  const envExamplePath = path.join(__dirname, "../.env.example");
+  const target = fs.existsSync(envPath) ? envPath : (fs.existsSync(envExamplePath) ? envExamplePath : null);
+
+  if (target) {
+    try {
+      const content = fs.readFileSync(target, "utf8");
+      for (const line of content.split("\n")) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith("#")) continue;
+        const eqIdx = trimmed.indexOf("=");
+        if (eqIdx !== -1) {
+          const key = trimmed.slice(0, eqIdx).trim();
+          const val = trimmed.slice(eqIdx + 1).trim().replace(/^["']|["']$/g, "");
+          if (!process.env[key]) {
+            process.env[key] = val;
+          }
+        }
+      }
+    } catch {
+      // fallback
+    }
+  }
+}
+
+loadEnvironment();
+
+const APP_NAME = process.env.APP_NAME || "mocktwo";
+const APP_VERSION = process.env.APP_VERSION || "1.0.0";
+const APP_COPYRIGHT = process.env.APP_COPYRIGHT || `Copyright © 2026 ${APP_NAME}`;
+const APP_ID = process.env.APP_ID || "com.mocktwo.app";
+
 // 1. Platform Identity for persistent permissions & notification grouping
-app.setName("mocktwo");
+app.setName(APP_NAME);
+if (typeof app.setVersion === "function") {
+  app.setVersion(APP_VERSION);
+}
 if (process.platform === "win32") {
-  app.setAppUserModelId("com.mocktwo.desktop");
+  app.setAppUserModelId(APP_ID);
 }
 
 const DEV_HOST = "127.0.0.1";
 const DEV_PORT = 5173;
 const DEV_SERVER_URL = `http://${DEV_HOST}:${DEV_PORT}`;
+const appIconPath = path.join(__dirname, "../build/icon.png");
 
 let mainWindow = null;
 let storageManager = null;
@@ -190,7 +228,12 @@ function buildMenu() {
           {
             label: "mocktwo",
             submenu: [
-              { role: "about", label: "About mocktwo" },
+              {
+                label: "About mocktwo",
+                click: () => {
+                  app.showAboutPanel();
+                },
+              },
               { type: "separator" },
               {
                 label: "Settings…",
@@ -394,7 +437,7 @@ function configureSessionSecurity() {
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     const isDev = !app.isPackaged;
     const csp = isDev
-      ? `default-src 'self' ${DEV_SERVER_URL}; script-src 'self' 'unsafe-inline' 'unsafe-eval' ${DEV_SERVER_URL}; style-src 'self' 'unsafe-inline' ${DEV_SERVER_URL}; font-src 'self' data: ${DEV_SERVER_URL}; img-src 'self' data: blob: https:; media-src 'self' blob:; worker-src 'self' blob:; connect-src 'self' ws://${DEV_HOST}:${DEV_PORT} ${DEV_SERVER_URL}; object-src 'none'; base-uri 'none'; frame-ancestors 'none';`
+      ? `default-src 'self' ${DEV_SERVER_URL}; script-src 'self' 'unsafe-inline' 'unsafe-eval' ${DEV_SERVER_URL}; style-src 'self' 'unsafe-inline' ${DEV_SERVER_URL}; font-src 'self' data: ${DEV_SERVER_URL}; img-src 'self' data: blob: https: ${DEV_SERVER_URL}; media-src 'self' blob:; worker-src 'self' blob:; connect-src 'self' ws://${DEV_HOST}:${DEV_PORT} ${DEV_SERVER_URL}; object-src 'none'; base-uri 'none'; frame-ancestors 'none';`
       : `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; media-src 'self' blob:; worker-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none';`;
 
     callback({
@@ -434,6 +477,7 @@ function createWindow() {
     minHeight: 700,
     show: false,
     title: "mocktwo",
+    icon: appIconPath,
     titleBarStyle: "hiddenInset",
     trafficLightPosition: { x: 18, y: 18 },
     vibrancy: "under-window",
@@ -535,7 +579,11 @@ function createWindow() {
     mainWindow.webContents.setVisualZoomLevelLimits(1, 1).catch(() => {});
   });
 
-  mainWindow.webContents.on("console-message", (_event, level, message, line, sourceId) => {
+  mainWindow.webContents.on("console-message", (event) => {
+    const level = typeof event?.level === "number" ? event.level : 0;
+    const message = event?.message || "";
+    const line = event?.lineNumber;
+    const sourceId = event?.sourceId;
     const levelStr = ["verbose", "info", "warning", "error"][level] || "log";
     console.log(`[renderer ${levelStr}] ${message}`);
     if (level >= 3) {
@@ -546,6 +594,9 @@ function createWindow() {
   mainWindow.on("resize", () => debouncedSaveBounds(mainWindow));
   mainWindow.on("move", () => debouncedSaveBounds(mainWindow));
   mainWindow.on("close", () => flushBoundsNow(mainWindow));
+  mainWindow.on("page-title-updated", (event) => {
+    event.preventDefault();
+  });
 
   buildMenu();
 
@@ -561,6 +612,25 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  if (process.platform === "darwin" && app.dock) {
+    try {
+      const dockIcon = nativeImage.createFromPath(appIconPath);
+      if (!dockIcon.isEmpty()) {
+        app.dock.setIcon(dockIcon);
+      }
+    } catch (err) {
+      console.warn("[main] Failed to set dock icon:", err.message);
+    }
+  }
+
+  app.setAboutPanelOptions({
+    applicationName: APP_NAME,
+    applicationVersion: APP_VERSION,
+    version: APP_VERSION,
+    copyright: APP_COPYRIGHT,
+    iconPath: appIconPath,
+  });
+
   storageManager = new StorageManager(app.getPath("userData"));
   permissionsService = new PermissionsService(storageManager, () => mainWindow);
   createWindow();

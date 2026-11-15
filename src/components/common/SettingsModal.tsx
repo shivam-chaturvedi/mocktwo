@@ -4,6 +4,7 @@ import { Button } from "./Button";
 import { EmptyState } from "./EmptyState";
 import { PermissionPrompt } from "./PermissionPrompt";
 import { usePermission } from "../../hooks/usePermission";
+import { MocktwoLogo } from "./MocktwoLogo";
 import {
   X,
   Sliders,
@@ -280,6 +281,19 @@ export const SettingsModal: React.FC = () => {
                     onChange={(e) => updateSettings({ hapticFeedback: e.target.checked })}
                     style={{ width: "16px", height: "16px", cursor: "pointer" }}
                   />
+                </div>
+              </div>
+
+              {/* About mocktwo */}
+              <div style={{ borderTop: "1px solid var(--separator)", paddingTop: "18px", display: "flex", alignItems: "center", gap: "12px" }}>
+                <MocktwoLogo size={36} />
+                <div>
+                  <div style={{ fontSize: "13px", fontWeight: 650, color: "var(--text-primary)" }}>
+                    {import.meta.env.VITE_APP_NAME || "mocktwo"}
+                  </div>
+                  <div style={{ fontSize: "11.5px", color: "var(--text-secondary)" }}>
+                    Version {import.meta.env.VITE_APP_VERSION || "1.0.0"} • Desktop rehearsal & composure sensing
+                  </div>
                 </div>
               </div>
             </div>

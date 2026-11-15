@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useApp } from "../../context";
+import { MocktwoLogo } from "../common/MocktwoLogo";
 import {
   Search,
-  Layers,
   Settings,
   LogOut,
   Code2,
@@ -100,21 +100,7 @@ export const TitleBar: React.FC = () => {
           paddingLeft: "72px",
         }}
       >
-        <div
-          style={{
-            width: "22px",
-            height: "22px",
-            borderRadius: "6px",
-            backgroundColor: "var(--accent-blue)",
-            display: "grid",
-            placeItems: "center",
-            color: "#ffffff",
-            boxShadow: "0 1px 3px rgba(10, 132, 255, 0.35)",
-            flexShrink: 0,
-          }}
-        >
-          <Layers size={13} strokeWidth={2.2} />
-        </div>
+        <MocktwoLogo size={20} />
         <div style={{ display: "flex", alignItems: "center" }}>
           <span
             style={{

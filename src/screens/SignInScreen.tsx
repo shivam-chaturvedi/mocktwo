@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useApp } from "../context";
 import { Button } from "../components/common/Button";
+import { MocktwoLogo } from "../components/common/MocktwoLogo";
 import {
-  Layers,
   ArrowRight,
   Fingerprint,
   Building2,
@@ -175,17 +175,18 @@ export const SignInScreen: React.FC = () => {
           width: "100%",
           display: "flex",
           alignItems: "center",
+          gap: "8px",
           paddingLeft: "78px",
           borderBottom: "1px solid var(--separator)"
         }}
       >
+        <MocktwoLogo size={18} />
         <span
           style={{
-            fontSize: "12px",
-            fontWeight: 600,
-            color: "var(--text-tertiary)",
-            letterSpacing: "0.06em",
-            textTransform: "uppercase"
+            fontSize: "12.5px",
+            fontWeight: 650,
+            color: "var(--text-secondary)",
+            letterSpacing: "-0.01em"
           }}
         >
           mocktwo
@@ -205,21 +206,13 @@ export const SignInScreen: React.FC = () => {
       >
         {/* Brand Icon & Tagline */}
         <div style={{ textAlign: "center", marginBottom: "28px" }}>
-          <div
+          <MocktwoLogo
+            size={60}
             style={{
-              width: "52px",
-              height: "52px",
-              borderRadius: "14px",
-              backgroundColor: "var(--accent-blue)",
-              display: "grid",
-              placeItems: "center",
-              color: "#ffffff",
-              boxShadow: "0 4px 16px rgba(10, 132, 255, 0.35)",
-              margin: "0 auto 16px auto"
+              margin: "0 auto 16px auto",
+              boxShadow: "0 6px 20px rgba(0, 0, 0, 0.28)",
             }}
-          >
-            <Layers size={26} strokeWidth={2.2} />
-          </div>
+          />
 
           <h1
             className="font-serif-luxury"

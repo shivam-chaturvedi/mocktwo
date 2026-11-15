@@ -10,6 +10,11 @@ lerna-debug.log*
 # Test artifacts
 tmp_test_*
 
+# Environment files
+.env
+.env*.local
+!.env.example
+
 node_modules
 dist
 dist-ssr

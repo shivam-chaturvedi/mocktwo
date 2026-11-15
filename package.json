@@ -1,20 +1,23 @@
 {
   "name": "mocktwo",
+  "productName": "mocktwo",
+  "description": "Desktop rehearsal and conversational composure training application",
+  "author": "mocktwo",
   "private": true,
   "version": "1.0.0",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
-    "dev": "concurrently -k \"vite --host 127.0.0.1\" \"wait-on tcp:5173 && electron .\"",
+    "dev": "node scripts/brand-electron-dev.cjs && concurrently -k \"vite --host 127.0.0.1\" \"wait-on tcp:5173 && electron .\"",
     "build": "tsc -b && vite build",
     "dist": "npm run build && electron-builder",
     "lint": "oxlint src",
     "test": "node --test src/services/*.test.ts tests/*.test.ts",
     "preview": "vite preview",
-    "postinstall": "electron-builder install-app-deps"
+    "postinstall": "electron-builder install-app-deps && node scripts/brand-electron-dev.cjs"
   },
   "build": {
-    "appId": "com.mocktwo.desktop",
+    "appId": "com.mocktwo.app",
     "productName": "mocktwo",
     "directories": {
       "output": "release"
@@ -27,6 +30,7 @@
       "**/node_modules/better-sqlite3/**"
     ],
     "mac": {
+      "icon": "build/icon.icns",
       "category": "public.app-category.productivity",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
