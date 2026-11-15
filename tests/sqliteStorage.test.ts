@@ -288,6 +288,38 @@ describe("Phase 3: SQLite Storage & Worker Subsystem", () => {
       /Invalid setting key/
     );
 
+    // Verify recordings:list handles malformed bounds cleanly
+    const safeList = await send("recordings:list", { limit: -10, offset: "bad" });
+    assert.ok(Array.isArray(safeList));
+
+    // Verify personas:update with partial updates merges safely
+    await send("personas:create", {
+      name: "Test Update Partner",
+      avatarUrl: "",
+      monogram: "TU",
+      title: "Senior Lead",
+      contextSetting: "Boardroom",
+      seniority: "Executive",
+      language: "English (US)",
+      temperamentTraits: ["Calm"],
+      voice: "Default",
+      backstory: "Experienced",
+      communicationNotes: "Notes",
+      scenariosCount: 2,
+      pressureLevel: "High",
+      source: "Mine",
+    });
+    const allPersonas = await send("personas:list");
+    const createdPersona = allPersonas.find((p: any) => p.name === "Test Update Partner");
+    assert.ok(createdPersona);
+
+    const updated = await send("personas:update", {
+      id: createdPersona.id,
+      persona: { name: "Renamed Update Partner" },
+    });
+    assert.equal(updated.name, "Renamed Update Partner");
+    assert.equal(updated.title, "Senior Lead"); // Preserved!
+
     await worker.terminate();
   });
 });

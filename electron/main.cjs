@@ -431,7 +431,7 @@ function createWindow() {
   // Block unexpected window opens
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     writeLogEntry("info", "navigation:windowOpenBlocked", `Blocked window.open for ${url}`);
-    if (url.startsWith("https://") || url.startsWith("http://")) {
+    if (url.startsWith("https://")) {
       shell.openExternal(url);
     }
     return { action: "deny" };
@@ -836,9 +836,11 @@ ipcMain.handle("audio:start-recording", async (event, id) => {
   }
 });
 
-ipcMain.handle("audio:append-chunk", async (event, { id, chunk }) => {
+ipcMain.handle("audio:append-chunk", async (event, payload) => {
   try {
-    if (!isValidSender(event) || !storageManager) return false;
+    if (!isValidSender(event) || !storageManager || !payload || typeof payload !== "object") return false;
+    const { id, chunk } = payload;
+    if (!id || !chunk) return false;
     const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     await storageManager.appendAudioChunk(id, buffer);
     return true;

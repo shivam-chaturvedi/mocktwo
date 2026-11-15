@@ -353,8 +353,18 @@ parentPort.on("message", ({ id, type, payload }) => {
       }
 
       case "personas:update": {
-        const { id: targetId, persona: p } = payload;
+        const { id: targetId, persona: p } = payload || {};
+        if (!targetId || !p || typeof p !== "object") {
+          result = null;
+          break;
+        }
+        const existing = db.prepare("SELECT * FROM personas WHERE id = ?").get(targetId);
+        if (!existing) {
+          result = null;
+          break;
+        }
         const now = new Date().toISOString();
+        const monogram = p.monogram || existing.monogram || (p.name ? p.name.slice(0, 2).toUpperCase() : "NA");
         db.prepare(`
           UPDATE personas SET
             name = ?,
@@ -374,24 +384,24 @@ parentPort.on("message", ({ id, type, payload }) => {
             updated_at = ?
           WHERE id = ?
         `).run(
-          p.name,
-          p.avatarUrl || null,
-          p.monogram,
-          p.title,
-          p.contextSetting,
-          p.seniority,
-          p.language || "English (US)",
-          JSON.stringify(p.temperamentTraits || []),
-          p.voice || "Default",
-          p.backstory || "",
-          p.communicationNotes || "",
-          p.scenariosCount || 0,
-          p.pressureLevel || "Moderate",
-          p.source || "Mine",
+          p.name || existing.name,
+          p.avatarUrl !== undefined ? p.avatarUrl : existing.avatar_url,
+          monogram,
+          p.title || existing.title || "Specialist",
+          p.contextSetting || existing.context_setting || "Meeting",
+          p.seniority || existing.seniority || "Mid-Level",
+          p.language || existing.language || "English (US)",
+          JSON.stringify(p.temperamentTraits || JSON.parse(existing.temperament_traits || "[]")),
+          p.voice || existing.voice || "Default",
+          p.backstory !== undefined ? p.backstory : existing.backstory,
+          p.communicationNotes !== undefined ? p.communicationNotes : existing.communication_notes,
+          p.scenariosCount !== undefined ? p.scenariosCount : existing.scenarios_count,
+          p.pressureLevel || existing.pressure_level || "Moderate",
+          p.source || existing.source || "Mine",
           now,
           targetId
         );
-        result = p;
+        result = { ...existing, ...p, id: targetId, monogram };
         break;
       }
 
@@ -475,7 +485,8 @@ parentPort.on("message", ({ id, type, payload }) => {
 
       // Recordings (Paginated list view without bulky vitals blobs)
       case "recordings:list": {
-        const { limit = 100, offset = 0 } = payload || {};
+        const cleanLimit = Math.max(1, Math.min(Number(payload?.limit) || 100, 1000));
+        const cleanOffset = Math.max(0, Number(payload?.offset) || 0);
         const rows = db.prepare(`
           SELECT id, scenario_id, scenario_title, persona_id, persona_name, persona_avatar_url,
                  date, relative_date, date_group, duration_seconds, duration_minutes,
@@ -484,7 +495,7 @@ parentPort.on("message", ({ id, type, payload }) => {
           FROM recordings
           ORDER BY date DESC
           LIMIT ? OFFSET ?
-        `).all(limit, offset);
+        `).all(cleanLimit, cleanOffset);
 
         result = rows.map((r) => ({
           id: r.id,
@@ -677,10 +688,20 @@ parentPort.on("message", ({ id, type, payload }) => {
       }
 
       case "recordings:add-note": {
-        const { recordingId, note } = payload;
+        const { recordingId, note } = payload || {};
+        if (!recordingId || !note) {
+          result = false;
+          break;
+        }
         const row = db.prepare("SELECT user_notes FROM recordings WHERE id = ?").get(recordingId);
         if (row) {
-          const notes = JSON.parse(row.user_notes || "[]");
+          let notes = [];
+          try {
+            notes = JSON.parse(row.user_notes || "[]");
+            if (!Array.isArray(notes)) notes = [];
+          } catch {
+            notes = [];
+          }
           notes.push(note);
           db.prepare("UPDATE recordings SET user_notes = ? WHERE id = ?").run(
             JSON.stringify(notes),
@@ -785,7 +806,11 @@ parentPort.on("message", ({ id, type, payload }) => {
       }
 
       case "permissions:save": {
-        const { resource, status, explainerShown, declinedAt } = payload;
+        const { resource, status, explainerShown, declinedAt } = payload || {};
+        if (!resource || !status) {
+          result = false;
+          break;
+        }
         const now = new Date().toISOString();
         db.prepare(`
           INSERT INTO permissions (resource, status, explainer_shown, declined_at, updated_at)
