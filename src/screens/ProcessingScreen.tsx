@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useApp } from "../context";
 import { Card } from "../components/common/Card";
 import { Loader2, AlertCircle, ArrowLeft, RefreshCw, X } from "lucide-react";
-import { serviceRegistry } from "../services/api";
 
 export type ProcessingState = "processing" | "ready" | "error" | "cancelled";
 
@@ -11,7 +10,7 @@ interface ProcessingScreenProps {
 }
 
 export const ProcessingScreen: React.FC<ProcessingScreenProps> = ({ timeoutMs = 15000 }) => {
-  const { navigateTo, selectedScenario } = useApp();
+  const { navigateTo, selectedScenario, completeProcessingSession } = useApp();
   const [state, setState] = useState<ProcessingState>("processing");
   const [errorMessage, setErrorMessage] = useState<string>("");
   const isMountedRef = useRef(true);
@@ -45,23 +44,13 @@ export const ProcessingScreen: React.FC<ProcessingScreenProps> = ({ timeoutMs = 
     }, timeoutMs);
 
     try {
-      const sessionService = serviceRegistry.session;
-      if (!sessionService.isAvailable()) {
-        throw new Error(sessionService.getUnavailableReason() || "Session analysis service unavailable");
-      }
-
-      const result = await sessionService.endSession(`session-${Date.now()}`);
+      await completeProcessingSession();
       if (timeoutTimerRef.current) clearTimeout(timeoutTimerRef.current);
 
       if (!isMountedRef.current) return;
 
-      if (result && result.recordingId) {
-        setState("ready");
-        navigateTo("recordings");
-      } else {
-        setState("ready");
-        navigateTo("recordings");
-      }
+      setState("ready");
+      navigateTo("recordings");
     } catch (err) {
       if (timeoutTimerRef.current) clearTimeout(timeoutTimerRef.current);
       if (!isMountedRef.current) return;
@@ -72,7 +61,7 @@ export const ProcessingScreen: React.FC<ProcessingScreenProps> = ({ timeoutMs = 
           : "An unexpected error occurred while analyzing the rehearsal session."
       );
     }
-  }, [navigateTo, timeoutMs]);
+  }, [completeProcessingSession, navigateTo, timeoutMs]);
 
   useEffect(() => {
     isMountedRef.current = true;

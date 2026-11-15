@@ -548,23 +548,25 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     navigateTo("simulation");
   }, [activeSessionPersona, navigateTo, showToast]);
 
-  const finishSimulation = useCallback(async (_durationSeconds: number) => {
+  const finishSimulation = useCallback((_durationSeconds: number) => {
     navigateTo("processing");
-    try {
-      if (!serviceRegistry.session.isAvailable()) {
-        throw new Error(serviceRegistry.session.getUnavailableReason());
-      }
-      const { recordingId } = await serviceRegistry.session.endSession(`session-${Date.now()}`);
+  }, [navigateTo]);
+
+  const completeProcessingSession = useCallback(async (): Promise<Recording | null> => {
+    if (!serviceRegistry.session.isAvailable()) {
+      throw new Error(serviceRegistry.session.getUnavailableReason() || "Session analysis service unavailable");
+    }
+    const { recordingId } = await serviceRegistry.session.endSession(`session-${Date.now()}`);
+    if (recordingId) {
       const rec = await serviceRegistry.recordings.getRecording(recordingId);
       if (rec) {
         setRecordings((prev) => [rec, ...prev]);
         setSelectedRecordingId(rec.id);
+        return rec;
       }
-      navigateTo("recordings");
-    } catch {
-      navigateTo("recordings");
     }
-  }, [navigateTo]);
+    return null;
+  }, []);
 
   // Recordings management
   const selectRecording = useCallback((rec: Recording | null) => {
@@ -706,6 +708,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setSessionPersona: setActiveSessionPersona,
         beginSimulation,
         finishSimulation,
+        completeProcessingSession,
         recordings: activeRecordings,
         selectedRecording,
         selectRecording,

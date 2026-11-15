@@ -39,6 +39,7 @@ export const BriefingSheet: React.FC = () => {
   const [micMuted, setMicMuted] = useState(false);
   const [cameraOff, setCameraOff] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
+  const [isStarting, setIsStarting] = useState(false);
   const [permissionError, setPermissionError] = useState<"camera" | "microphone" | null>(null);
   const [isCrossfading, setIsCrossfading] = useState(false);
   const [isMeasuringBaseline, setIsMeasuringBaseline] = useState(false);
@@ -112,6 +113,7 @@ export const BriefingSheet: React.FC = () => {
     } else if (countdown === 1) {
       const timer = setTimeout(() => {
         setCountdown(null);
+        setIsStarting(false);
         beginSimulation(effectivePersona);
       }, 650);
       return () => clearTimeout(timer);
@@ -133,23 +135,30 @@ export const BriefingSheet: React.FC = () => {
   ];
 
   const handleStartSession = async () => {
-    if (countdown !== null) return;
+    if (countdown !== null || isStarting) return;
+    setIsStarting(true);
     setPermissionError(null);
 
-    if (window.electronAPI?.requestMediaAccess) {
-      const camOk = await window.electronAPI.requestMediaAccess("camera");
-      if (!camOk) {
-        setPermissionError("camera");
-        return;
+    try {
+      if (window.electronAPI?.requestMediaAccess) {
+        const camOk = await window.electronAPI.requestMediaAccess("camera");
+        if (!camOk) {
+          setPermissionError("camera");
+          setIsStarting(false);
+          return;
+        }
+        const micOk = await window.electronAPI.requestMediaAccess("microphone");
+        if (!micOk) {
+          setPermissionError("microphone");
+          setIsStarting(false);
+          return;
+        }
       }
-      const micOk = await window.electronAPI.requestMediaAccess("microphone");
-      if (!micOk) {
-        setPermissionError("microphone");
-        return;
-      }
-    }
 
-    setCountdown(3);
+      setCountdown(3);
+    } catch {
+      setIsStarting(false);
+    }
   };
 
   const setting = formatContextSetting(effectivePersona.contextSetting || effectivePersona.roomNumber || "");
@@ -806,7 +815,7 @@ export const BriefingSheet: React.FC = () => {
             <Button
               variant="primary"
               size="md"
-              disabled={!isSessionServiceAvailable || !currentPersona}
+              disabled={!isSessionServiceAvailable || !currentPersona || isStarting || countdown !== null}
               title={!isSessionServiceAvailable ? "Practice sessions require a connected mocktwo backend service" : undefined}
               icon={<Play size={13} fill="currentColor" />}
               onClick={handleStartSession}

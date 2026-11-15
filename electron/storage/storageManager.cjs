@@ -150,12 +150,16 @@ class StorageManager {
       const files = fs.readdirSync(this.recordingsDir);
       for (const file of files) {
         if (file.endsWith(".partial")) {
-          const fullPath = path.join(this.recordingsDir, file);
-          const stats = fs.statSync(fullPath);
-          const ageMs = Date.now() - stats.mtimeMs;
-          // If file is older than 1 hour, clean it up
-          if (ageMs > 3600000) {
-            fs.unlinkSync(fullPath);
+          try {
+            const fullPath = path.join(this.recordingsDir, file);
+            const stats = fs.statSync(fullPath);
+            const ageMs = Date.now() - stats.mtimeMs;
+            // If file is older than 1 hour, clean it up
+            if (ageMs > 3600000) {
+              fs.unlinkSync(fullPath);
+            }
+          } catch {
+            // ignore individual file cleanup failure
           }
         }
       }
@@ -166,6 +170,10 @@ class StorageManager {
 
   close() {
     this.isClosing = true;
+    for (const [, pending] of this.pendingRequests.entries()) {
+      pending.reject(new Error("StorageManager closed"));
+    }
+    this.pendingRequests.clear();
     if (this.worker) {
       this.worker.terminate();
     }

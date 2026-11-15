@@ -136,6 +136,29 @@ describe("Phase 3: SQLite Storage & Worker Subsystem", () => {
     assert.equal(retrievedRec.notes.length, 1);
     assert.equal(retrievedRec.vitalsSamples.length, 1);
 
+    // Verify re-saving recording does NOT duplicate child rows
+    await send("recordings:save", {
+      ...recording,
+      selfReflectionNotes: "Reflected on pacing",
+    });
+    const retrievedAfterReSave = await send("recordings:get", "rec-test-1");
+    assert.equal(retrievedAfterReSave.notes.length, 1);
+    assert.equal(retrievedAfterReSave.vitalsSamples.length, 1);
+    assert.equal(retrievedAfterReSave.selfReflectionNotes, "Reflected on pacing");
+
+    // Verify recordings:add-note synchronizes both user_notes and recording_notes table
+    await send("recordings:add-note", {
+      recordingId: "rec-test-1",
+      note: { timestampSeconds: 25, text: "Second observation note", author: "Coach" },
+    });
+    const retrievedAfterAddNote = await send("recordings:get", "rec-test-1");
+    assert.equal(retrievedAfterAddNote.notes.length, 2);
+
+    const checkDb = new Database(DB_PATH);
+    const notesInTable = checkDb.prepare("SELECT count(*) as count FROM recording_notes WHERE recording_id = ?").get("rec-test-1") as { count: number };
+    checkDb.close();
+    assert.equal(notesInTable.count, 2);
+
     // Delete recording and check vitals samples are deleted (cascade)
     const delResult = await send("recordings:delete", "rec-test-1");
     assert.equal(delResult, true);

@@ -2,6 +2,7 @@ const { parentPort, workerData } = require("worker_threads");
 const Database = require("better-sqlite3");
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 
 const dbPath = workerData.dbPath;
 const recordingsDir = path.join(path.dirname(dbPath), "recordings");
@@ -613,6 +614,14 @@ parentPort.on("message", ({ id, type, payload }) => {
             rec.createdAt || now
           );
 
+          // Clean up existing child samples and notes on re-save to prevent row duplication
+          if (Array.isArray(rec.vitalsSamples) || (rec.sessionBiometrics && rec.sessionBiometrics.pulse)) {
+            db.prepare("DELETE FROM vitals_samples WHERE recording_id = ?").run(id);
+          }
+          if (Array.isArray(rec.notes || rec.userNotes)) {
+            db.prepare("DELETE FROM recording_notes WHERE recording_id = ?").run(id);
+          }
+
           const insertSampleStmt = db.prepare(`
             INSERT INTO vitals_samples (recording_id, timestamp_offset_ms, pulse_bpm, confidence, is_clean)
             VALUES (?, ?, ?, ?, ?)
@@ -650,7 +659,7 @@ parentPort.on("message", ({ id, type, payload }) => {
             `);
             for (const n of notesArr) {
               insertNoteStmt.run(
-                n.id || `n-${Date.now()}-${Math.random()}`,
+                n.id || `n-${Date.now()}-${crypto.randomUUID()}`,
                 id,
                 n.timestampSeconds || 0,
                 n.text || n.noteText || "",
@@ -703,10 +712,25 @@ parentPort.on("message", ({ id, type, payload }) => {
             notes = [];
           }
           notes.push(note);
-          db.prepare("UPDATE recordings SET user_notes = ? WHERE id = ?").run(
-            JSON.stringify(notes),
-            recordingId
-          );
+          const now = new Date().toISOString();
+          const noteId = note.id || `n-${Date.now()}-${crypto.randomUUID()}`;
+          db.transaction(() => {
+            db.prepare("UPDATE recordings SET user_notes = ? WHERE id = ?").run(
+              JSON.stringify(notes),
+              recordingId
+            );
+            db.prepare(`
+              INSERT INTO recording_notes (id, recording_id, timestamp_seconds, note_text, author, created_at)
+              VALUES (?, ?, ?, ?, ?, ?)
+            `).run(
+              noteId,
+              recordingId,
+              note.timestampSeconds || 0,
+              note.text || note.noteText || "",
+              note.author || "User",
+              note.createdAt || now
+            );
+          })();
         }
         result = true;
         break;

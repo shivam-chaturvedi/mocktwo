@@ -362,33 +362,11 @@ function isValidSender(frameOrEvent) {
   }
 }
 
-function createWindow() {
-  const initialBounds = loadBounds();
+let isSessionSecurityConfigured = false;
 
-  mainWindow = new BrowserWindow({
-    width: initialBounds.width || 1360,
-    height: initialBounds.height || 860,
-    x: initialBounds.x,
-    y: initialBounds.y,
-    minWidth: 1100,
-    minHeight: 700,
-    show: false,
-    title: "mocktwo",
-    titleBarStyle: "hiddenInset",
-    trafficLightPosition: { x: 18, y: 18 },
-    vibrancy: "under-window",
-    visualEffectState: "active",
-    backgroundColor: "#1e1e1e",
-    webPreferences: {
-      preload: path.join(__dirname, "preload.cjs"),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      webSecurity: true,
-      zoomFactor: 1.0,
-      navigateOnDragDrop: false,
-    },
-  });
+function configureSessionSecurity() {
+  if (isSessionSecurityConfigured) return;
+  isSessionSecurityConfigured = true;
 
   // Strict CSP via webRequest headers
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
@@ -426,6 +404,36 @@ function createWindow() {
       : requestingOrigin.startsWith(DEV_SERVER_URL) || requestingOrigin.startsWith("file://");
 
     return isAllowedOrigin && permission === "media";
+  });
+}
+
+function createWindow() {
+  configureSessionSecurity();
+  const initialBounds = loadBounds();
+
+  mainWindow = new BrowserWindow({
+    width: initialBounds.width || 1360,
+    height: initialBounds.height || 860,
+    x: initialBounds.x,
+    y: initialBounds.y,
+    minWidth: 1100,
+    minHeight: 700,
+    show: false,
+    title: "mocktwo",
+    titleBarStyle: "hiddenInset",
+    trafficLightPosition: { x: 18, y: 18 },
+    vibrancy: "under-window",
+    visualEffectState: "active",
+    backgroundColor: "#1e1e1e",
+    webPreferences: {
+      preload: path.join(__dirname, "preload.cjs"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
+      zoomFactor: 1.0,
+      navigateOnDragDrop: false,
+    },
   });
 
   // Block unexpected window opens
@@ -594,22 +602,27 @@ ipcMain.handle("reveal-logs", async (event) => {
 
 ipcMain.handle("open-system-settings", async (event, pane) => {
   if (!isValidSender(event.senderFrame)) return false;
-  if (process.platform === "darwin") {
-    if (pane === "camera") {
-      await shell.openExternal("x-apple.systempreferences:com.apple.preference.security?Privacy_Camera");
-      return true;
-    } else if (pane === "microphone") {
-      await shell.openExternal("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone");
-      return true;
+  try {
+    if (process.platform === "darwin") {
+      if (pane === "camera") {
+        await shell.openExternal("x-apple.systempreferences:com.apple.preference.security?Privacy_Camera");
+        return true;
+      } else if (pane === "microphone") {
+        await shell.openExternal("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone");
+        return true;
+      }
+    } else if (process.platform === "win32") {
+      if (pane === "camera") {
+        await shell.openExternal("ms-settings:privacy-webcam");
+        return true;
+      } else if (pane === "microphone") {
+        await shell.openExternal("ms-settings:privacy-microphone");
+        return true;
+      }
     }
-  } else if (process.platform === "win32") {
-    if (pane === "camera") {
-      await shell.openExternal("ms-settings:privacy-webcam");
-      return true;
-    } else if (pane === "microphone") {
-      await shell.openExternal("ms-settings:privacy-microphone");
-      return true;
-    }
+  } catch (err) {
+    writeLogEntry("warn", "system:openSettingsFailed", `Failed to open settings for ${pane}: ${err.message}`);
+    return false;
   }
   return false;
 });
