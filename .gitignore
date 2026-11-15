@@ -10,10 +10,21 @@ lerna-debug.log*
 # Test artifacts
 tmp_test_*
 
+# Environment files
+.env
+.env*.local
+!.env.example
+
+# Planning and notes
+PLAN*
+desc.md
+
 node_modules
 dist
 dist-ssr
 release
+out
+*.tsbuildinfo
 *.local
 
 # Editor directories and files

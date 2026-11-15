@@ -5,13 +5,18 @@ export interface ElectronAPI {
   openSystemSettings: (pane: "camera" | "microphone") => Promise<boolean>;
   logError: (payload: Record<string, unknown>) => void;
   revealLogs: () => Promise<string>;
+  tavusStatus: () => Promise<{ configured: boolean }>;
+  personaRetrySync: (id: string) => Promise<any>;
+  personaPreviewPrompt: (draft: any) => Promise<{ prompt: string; wordCount: number; warnings: string[]; error: string | null }>;
+  tavusListFaces: (options?: { forceRefresh?: boolean }) => Promise<{ data: any[]; total_count?: number }>;
+  tavusListVoices: (options?: { forceRefresh?: boolean }) => Promise<{ data: any[]; total_count?: number }>;
   storage: {
     getProfile: () => Promise<any>;
     saveProfile: (p: any) => Promise<any>;
     getPersonas: () => Promise<any[]>;
     createPersona: (p: any) => Promise<any>;
     updatePersona: (id: string, p: any) => Promise<any>;
-    deletePersona: (id: string) => Promise<boolean>;
+    deletePersona: (id: string, options?: { deleteTavusPal?: boolean }) => Promise<boolean>;
     getScenarios: () => Promise<any[]>;
     createScenario: (s: any) => Promise<any>;
     deleteScenario: (id: string) => Promise<boolean>;
