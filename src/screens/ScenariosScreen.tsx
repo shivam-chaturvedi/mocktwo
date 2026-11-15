@@ -24,6 +24,7 @@ import {
   ChevronDown,
   Check,
   Layers,
+  Sparkles,
 } from "lucide-react";
 import { formatContextSetting, type InteractionType, type PracticeScenario, type Persona } from "../types";
 
@@ -539,6 +540,16 @@ export const ScenariosScreen: React.FC = () => {
                     );
                   })
                 )
+              ) : scenarios.length === 0 ? (
+                <EmptyState
+                  icon={<Sparkles size={18} />}
+                  title="No scenarios yet"
+                  description="Create a practice scenario in Studio to begin rehearsing."
+                  primaryAction={{
+                    label: "Create scenario",
+                    onClick: () => openStudio("scenario"),
+                  }}
+                />
               ) : sortedScenarios.length === 0 ? (
                 <EmptyState
                   icon={<Search size={18} />}
@@ -660,9 +671,9 @@ export const ScenariosScreen: React.FC = () => {
                       Temperament & Behavioral Traits
                     </div>
                     <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                      {(activePersona.temperamentTraits || []).map((t) => (
+                      {(activePersona.temperamentTraits || []).map((t, idx) => (
                         <span
-                          key={t}
+                          key={`${t}-${idx}`}
                           style={{
                             fontSize: "11.5px",
                             padding: "3px 8px",

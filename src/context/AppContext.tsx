@@ -25,7 +25,6 @@ const DEFAULT_EMPTY_USER: UserProfile = {
   averageComposure: 0,
   department: "Strategy & Operations",
   property: "mocktwo Workspace",
-  employeeId: "USR-0001",
   averageRating: 0,
 };
 
@@ -180,16 +179,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, []);
 
-  const signIn = useCallback((email: string) => {
-    serviceRegistry.auth.signIn(email).then((signedInUser) => {
-      setUser((prev) => ({
-        ...prev,
-        ...signedInUser,
-        email: email.trim(),
-      }));
-      setIsAuthenticated(true);
-      navigateTo("home");
-    });
+  const signIn = useCallback(async (email: string) => {
+    const signedInUser = await serviceRegistry.auth.signIn(email);
+    setUser((prev) => ({
+      ...prev,
+      ...signedInUser,
+      email: email.trim(),
+    }));
+    setIsAuthenticated(true);
+    navigateTo("home");
   }, [navigateTo]);
 
   const signOut = useCallback(() => {
@@ -631,8 +629,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         signOut,
         user: effectiveUser,
         updateUser,
-        employee: effectiveUser,
-        updateEmployee: updateUser,
         baseline,
         setBaseline,
         measureBaseline,
@@ -646,10 +642,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         addPersona,
         updatePersona,
         deletePersona,
-        guests: personas,
-        addGuest: addPersona,
-        updateGuest: updatePersona,
-        deleteGuest: deletePersona,
         scenarios,
         selectedScenario,
         selectScenario,
@@ -663,8 +655,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         closeBriefing,
         activeSessionPersona,
         setSessionPersona: setActiveSessionPersona,
-        activeSessionGuest: activeSessionPersona,
-        setSessionGuest: setActiveSessionPersona,
         beginSimulation,
         finishSimulation,
         recordings: activeRecordings,

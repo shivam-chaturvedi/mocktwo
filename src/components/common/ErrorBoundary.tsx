@@ -25,8 +25,23 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    if (process.env.NODE_ENV !== "production") {
-      console.error("ErrorBoundary caught an unhandled error:", error, errorInfo);
+    console.error("ErrorBoundary caught an unhandled error:", error, errorInfo);
+    try {
+      const electronAPI = (window as unknown as {
+        electronAPI?: { logError?: (payload: Record<string, unknown>) => void };
+      }).electronAPI;
+      if (electronAPI && typeof electronAPI.logError === "function") {
+        electronAPI.logError({
+          type: "react-error-boundary",
+          name: error.name,
+          message: error.message,
+          stack: error.stack || "",
+          componentStack: errorInfo.componentStack || "",
+          timestamp: new Date().toISOString(),
+        });
+      }
+    } catch {
+      // ignore logging failures
     }
   }
 

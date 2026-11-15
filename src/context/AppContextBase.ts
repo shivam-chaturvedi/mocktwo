@@ -2,10 +2,8 @@ import { createContext } from "react";
 import type {
   Screen,
   Persona,
-  Guest,
   PracticeScenario,
   UserProfile,
-  EmployeeProfile,
   Recording,
   AppSettings,
   UserBaseline,
@@ -15,14 +13,12 @@ export interface AppContextType {
   currentScreen: Screen;
   navigateTo: (screen: Screen) => void;
   isAuthenticated: boolean;
-  signIn: (email: string) => void;
+  signIn: (email: string) => Promise<void>;
   signOut: () => void;
   
   // User profile
   user: UserProfile;
   updateUser: (profile: Partial<UserProfile>) => void;
-  employee: EmployeeProfile;
-  updateEmployee: (profile: Partial<EmployeeProfile>) => void;
 
   // Baseline biometrics
   baseline: UserBaseline | null;
@@ -40,11 +36,6 @@ export interface AppContextType {
   addPersona: (persona: Persona) => void;
   updatePersona: (persona: Persona) => void;
   deletePersona: (id: string) => { success: boolean; reason?: string };
-  // Backwards compatibility alias
-  guests: Guest[];
-  addGuest: (guest: Guest) => void;
-  updateGuest: (guest: Guest) => void;
-  deleteGuest: (id: string) => { success: boolean; reason?: string };
 
   // Scenarios
   scenarios: PracticeScenario[];
@@ -62,8 +53,6 @@ export interface AppContextType {
   closeBriefing: () => void;
   activeSessionPersona: Persona | null;
   setSessionPersona: (persona: Persona | null) => void;
-  activeSessionGuest: Guest | null;
-  setSessionGuest: (guest: Guest | null) => void;
   
   // Live simulation session
   beginSimulation: (overridePersona?: Persona) => void;

@@ -20,6 +20,7 @@ import {
 import {
   getComposureTier,
   type MetricState,
+  type Recording,
 } from "../types";
 import { WELLNESS_DISCLAIMER } from "../services/biometrics";
 
@@ -53,13 +54,17 @@ export const RecordingsScreen: React.FC = () => {
 
   const activeRecording = selectedRecording || (recordings.length > 0 ? recordings[0] : null);
 
-  // Sync state upon active recording change
-  const [prevRecId, setPrevRecId] = useState(activeRecording?.id);
-  if (activeRecording && activeRecording.id !== prevRecId) {
-    setPrevRecId(activeRecording.id);
-    setPlaybackTime(0);
+  const handleSelectRecording = (rec: Recording | null) => {
     setIsPlaying(false);
-  }
+    setPlaybackTime(0);
+    selectRecording(rec);
+  };
+
+  const handleCloseDebrief = () => {
+    setIsPlaying(false);
+    setPlaybackTime(0);
+    closeDebriefMode();
+  };
 
   // Media Player Simulation Timer
   useEffect(() => {
@@ -217,7 +222,7 @@ export const RecordingsScreen: React.FC = () => {
           }}
         >
           <button
-            onClick={closeDebriefMode}
+            onClick={handleCloseDebrief}
             className="focus-ring"
             style={{
               display: "inline-flex",
@@ -242,7 +247,7 @@ export const RecordingsScreen: React.FC = () => {
           description="It may have been deleted."
           primaryAction={{
             label: "Back to recordings",
-            onClick: closeDebriefMode,
+            onClick: handleCloseDebrief,
           }}
         />
       </div>
@@ -286,7 +291,7 @@ export const RecordingsScreen: React.FC = () => {
         >
           <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0 }}>
             <button
-              onClick={closeDebriefMode}
+              onClick={handleCloseDebrief}
               aria-label="Back to recordings list"
               className="focus-ring"
               style={{
@@ -1142,7 +1147,7 @@ export const RecordingsScreen: React.FC = () => {
               <div
                 key={rec.id}
                 onClick={() => {
-                  selectRecording(rec);
+                  handleSelectRecording(rec);
                 }}
                 className="mac-list-row mac-card-hoverable"
                 style={{
@@ -1213,7 +1218,7 @@ export const RecordingsScreen: React.FC = () => {
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      selectRecording(rec);
+                      handleSelectRecording(rec);
                     }}
                     className="mac-btn focus-ring"
                     style={{

@@ -326,8 +326,6 @@ export interface PracticeScenario {
   assignedBy?: string;
 }
 
-export type GuestScenario = PracticeScenario;
-
 export interface TranscriptUtterance {
   id: string;
   speaker: "Persona" | "You" | "Guest";
@@ -444,11 +442,8 @@ export interface UserProfile {
   // Aliases for backward compatibility
   department?: string;
   property?: string;
-  employeeId?: string;
   averageRating?: number;
 }
-
-export type EmployeeProfile = UserProfile;
 
 export interface AppSettings {
   theme: "dark" | "light" | "system";
@@ -491,8 +486,6 @@ export function formatContextSetting(setting: string): string {
   return cleaned;
 }
 
-export const formatRoomNumber = formatContextSetting;
-
 // Compatibility helper: filters compatible personas for a given scenario
 export function getCompatiblePersonas(scenario?: PracticeScenario | null, allPersonas: Persona[] = []): Persona[] {
   if (!scenario) return allPersonas || [];
@@ -527,8 +520,6 @@ export function getCompatiblePersonas(scenario?: PracticeScenario | null, allPer
     return true;
   });
 }
-
-export const getCompatibleGuests = getCompatiblePersonas;
 
 export function renderScenarioText(text: string, scenario?: PracticeScenario | null, persona?: Persona | null): string {
   if (!text) return "";

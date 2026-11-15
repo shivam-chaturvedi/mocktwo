@@ -14,6 +14,14 @@ const BANNED_PATTERNS = [
   "Math.random",
   "mockData",
   "INITIAL_",
+  "MockBiometricsProvider",
+  "guests",
+  "updateGuest",
+  "employee",
+  "GuestPicker",
+  "GuestScenario",
+  "formatRoomNumber",
+  "getCompatibleGuests",
 ];
 
 function getAllFiles(dir: string): string[] {

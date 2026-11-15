@@ -16,9 +16,9 @@ import {
 import { VALIDATION_HINTS, type ValidationStatusCode } from "../types";
 
 export const LiveSimulationScreen: React.FC = () => {
-  const { selectedScenario, activeSessionGuest, finishSimulation, user } = useApp();
+  const { selectedScenario, activeSessionPersona, finishSimulation, user } = useApp();
 
-  const currentPersona = activeSessionGuest || {
+  const currentPersona = activeSessionPersona || {
     id: selectedScenario.id,
     name: selectedScenario.personaName || selectedScenario.guestName,
     avatarUrl: selectedScenario.personaAvatarUrl || selectedScenario.guestAvatarUrl,
@@ -39,6 +39,8 @@ export const LiveSimulationScreen: React.FC = () => {
 
   const TOTAL_SESSION_SECONDS = 60;
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasFinishedRef = useRef(false);
+  const startTimeRef = useRef<number | null>(null);
 
   // Optical sensor validation status: simulated briefly without showing live numbers
   const currentValidationStatus: ValidationStatusCode = useMemo(() => {
@@ -47,18 +49,23 @@ export const LiveSimulationScreen: React.FC = () => {
     return "OK";
   }, [cameraOff, secondsElapsed]);
 
-  // Timer increment
+  // Monotonic timer using performance.now to prevent background timer drift and pure updater violations
   useEffect(() => {
+    startTimeRef.current = performance.now();
+    hasFinishedRef.current = false;
+
     const timer = setInterval(() => {
-      setSecondsElapsed((prev) => {
-        if (prev >= TOTAL_SESSION_SECONDS) {
-          clearInterval(timer);
-          finishSimulation(TOTAL_SESSION_SECONDS);
-          return TOTAL_SESSION_SECONDS;
-        }
-        return prev + 1;
-      });
-    }, 1000);
+      if (startTimeRef.current === null) return;
+      const elapsed = Math.floor((performance.now() - startTimeRef.current) / 1000);
+      const clampedElapsed = Math.min(TOTAL_SESSION_SECONDS, elapsed);
+      setSecondsElapsed(clampedElapsed);
+
+      if (clampedElapsed >= TOTAL_SESSION_SECONDS && !hasFinishedRef.current) {
+        hasFinishedRef.current = true;
+        clearInterval(timer);
+        finishSimulation(TOTAL_SESSION_SECONDS);
+      }
+    }, 250);
 
     return () => clearInterval(timer);
   }, [finishSimulation]);
@@ -106,6 +113,8 @@ export const LiveSimulationScreen: React.FC = () => {
   };
 
   const handleEndEarly = () => {
+    if (hasFinishedRef.current) return;
+    hasFinishedRef.current = true;
     setShowEndModal(false);
     finishSimulation(secondsElapsed);
   };
@@ -380,7 +389,7 @@ export const LiveSimulationScreen: React.FC = () => {
           </div>
         )}
 
-        {/* Picture-in-Picture Employee Preview (Bottom Right Corner) */}
+        {/* Picture-in-Picture User Preview (Bottom Right Corner) */}
         <div
           style={{
             position: "absolute",

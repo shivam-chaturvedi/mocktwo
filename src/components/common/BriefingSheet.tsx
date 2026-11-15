@@ -58,6 +58,25 @@ export const BriefingSheet: React.FC = () => {
     return defaultP || personas[0];
   }, [activeSessionPersona, personas, selectedScenario]);
 
+  const effectivePersona: Persona = useMemo(() => {
+    if (currentPersona) return currentPersona;
+    return {
+      id: "persona-default",
+      name: selectedScenario?.personaName || selectedScenario?.guestName || "Practice Counterpart",
+      monogram: (selectedScenario?.personaName || "PC").slice(0, 2).toUpperCase(),
+      title: "Counterpart",
+      contextSetting: selectedScenario?.contextSetting || "Meeting Room",
+      seniority: selectedScenario?.seniority || "Standard",
+      language: "English (US)",
+      temperamentTraits: ["Direct"],
+      voice: "Default",
+      backstory: "Practice counterpart for conversational simulation.",
+      communicationNotes: "Focus on composure and clear responses.",
+      scenariosCount: 1,
+      source: "Library",
+    };
+  }, [currentPersona, selectedScenario]);
+
   const handleSelectPersona = (newPersona: Persona) => {
     if (settings.reducedMotion) {
       setSessionPersona(newPersona);
@@ -92,11 +111,11 @@ export const BriefingSheet: React.FC = () => {
     } else if (countdown === 1) {
       const timer = setTimeout(() => {
         setCountdown(null);
-        beginSimulation(currentPersona);
+        beginSimulation(effectivePersona);
       }, 650);
       return () => clearTimeout(timer);
     }
-  }, [countdown, beginSimulation, currentPersona]);
+  }, [countdown, beginSimulation, effectivePersona]);
 
   if (!isBriefingOpen || !selectedScenario) return null;
 
@@ -113,12 +132,13 @@ export const BriefingSheet: React.FC = () => {
   ];
 
   const handleStartSession = () => {
+    if (countdown !== null) return;
     setCountdown(3);
   };
 
-  const setting = currentPersona ? formatContextSetting(currentPersona.contextSetting || currentPersona.roomNumber || "") : "";
-  const seniority = currentPersona?.seniority || currentPersona?.loyaltyTier || "";
-  const tone = currentPersona?.temperamentTraits ? currentPersona.temperamentTraits.join(" & ") : (currentPersona?.title || "");
+  const setting = formatContextSetting(effectivePersona.contextSetting || effectivePersona.roomNumber || "");
+  const seniority = effectivePersona.seniority || effectivePersona.loyaltyTier || "";
+  const tone = effectivePersona.temperamentTraits ? effectivePersona.temperamentTraits.join(" & ") : (effectivePersona.title || "");
 
   return (
     <div
@@ -184,7 +204,7 @@ export const BriefingSheet: React.FC = () => {
               {countdown}
             </span>
             <span style={{ fontSize: "14px", color: "var(--text-secondary)", letterSpacing: "0.02em" }}>
-              Connecting live feed with {currentPersona.name}…
+              Connecting live feed with {effectivePersona.name}…
             </span>
           </div>
         )}
@@ -271,10 +291,10 @@ export const BriefingSheet: React.FC = () => {
                   backgroundColor: "var(--bg-window)",
                 }}
               >
-                {currentPersona.avatarUrl ? (
+                {effectivePersona.avatarUrl ? (
                   <img
-                    src={currentPersona.avatarUrl}
-                    alt={currentPersona.name}
+                    src={effectivePersona.avatarUrl}
+                    alt={effectivePersona.name}
                     style={{ width: "100%", height: "100%", objectFit: "cover" }}
                   />
                 ) : (
@@ -290,7 +310,7 @@ export const BriefingSheet: React.FC = () => {
                       color: "var(--text-primary)",
                     }}
                   >
-                    {currentPersona.monogram || currentPersona.name.slice(0, 2).toUpperCase()}
+                    {effectivePersona.monogram || effectivePersona.name.slice(0, 2).toUpperCase()}
                   </div>
                 )}
               </div>
@@ -304,7 +324,7 @@ export const BriefingSheet: React.FC = () => {
                     letterSpacing: "-0.015em",
                   }}
                 >
-                  {currentPersona.name}
+                  {effectivePersona.name}
                 </h3>
                 <div style={{ fontSize: "12.5px", color: "var(--text-secondary)", marginTop: "2px" }}>
                   {setting} · {seniority}

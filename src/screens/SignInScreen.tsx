@@ -47,16 +47,25 @@ export const SignInScreen: React.FC = () => {
     }, 400);
   };
 
-  const handleSSOLogin = () => {
+  const handleSSOLogin = async () => {
     setIsLoading(true);
-    setTimeout(() => {
+    setError("");
+    try {
+      await signIn(email || "user@work.com");
+    } catch (err: unknown) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Authentication service is unavailable offline. A connected mocktwo workspace backend is required."
+      );
+    } finally {
       setIsLoading(false);
-      signIn(email);
-    }, 500);
+    }
   };
 
   const handleSendCode = () => {
     setIsLoading(true);
+    setError("");
     setResendTimer(45);
     setTimeout(() => {
       setIsLoading(false);
@@ -65,12 +74,20 @@ export const SignInScreen: React.FC = () => {
     }, 400);
   };
 
-  const handleTouchIDUnlock = () => {
+  const handleTouchIDUnlock = async () => {
     setIsLoading(true);
-    setTimeout(() => {
+    setError("");
+    try {
+      await signIn(user.email || "user@work.com");
+    } catch (err: unknown) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Authentication service is unavailable offline. A connected mocktwo workspace backend is required."
+      );
+    } finally {
       setIsLoading(false);
-      signIn(user.email);
-    }, 450);
+    }
   };
 
   const handleCodeChange = (index: number, val: string) => {
@@ -85,10 +102,18 @@ export const SignInScreen: React.FC = () => {
 
     if (newDigits.every((d) => d !== "")) {
       setIsLoading(true);
-      setTimeout(() => {
-        setIsLoading(false);
-        signIn(email);
-      }, 500);
+      setError("");
+      signIn(email)
+        .catch((err: unknown) => {
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Authentication service is unavailable offline. A connected mocktwo workspace backend is required."
+          );
+        })
+        .finally(() => {
+          setIsLoading(false);
+        });
     }
   };
 

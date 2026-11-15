@@ -40,6 +40,20 @@ export function App() {
   useEffect(() => {
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
       console.error("[mocktwo] Unhandled promise rejection:", event.reason);
+      try {
+        const electronAPI = (window as unknown as {
+          electronAPI?: { logError?: (payload: Record<string, unknown>) => void };
+        }).electronAPI;
+        if (electronAPI && typeof electronAPI.logError === "function") {
+          electronAPI.logError({
+            type: "unhandled-rejection",
+            reason: String(event.reason),
+            timestamp: new Date().toISOString(),
+          });
+        }
+      } catch {
+        // ignore
+      }
       // Prevent browser default popups or crashes
       event.preventDefault();
     };
@@ -52,6 +66,24 @@ export function App() {
       error?: Error
     ) => {
       console.error("[mocktwo] Window error caught:", { event, source, lineno, colno, error });
+      try {
+        const electronAPI = (window as unknown as {
+          electronAPI?: { logError?: (payload: Record<string, unknown>) => void };
+        }).electronAPI;
+        if (electronAPI && typeof electronAPI.logError === "function") {
+          electronAPI.logError({
+            type: "window-error",
+            message: typeof event === "string" ? event : error?.message || "Unknown",
+            source: source || "",
+            lineno: lineno || 0,
+            colno: colno || 0,
+            stack: error?.stack || "",
+            timestamp: new Date().toISOString(),
+          });
+        }
+      } catch {
+        // ignore
+      }
     };
 
     window.addEventListener("unhandledrejection", handleUnhandledRejection);

@@ -138,10 +138,13 @@ export const TodayScreen: React.FC = () => {
   );
 
   const handleRandomScenario = useCallback(() => {
-    if (scenarios.length === 0) return;
+    if (scenarios.length === 0) {
+      openQuickPractice();
+      return;
+    }
     const nextScenario = scenarios[0];
     openBriefing(nextScenario);
-  }, [scenarios, openBriefing]);
+  }, [scenarios, openBriefing, openQuickPractice]);
 
   const handleLastUsedScenario = useCallback(() => {
     if (recordings.length > 0) {
@@ -154,8 +157,10 @@ export const TodayScreen: React.FC = () => {
     }
     if (suggestedScenario) {
       openBriefing(suggestedScenario);
+    } else {
+      openQuickPractice();
     }
-  }, [recordings, scenarios, suggestedScenario, openBriefing]);
+  }, [recordings, scenarios, suggestedScenario, openBriefing, openQuickPractice]);
 
   // Compile all quick start chips based on whether sessions exist
   const allQuickChips = useMemo(() => {

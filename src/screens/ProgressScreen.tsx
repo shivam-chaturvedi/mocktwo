@@ -35,11 +35,12 @@ export const ProgressScreen: React.FC = () => {
 
   const avgComposure = useMemo(() => {
     if (completedRecordings.length === 0) return user.averageComposure || 0;
-    const scored = completedRecordings.filter((r) => r.composureScore != null);
+    const scored = completedRecordings.filter((r) => r.composureScore != null && !isNaN(r.composureScore));
     if (scored.length === 0) return user.averageComposure || 0;
-    return Math.round(
+    const result = Math.round(
       scored.reduce((acc, r) => acc + (r.composureScore || 0), 0) / scored.length
     );
+    return isNaN(result) ? 0 : result;
   }, [completedRecordings, user.averageComposure]);
 
   const currentTier = getComposureTier(avgComposure);
@@ -47,6 +48,29 @@ export const ProgressScreen: React.FC = () => {
   // Baseline data from user profile
   const baselinePulse = baseline?.restingPulse || 68;
   const baselineHrv = baseline?.restingHrvRmssd || 44;
+
+  const totalPracticeMinutes = useMemo(() => {
+    const totalSecs = completedRecordings.reduce((acc, r) => acc + (r.durationSeconds || 0), 0);
+    return Math.round(totalSecs / 60);
+  }, [completedRecordings]);
+
+  const avgRecoverySeconds = useMemo(() => {
+    const valid = completedRecordings
+      .map((r) => r.sessionBiometrics?.recoverySecondsApprox)
+      .filter((s): s is number => typeof s === "number" && !isNaN(s));
+    if (valid.length === 0) return 18;
+    const result = Math.round(valid.reduce((acc, s) => acc + s, 0) / valid.length);
+    return isNaN(result) ? 18 : result;
+  }, [completedRecordings]);
+
+  const avgPulseBpm = useMemo(() => {
+    const valid = completedRecordings
+      .map((r) => r.sessionBiometrics?.pulse?.avg)
+      .filter((p): p is number => typeof p === "number" && !isNaN(p));
+    if (valid.length === 0) return baselinePulse;
+    const result = Math.round(valid.reduce((acc, p) => acc + p, 0) / valid.length);
+    return isNaN(result) ? baselinePulse : result;
+  }, [completedRecordings, baselinePulse]);
 
   // The 5 SDK-compliant Pressure Skills
   const pressureSkills: {
@@ -352,25 +376,25 @@ export const ProgressScreen: React.FC = () => {
                     <div style={{ padding: "8px 10px", borderRadius: "var(--radius-sm)", backgroundColor: "var(--bg-control)" }}>
                       <span style={{ fontSize: "10.5px", color: "var(--text-tertiary)", display: "block" }}>Sessions</span>
                       <span className="tabular-nums" style={{ fontSize: "14px", fontWeight: 650, color: "var(--text-primary)" }}>
-                        {user.completedSessionsCount}
+                        {completedRecordings.length}
                       </span>
                     </div>
                     <div style={{ padding: "8px 10px", borderRadius: "var(--radius-sm)", backgroundColor: "var(--bg-control)" }}>
                       <span style={{ fontSize: "10.5px", color: "var(--text-tertiary)", display: "block" }}>Practice Time</span>
                       <span className="tabular-nums" style={{ fontSize: "14px", fontWeight: 650, color: "var(--text-primary)" }}>
-                        18 mins
+                        {totalPracticeMinutes} mins
                       </span>
                     </div>
                     <div style={{ padding: "8px 10px", borderRadius: "var(--radius-sm)", backgroundColor: "var(--bg-control)" }}>
                       <span style={{ fontSize: "10.5px", color: "var(--text-tertiary)", display: "block" }}>Avg Recovery</span>
                       <span className="tabular-nums" style={{ fontSize: "14px", fontWeight: 650, color: "var(--accent-green)" }}>
-                        18s
+                        {avgRecoverySeconds}s
                       </span>
                     </div>
                     <div style={{ padding: "8px 10px", borderRadius: "var(--radius-sm)", backgroundColor: "var(--bg-control)" }}>
                       <span style={{ fontSize: "10.5px", color: "var(--text-tertiary)", display: "block" }}>Avg Pulse</span>
                       <span className="tabular-nums" style={{ fontSize: "14px", fontWeight: 650, color: "var(--accent-blue)" }}>
-                        73 bpm
+                        {avgPulseBpm} bpm
                       </span>
                     </div>
                   </div>

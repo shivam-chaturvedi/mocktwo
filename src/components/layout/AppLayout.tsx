@@ -10,6 +10,7 @@ import { SignOutConfirmSheet } from "../common/SignOutConfirmSheet";
 import { BaselineSheet } from "../common/BaselineSheet";
 import { ToastNotification } from "../common/ToastNotification";
 import { ErrorBoundary } from "../common/ErrorBoundary";
+import { useGlobalShortcuts } from "../../hooks/useGlobalShortcuts";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -17,6 +18,7 @@ interface AppLayoutProps {
 
 export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const { currentScreen, isAuthenticated } = useApp();
+  useGlobalShortcuts();
 
   // If in sign-in screen, render full-window minimal layout
   if (currentScreen === "sign-in" || !isAuthenticated) {
@@ -40,9 +42,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           }}
         >
           <ErrorBoundary>
-            <ErrorBoundary>
-          {children}
-        </ErrorBoundary>
+            {children}
           </ErrorBoundary>
         </main>
       </div>

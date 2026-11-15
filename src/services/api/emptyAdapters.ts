@@ -34,26 +34,8 @@ export class EmptyAuthService implements AuthService {
     return this.user;
   }
 
-  async signIn(email: string): Promise<UserProfile> {
-    const trimmed = email.trim();
-    const namePart = trimmed.split("@")[0] || "User";
-    const formattedName = namePart.charAt(0).toUpperCase() + namePart.slice(1);
-    const profile: UserProfile = {
-      name: formattedName,
-      email: trimmed,
-      role: "Learner",
-      team: "Strategy & Operations",
-      workspace: "Workspace",
-      property: "Workspace",
-      userId: "USR-0001",
-      avatarUrl: "",
-      streakDays: 0,
-      completedSessionsCount: 0,
-      averageComposure: 0,
-      averageRating: 0,
-    };
-    this.user = profile;
-    return profile;
+  async signIn(_email: string): Promise<UserProfile> {
+    throw new Error("Authentication service is unavailable offline. A connected mocktwo workspace backend is required.");
   }
 
   async signOut(): Promise<void> {

@@ -62,16 +62,42 @@ export const StudioSheet: React.FC = () => {
   const [personaNotes, setPersonaNotes] = useState("");
   const [personaPressure, setPersonaPressure] = useState<"Moderate" | "High" | "Intense">("High");
   const [isPlayingVoice, setIsPlayingVoice] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+
+  const isFormDirty = Boolean(
+    promptText.trim() ||
+    attachedDoc ||
+    generatedDraft ||
+    manualTitle.trim() ||
+    manualContext.trim() ||
+    personaName.trim() ||
+    personaTitle.trim() ||
+    personaBackstory.trim() ||
+    personaNotes.trim()
+  );
+
+  const requestClose = React.useCallback(() => {
+    if (isFormDirty) {
+      setShowDiscardConfirm(true);
+    } else {
+      closeStudio();
+    }
+  }, [isFormDirty, closeStudio]);
 
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape" && isStudioOpen) {
-        closeStudio();
+        if (showDiscardConfirm) {
+          setShowDiscardConfirm(false);
+        } else {
+          requestClose();
+        }
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isStudioOpen, closeStudio]);
+  }, [isStudioOpen, requestClose, showDiscardConfirm]);
 
   if (!isStudioOpen) return null;
 
@@ -125,7 +151,8 @@ export const StudioSheet: React.FC = () => {
   };
 
   const handleSaveDescribeDraft = () => {
-    if (!generatedDraft) return;
+    if (!generatedDraft || isSaving) return;
+    setIsSaving(true);
     const finalScenario: PracticeScenario = {
       id: `sc-mine-${Date.now()}`,
       title: generatedDraft.title || "Custom Scenario",
@@ -149,10 +176,13 @@ export const StudioSheet: React.FC = () => {
       createdAt: new Date().toISOString().split("T")[0],
     };
     addScenario(finalScenario);
+    setIsSaving(false);
     closeStudio();
   };
 
   const handleSaveManualScenario = () => {
+    if (isSaving) return;
+    setIsSaving(true);
     const assignedPersona = personas.find((p) => p.id === manualPersonaId) || personas[0];
     const newScenario: PracticeScenario = {
       id: `sc-mine-${Date.now()}`,
@@ -176,11 +206,13 @@ export const StudioSheet: React.FC = () => {
       createdAt: new Date().toISOString().split("T")[0],
     };
     addScenario(newScenario);
+    setIsSaving(false);
     closeStudio();
   };
 
   const handleSavePersona = () => {
-    if (!personaName.trim()) return;
+    if (!personaName.trim() || isSaving) return;
+    setIsSaving(true);
     const newP: Persona = {
       id: `persona-mine-${Date.now()}`,
       name: personaName.trim(),
@@ -204,6 +236,7 @@ export const StudioSheet: React.FC = () => {
       source: "Mine",
     };
     addPersona(newP);
+    setIsSaving(false);
     closeStudio();
   };
 
@@ -220,9 +253,10 @@ export const StudioSheet: React.FC = () => {
         placeItems: "center",
         padding: "24px",
       }}
-      onClick={closeStudio}
+      onClick={requestClose}
     >
       <div
+        onClick={(e) => e.stopPropagation()}
         className="glass-surface animate-sheet-in"
         style={{
           width: "100%",
@@ -236,7 +270,6 @@ export const StudioSheet: React.FC = () => {
           flexDirection: "column",
           overflow: "hidden",
         }}
-        onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
       >
@@ -328,7 +361,7 @@ export const StudioSheet: React.FC = () => {
           </div>
 
           <button
-            onClick={closeStudio}
+            onClick={requestClose}
             aria-label="Close"
             className="hover-subtle focus-ring"
             style={{
@@ -1177,7 +1210,7 @@ export const StudioSheet: React.FC = () => {
               <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
                 <button
                   type="button"
-                  onClick={closeStudio}
+                  onClick={requestClose}
                   className="hover-subtle"
                   style={{ padding: "7px 14px", borderRadius: "var(--radius-sm)", color: "var(--text-secondary)" }}
                 >
@@ -1205,6 +1238,85 @@ export const StudioSheet: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Discard Confirmation Overlay */}
+      {showDiscardConfirm && (
+        <div
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowDiscardConfirm(false);
+          }}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 1100,
+            backgroundColor: "rgba(0, 0, 0, 0.45)",
+            display: "grid",
+            placeItems: "center",
+            padding: "24px",
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="glass-surface animate-sheet-in"
+            style={{
+              width: "100%",
+              maxWidth: "380px",
+              padding: "22px",
+              borderRadius: "var(--radius-lg)",
+              border: "1px solid var(--separator)",
+              boxShadow: "var(--shadow-modal)",
+              backgroundColor: "var(--bg-elevated)",
+            }}
+          >
+            <h3 style={{ fontSize: "15px", fontWeight: 700, color: "var(--text-primary)", margin: "0 0 8px 0" }}>
+              Discard unsaved scenario?
+            </h3>
+            <p style={{ fontSize: "12.5px", color: "var(--text-secondary)", lineHeight: 1.45, margin: "0 0 18px 0" }}>
+              You have unsaved changes. Closing the studio will discard what you have drafted.
+            </p>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
+              <button
+                type="button"
+                onClick={() => setShowDiscardConfirm(false)}
+                className="mac-btn focus-ring"
+                style={{
+                  padding: "6px 12px",
+                  borderRadius: "var(--radius-sm)",
+                  backgroundColor: "var(--bg-control)",
+                  border: "1px solid var(--separator)",
+                  fontSize: "12px",
+                  fontWeight: 500,
+                  color: "var(--text-primary)",
+                  cursor: "pointer",
+                }}
+              >
+                Keep Editing
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDiscardConfirm(false);
+                  closeStudio();
+                }}
+                className="mac-btn focus-ring"
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: "var(--radius-sm)",
+                  backgroundColor: "var(--accent-red, #ef4444)",
+                  border: "none",
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  color: "#ffffff",
+                  cursor: "pointer",
+                }}
+              >
+                Discard Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

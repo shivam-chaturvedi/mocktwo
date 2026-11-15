@@ -19,8 +19,6 @@ export interface PersonaPickerProps {
   disabled?: boolean;
 }
 
-export type GuestPickerProps = PersonaPickerProps;
-
 export const PersonaPicker: React.FC<PersonaPickerProps> = ({
   scenario,
   selectedPersona,
@@ -504,5 +502,3 @@ export const PersonaPicker: React.FC<PersonaPickerProps> = ({
     </div>
   );
 };
-
-export const GuestPicker = PersonaPicker;

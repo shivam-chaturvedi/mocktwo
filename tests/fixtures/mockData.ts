@@ -8,7 +8,8 @@ import type {
   InteractionType,
   DifficultyLevel,
 } from "../../src/types";
-import { MockBiometricsProvider, DEFAULT_USER_BASELINE } from "../../src/services/biometrics";
+import { DEFAULT_USER_BASELINE } from "../../src/services/biometrics";
+import { generateFixtureSessionBiometrics } from "./fixtureBiometrics";
 
 export const INITIAL_USER: UserProfile = {
   name: "Elena Vance",
@@ -394,8 +395,6 @@ export const INITIAL_SCENARIOS: PracticeScenario[] = [
   },
 ];
 
-const biometricsProvider = new MockBiometricsProvider();
-
 // 7 MOCK SESSIONS REQUIRED BY THE SDK TRUTH SPECIFICATION:
 // 1. 75 s (Full read, all 5 signals, RMSSD & Baevsky active, composure 92)
 // 2. 41 s (Standard, 4 signals: pulse, recovery, EDA, face; HRV warming up, composure 86)
@@ -426,7 +425,7 @@ export const INITIAL_RECORDINGS: Recording[] = [
     readinessStatus: "Full read",
     status: "Completed",
     mediaType: "video",
-    sessionBiometrics: biometricsProvider.generateSessionBiometrics(
+    sessionBiometrics: generateFixtureSessionBiometrics(
       75,
       "Advanced",
       ["Analytical", "Inquisitive", "Challenging"],
@@ -592,7 +591,7 @@ export const INITIAL_RECORDINGS: Recording[] = [
     readinessStatus: "Quick read",
     status: "Completed",
     mediaType: "video",
-    sessionBiometrics: biometricsProvider.generateSessionBiometrics(
+    sessionBiometrics: generateFixtureSessionBiometrics(
       41,
       "Intermediate",
       ["Demanding", "Price-focused"],
@@ -717,7 +716,7 @@ export const INITIAL_RECORDINGS: Recording[] = [
     readinessStatus: "Quick read",
     status: "Completed",
     mediaType: "video",
-    sessionBiometrics: biometricsProvider.generateSessionBiometrics(
+    sessionBiometrics: generateFixtureSessionBiometrics(
       18,
       "Advanced",
       ["Skeptical", "Impatient"],
@@ -842,7 +841,7 @@ export const INITIAL_RECORDINGS: Recording[] = [
     readinessStatus: "Too short",
     status: "Too short",
     mediaType: "video",
-    sessionBiometrics: biometricsProvider.generateSessionBiometrics(
+    sessionBiometrics: generateFixtureSessionBiometrics(
       8,
       "Intermediate",
       ["Defensive", "Frustrated"],
@@ -933,7 +932,7 @@ export const INITIAL_RECORDINGS: Recording[] = [
     readinessStatus: "Full read",
     status: "Completed",
     mediaType: "video",
-    sessionBiometrics: biometricsProvider.generateSessionBiometrics(
+    sessionBiometrics: generateFixtureSessionBiometrics(
       60,
       "Advanced",
       ["Unforgiving", "Time-pressured"],
@@ -1059,7 +1058,7 @@ export const INITIAL_RECORDINGS: Recording[] = [
     readinessStatus: "Quick read",
     status: "Completed",
     mediaType: "video",
-    sessionBiometrics: biometricsProvider.generateSessionBiometrics(
+    sessionBiometrics: generateFixtureSessionBiometrics(
       52,
       "Intermediate",
       ["Demanding", "Agitated"],
