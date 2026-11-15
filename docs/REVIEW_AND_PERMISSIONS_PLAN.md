@@ -778,31 +778,31 @@ Under `electron-builder` configuration in `package.json`:
 ## 11. Implementation Roadmap & Acceptance Checklist
 
 ### Phase 1: High-Risk Stability & Crash Fixes (Estimated: 2 Days)
-- [ ] Fix unhandled `ProcessingScreen` hang: add 15s timeout and Cancel button (HC-AUDIT-001).
-- [ ] Replace synchronous `fs.writeFileSync` in `main.cjs` with 500ms debounced async writer (HC-AUDIT-002).
-- [ ] Attach global shortcut listener for `⌘K`, `⌘,`, and `⌘1`..`⌘4` in `App.tsx` (HC-AUDIT-003).
-- [ ] Eliminate `setState` during render in `RecordingsScreen.tsx` (HC-AUDIT-004).
-- [ ] Refactor `finishSimulation` call out of pure state updater in `LiveSimulationScreen.tsx` (HC-AUDIT-007).
-- [ ] Align dev server URLs to `127.0.0.1` in `main.cjs` (HC-AUDIT-008).
+- [x] Fix unhandled `ProcessingScreen` hang: add 15s timeout and Cancel button (HC-AUDIT-001).
+- [x] Replace synchronous `fs.writeFileSync` in `main.cjs` with 500ms debounced async writer (HC-AUDIT-002).
+- [x] Attach global shortcut listener for `⌘K`, `⌘,`, and `⌘1`..`⌘4` in `App.tsx` (HC-AUDIT-003).
+- [x] Eliminate `setState` during render in `RecordingsScreen.tsx` (HC-AUDIT-004).
+- [x] Refactor `finishSimulation` call out of pure state updater in `LiveSimulationScreen.tsx` (HC-AUDIT-007).
+- [x] Align dev server URLs to `127.0.0.1` in `main.cjs` (HC-AUDIT-008).
 
 ### Phase 2: Central PermissionsService & Platform Config (Estimated: 2 Days)
-- [ ] Implement `PermissionsService` in Electron main process with SQLite persistence.
-- [ ] Add Windows `ms-settings:privacy-webcam` and `ms-settings:privacy-microphone` routing (HC-AUDIT-005).
-- [ ] Add `NSCameraUsageDescription` and `NSMicrophoneUsageDescription` to `package.json` (HC-AUDIT-016).
-- [ ] Add `render-process-gone` and `did-fail-load` crash handlers in `main.cjs` (HC-AUDIT-006).
+- [x] Implement `PermissionsService` in Electron main process with SQLite persistence.
+- [x] Add Windows `ms-settings:privacy-webcam` and `ms-settings:privacy-microphone` routing (HC-AUDIT-005).
+- [x] Add `NSCameraUsageDescription` and `NSMicrophoneUsageDescription` to `package.json` (HC-AUDIT-016).
+- [x] Add `render-process-gone` and `did-fail-load` crash handlers in `main.cjs` (HC-AUDIT-006).
 
 ### Phase 3: SQLite Storage Engine & Data Layer (Estimated: 3 Days)
-- [ ] Install and configure `better-sqlite3` with WAL mode.
-- [ ] Execute DDL migrations for `profiles`, `scenarios`, `recordings`, `vitals_samples`, and `settings`.
-- [ ] Implement chunked 5-second buffer insertion for vitals telemetry.
-- [ ] Implement atomic "Clear All Data" and JSON/CSV export routines.
+- [x] Install and configure `better-sqlite3` with WAL mode.
+- [x] Execute DDL migrations for `profiles`, `scenarios`, `recordings`, `vitals_samples`, and `settings`.
+- [x] Implement chunked 5-second buffer insertion for vitals telemetry.
+- [x] Implement atomic "Clear All Data" and JSON/CSV export routines.
 
 ### Phase 4: UI Polish, A11y & Click-Path Hardening (Estimated: 2 Days)
-- [ ] Implement modal unsaved changes confirmation in Scenario Studio (HC-AUDIT-014).
-- [ ] Add concurrency locks to Export button and Studio Save button (HC-AUDIT-010).
-- [ ] Repair zero-scenario empty state messaging in `ScenariosScreen.tsx` (HC-AUDIT-009).
-- [ ] Add `role="button"` and keyboard triggers to Recent Session list items (HC-AUDIT-015).
-- [ ] Remove unused components flagged by Knip (HC-AUDIT-017).
+- [x] Implement modal unsaved changes confirmation in Scenario Studio (HC-AUDIT-014).
+- [x] Add concurrency locks to Export button and Studio Save button (HC-AUDIT-010).
+- [x] Repair zero-scenario empty state messaging in `ScenariosScreen.tsx` (HC-AUDIT-009).
+- [x] Add `role="button"` and keyboard triggers to Recent Session list items (HC-AUDIT-015).
+- [x] Remove unused components flagged by Knip (HC-AUDIT-017).
 
 ---
 
