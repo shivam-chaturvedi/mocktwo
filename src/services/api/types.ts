@@ -83,6 +83,7 @@ export interface SessionService {
 export interface RecordingService {
   getRecordings(): Promise<Recording[]>;
   getRecording(id: string): Promise<Recording | null>;
+  saveRecording(recording: Recording): Promise<Recording>;
   addNote(recordingId: string, timestampSeconds: number, text: string): Promise<void>;
   deleteRecording(id: string): Promise<boolean>;
 }

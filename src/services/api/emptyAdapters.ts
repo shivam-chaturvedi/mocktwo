@@ -211,6 +211,16 @@ export class EmptyRecordingService implements RecordingService {
     return this.items.find((r) => r.id === id) || null;
   }
 
+  async saveRecording(recording: Recording): Promise<Recording> {
+    const idx = this.items.findIndex((r) => r.id === recording.id);
+    if (idx >= 0) {
+      this.items[idx] = recording;
+    } else {
+      this.items.push(recording);
+    }
+    return recording;
+  }
+
   async addNote(recordingId: string, timestampSeconds: number, text: string): Promise<void> {
     const rec = this.items.find((r) => r.id === recordingId);
     if (!rec) return;

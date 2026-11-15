@@ -4,6 +4,7 @@ const fs = require("fs");
 const path = require("path");
 
 const dbPath = workerData.dbPath;
+const recordingsDir = path.join(path.dirname(dbPath), "recordings");
 
 let db;
 
@@ -28,6 +29,15 @@ function initDatabase() {
       if (fs.existsSync(dbPath)) {
         fs.renameSync(dbPath, backupPath);
       }
+    } catch {
+      // ignore
+    }
+  }
+
+  const dir = path.dirname(dbPath);
+  if (!fs.existsSync(dir)) {
+    try {
+      fs.mkdirSync(dir, { recursive: true });
     } catch {
       // ignore
     }
@@ -650,10 +660,15 @@ parentPort.on("message", ({ id, type, payload }) => {
         const row = db.prepare("SELECT audio_path, waveform_path FROM recordings WHERE id = ?").get(idToDelete);
         db.prepare("DELETE FROM recordings WHERE id = ?").run(idToDelete);
         if (row) {
-          if (row.audio_path && fs.existsSync(row.audio_path)) {
+          const isSafeFile = (filePath) => {
+            if (!filePath || typeof filePath !== "string") return false;
+            const resolved = path.resolve(filePath);
+            return resolved.startsWith(path.resolve(recordingsDir));
+          };
+          if (row.audio_path && isSafeFile(row.audio_path) && fs.existsSync(row.audio_path)) {
             try { fs.unlinkSync(row.audio_path); } catch { /* ignore */ }
           }
-          if (row.waveform_path && fs.existsSync(row.waveform_path)) {
+          if (row.waveform_path && isSafeFile(row.waveform_path) && fs.existsSync(row.waveform_path)) {
             try { fs.unlinkSync(row.waveform_path); } catch { /* ignore */ }
           }
         }
@@ -734,20 +749,24 @@ parentPort.on("message", ({ id, type, payload }) => {
       // Settings
       case "settings:get-all": {
         const rows = db.prepare("SELECT key, value FROM settings").all();
-        const map = {};
+        const map = Object.create(null);
         for (const r of rows) {
+          if (r.key === "__proto__" || r.key === "constructor" || r.key === "prototype") continue;
           try {
             map[r.key] = JSON.parse(r.value);
           } catch {
             map[r.key] = r.value;
           }
         }
-        result = map;
+        result = { ...map };
         break;
       }
 
       case "settings:set": {
         const { key, value } = payload;
+        if (typeof key !== "string" || key === "__proto__" || key === "constructor" || key === "prototype") {
+          throw new Error("Invalid setting key");
+        }
         const now = new Date().toISOString();
         db.prepare(`
           INSERT INTO settings (key, value, updated_at)
@@ -800,6 +819,18 @@ parentPort.on("message", ({ id, type, payload }) => {
         });
         clearAll();
         db.pragma("VACUUM");
+
+        // Wipe audio recordings on disk for complete data hygiene (GDPR erasure compliance)
+        if (fs.existsSync(recordingsDir)) {
+          try {
+            const files = fs.readdirSync(recordingsDir);
+            for (const file of files) {
+              const fullPath = path.join(recordingsDir, file);
+              try { fs.unlinkSync(fullPath); } catch { /* ignore */ }
+            }
+          } catch { /* ignore */ }
+        }
+
         result = true;
         break;
       }

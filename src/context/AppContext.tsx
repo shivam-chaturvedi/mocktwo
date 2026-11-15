@@ -578,42 +578,61 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const addRecordingNote = useCallback(
     (recordingId: string, timestampSeconds: number, text: string) => {
-      serviceRegistry.recordings.addNote(recordingId, timestampSeconds, text).then(() => {
-        setRecordings((prev) =>
-          prev.map((r) => {
-            if (r.id !== recordingId) return r;
-            const newNote = {
-              id: `note-${Date.now()}`,
-              timestampSeconds,
-              text,
-              createdAt: "Just now",
-            };
-            return {
-              ...r,
-              userNotes: [...(r.userNotes || []), newNote],
-            };
-          })
-        );
-        showToast("Note added at timestamp");
-      });
+      serviceRegistry.recordings
+        .addNote(recordingId, timestampSeconds, text)
+        .then(() => {
+          setRecordings((prev) =>
+            prev.map((r) => {
+              if (r.id !== recordingId) return r;
+              const newNote = {
+                id: `note-${Date.now()}`,
+                timestampSeconds,
+                text,
+                createdAt: "Just now",
+              };
+              return {
+                ...r,
+                userNotes: [...(r.userNotes || []), newNote],
+              };
+            })
+          );
+          showToast("Note added at timestamp");
+        })
+        .catch((err) => {
+          console.warn("[AppContext] Failed to add note:", err);
+          showToast("Failed to save note");
+        });
     },
     [showToast]
   );
 
   const deleteRecording = useCallback((id: string) => {
-    serviceRegistry.recordings.deleteRecording(id).then(() => {
-      setRecordings((prev) => prev.filter((r) => r.id !== id));
-      if (selectedRecordingId === id) {
-        setSelectedRecordingId(null);
-        setIsDebriefMode(false);
-      }
-      showToast("Recording deleted");
-    });
+    serviceRegistry.recordings
+      .deleteRecording(id)
+      .then(() => {
+        setRecordings((prev) => prev.filter((r) => r.id !== id));
+        if (selectedRecordingId === id) {
+          setSelectedRecordingId(null);
+          setIsDebriefMode(false);
+        }
+        showToast("Recording deleted");
+      })
+      .catch((err) => {
+        console.warn("[AppContext] Failed to delete recording:", err);
+        showToast("Failed to delete recording");
+      });
   }, [selectedRecordingId, showToast]);
 
   const renameRecording = useCallback((id: string, newTitle: string) => {
     setRecordings((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, scenarioTitle: newTitle } : r))
+      prev.map((r) => {
+        if (r.id !== id) return r;
+        const updated = { ...r, scenarioTitle: newTitle };
+        serviceRegistry.recordings.saveRecording(updated).catch((err: unknown) => {
+          console.warn("[AppContext] Failed to persist renamed recording:", err);
+        });
+        return updated;
+      })
     );
     showToast("Recording renamed");
   }, [showToast]);

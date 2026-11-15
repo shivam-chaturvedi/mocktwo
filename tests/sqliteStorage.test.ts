@@ -4,6 +4,9 @@ import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { Worker } from "node:worker_threads";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
 
 const TEST_DIR = path.join(process.cwd(), "tmp_test_sqlite_" + Date.now());
 const DB_PATH = path.join(TEST_DIR, "test.db");
@@ -215,5 +218,76 @@ describe("Phase 3: SQLite Storage & Worker Subsystem", () => {
     const dirFiles = fs.readdirSync(TEST_DIR);
     const backupFound = dirFiles.some((f) => f.includes("corrupt.db.corrupt."));
     assert.ok(backupFound, "Backup of corrupt database should exist");
+  });
+
+  test("Security: StorageManager prevents path traversal in audio chunk recording paths", () => {
+    const { StorageManager } = require("../electron/storage/storageManager.cjs");
+    const mockSM = {
+      recordingsDir: path.join(TEST_DIR, "recordings"),
+      getSafeRecordingPath: StorageManager.prototype.getSafeRecordingPath,
+    };
+
+    assert.throws(
+      () => mockSM.getSafeRecordingPath("../../../etc/passwd", "webm"),
+      /Invalid recording ID|Path traversal blocked/
+    );
+    assert.throws(
+      () => mockSM.getSafeRecordingPath("..\\windows\\system32", "webm"),
+      /Invalid recording ID|Path traversal blocked/
+    );
+    assert.throws(
+      () => mockSM.getSafeRecordingPath("", "webm"),
+      /Invalid recording ID/
+    );
+
+    // Valid alphanumeric ID
+    const validPath = mockSM.getSafeRecordingPath("rec-12345_test", "webm");
+    assert.ok(validPath.endsWith("rec-12345_test.webm"));
+    assert.ok(validPath.startsWith(path.resolve(path.join(TEST_DIR, "recordings"))));
+  });
+
+  test("Security: settings:set blocks prototype pollution attempts", async () => {
+    const { Worker } = require("worker_threads");
+    const testDbPath = path.join(TEST_DIR, "proto-test.db");
+    const worker = new Worker(path.resolve("electron/storage/dbWorker.cjs"), {
+      workerData: { dbPath: testDbPath },
+    });
+
+    const send = (type: string, payload: any = null) =>
+      new Promise<any>((resolve, reject) => {
+        const id = Math.random();
+        const handler = (msg: any) => {
+          if (msg.id === id) {
+            worker.off("message", handler);
+            if (msg.success) resolve(msg.result);
+            else reject(new Error(msg.error));
+          }
+        };
+        worker.on("message", handler);
+        worker.postMessage({ id, type, payload });
+      });
+
+    await assert.rejects(
+      async () => {
+        await send("settings:set", { key: "__proto__", value: { polluted: true } });
+      },
+      /Invalid setting key/
+    );
+
+    await assert.rejects(
+      async () => {
+        await send("settings:set", { key: "constructor", value: { polluted: true } });
+      },
+      /Invalid setting key/
+    );
+
+    await assert.rejects(
+      async () => {
+        await send("settings:set", { key: "prototype", value: { polluted: true } });
+      },
+      /Invalid setting key/
+    );
+
+    await worker.terminate();
   });
 });

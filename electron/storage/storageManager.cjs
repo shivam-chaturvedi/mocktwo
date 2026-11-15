@@ -88,6 +88,25 @@ class StorageManager {
   // ---------------------------------------------------------------------------
   // Chunked Audio Recording Subsystem
   // ---------------------------------------------------------------------------
+  getSafeRecordingPath(recordingId, ext) {
+    if (typeof recordingId !== "string" || !recordingId.trim()) {
+      throw new Error("Invalid recording ID");
+    }
+    if (recordingId.includes("..") || recordingId.includes("/") || recordingId.includes("\\")) {
+      throw new Error("Path traversal blocked");
+    }
+    const cleanId = path.basename(recordingId).replace(/[^a-zA-Z0-9_-]/g, "");
+    if (!cleanId) {
+      throw new Error("Invalid recording ID characters");
+    }
+    const targetPath = path.join(this.recordingsDir, `${cleanId}.${ext}`);
+    const resolved = path.resolve(targetPath);
+    if (!resolved.startsWith(path.resolve(this.recordingsDir))) {
+      throw new Error("Path traversal blocked");
+    }
+    return resolved;
+  }
+
   async startAudioRecording(recordingId) {
     const freeBytes = await this.checkFreeSpaceBytes();
     const MIN_REQUIRED_BYTES = 50 * 1024 * 1024; // 50 MB
@@ -95,13 +114,13 @@ class StorageManager {
       throw new Error("Insufficient local disk space to start rehearsal recording (minimum 50 MB required).");
     }
 
-    const partialPath = path.join(this.recordingsDir, `${recordingId}.partial`);
+    const partialPath = this.getSafeRecordingPath(recordingId, "partial");
     await fs.promises.writeFile(partialPath, Buffer.alloc(0));
     return partialPath;
   }
 
   async appendAudioChunk(recordingId, chunkBuffer) {
-    const partialPath = path.join(this.recordingsDir, `${recordingId}.partial`);
+    const partialPath = this.getSafeRecordingPath(recordingId, "partial");
     if (!fs.existsSync(partialPath)) {
       throw new Error(`Recording partial file not found for id: ${recordingId}`);
     }
@@ -115,8 +134,8 @@ class StorageManager {
   }
 
   async finalizeAudioRecording(recordingId) {
-    const partialPath = path.join(this.recordingsDir, `${recordingId}.partial`);
-    const finalPath = path.join(this.recordingsDir, `${recordingId}.webm`);
+    const partialPath = this.getSafeRecordingPath(recordingId, "partial");
+    const finalPath = this.getSafeRecordingPath(recordingId, "webm");
 
     if (fs.existsSync(partialPath)) {
       await fs.promises.rename(partialPath, finalPath);
