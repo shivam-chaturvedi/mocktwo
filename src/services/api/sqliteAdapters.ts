@@ -1,0 +1,464 @@
+import type {
+  ProfileService,
+  ScenarioService,
+  CreateAdHocParams,
+  PersonaService,
+  RecordingService,
+  ProgressService,
+  ProgressSummary,
+  BiometricsService,
+  BiometricsStatusInfo,
+  SettingsService,
+} from "./types";
+import type {
+  PracticeScenario,
+  Persona,
+  Recording,
+  UserProfile,
+  AppSettings,
+  UserBaseline,
+} from "../../types";
+
+export class SqliteProfileService implements ProfileService {
+  async getProfile(): Promise<UserProfile | null> {
+    if (window.electronAPI?.storage) {
+      const p = await window.electronAPI.storage.getProfile();
+      if (p) return p;
+    }
+    return null;
+  }
+
+  async updateProfile(updates: Partial<UserProfile>): Promise<UserProfile> {
+    const existing = await this.getProfile();
+    const merged: UserProfile = {
+      name: updates.name ?? existing?.name ?? "User",
+      email: updates.email ?? existing?.email ?? "",
+      role: updates.role ?? existing?.role ?? "Learner",
+      team: updates.team ?? existing?.team ?? "Strategy & Operations",
+      workspace: updates.workspace ?? existing?.workspace ?? "Workspace",
+      property: updates.property ?? existing?.property ?? "Workspace",
+      userId: updates.userId ?? existing?.userId ?? "USR-0001",
+      avatarUrl: updates.avatarUrl ?? existing?.avatarUrl ?? "",
+      streakDays: updates.streakDays ?? existing?.streakDays ?? 0,
+      completedSessionsCount: updates.completedSessionsCount ?? existing?.completedSessionsCount ?? 0,
+      averageComposure: updates.averageComposure ?? existing?.averageComposure ?? 0,
+      averageRating: updates.averageRating ?? existing?.averageRating ?? 0,
+    };
+
+    if (window.electronAPI?.storage) {
+      await window.electronAPI.storage.saveProfile(merged);
+    }
+    return merged;
+  }
+}
+
+export class SqlitePersonaService implements PersonaService {
+  async getPersonas(): Promise<Persona[]> {
+    if (window.electronAPI?.storage) {
+      return window.electronAPI.storage.getPersonas();
+    }
+    return [];
+  }
+
+  async getPersona(id: string): Promise<Persona | null> {
+    const list = await this.getPersonas();
+    return list.find((p) => p.id === id) || null;
+  }
+
+  async createPersona(persona: Omit<Persona, "id">): Promise<Persona> {
+    if (window.electronAPI?.storage) {
+      return window.electronAPI.storage.createPersona(persona);
+    }
+    const newPersona: Persona = {
+      ...persona,
+      id: `persona-${Date.now()}`,
+    };
+    return newPersona;
+  }
+
+  async updatePersona(id: string, updates: Partial<Persona>): Promise<Persona> {
+    if (window.electronAPI?.storage) {
+      return window.electronAPI.storage.updatePersona(id, updates);
+    }
+    const current = await this.getPersona(id);
+    return { ...(current || ({} as Persona)), ...updates, id };
+  }
+
+  async deletePersona(id: string): Promise<boolean> {
+    if (window.electronAPI?.storage) {
+      return window.electronAPI.storage.deletePersona(id);
+    }
+    return true;
+  }
+}
+
+export class SqliteScenarioService implements ScenarioService {
+  async getScenarios(): Promise<PracticeScenario[]> {
+    if (window.electronAPI?.storage) {
+      return window.electronAPI.storage.getScenarios();
+    }
+    return [];
+  }
+
+  async getScenario(id: string): Promise<PracticeScenario | null> {
+    const list = await this.getScenarios();
+    return list.find((s) => s.id === id) || null;
+  }
+
+  async createScenario(scenario: Omit<PracticeScenario, "id">): Promise<PracticeScenario> {
+    if (window.electronAPI?.storage) {
+      return window.electronAPI.storage.createScenario(scenario);
+    }
+    const newScenario: PracticeScenario = {
+      ...scenario,
+      id: `sc-${Date.now()}`,
+    };
+    return newScenario;
+  }
+
+  async createAdHoc(params: CreateAdHocParams): Promise<PracticeScenario> {
+    const sc: Omit<PracticeScenario, "id"> = {
+      title: params.topic,
+      personaName: "Practice Partner",
+      contextSetting: "General Rehearsal",
+      seniority: "Professional",
+      interactionType: "Difficult Conversations",
+      difficulty: "Intermediate",
+      durationMinutes: params.lengthMin || 3,
+      summary: `Targeted session focused on: ${params.topic}`,
+      context: `Targeted session focused on: ${params.topic}`,
+      personaMood: "Neutral",
+      learningObjectives: [
+        "Maintain physiological composure during challenging prompts",
+        "Clear and structured articulation",
+      ],
+      keyChallenges: ["Unexpected line of questioning"],
+      recommendedPhrases: ["Let me clarify that point"],
+      personaAvatarUrl: "",
+      personaSummary: "Experienced counterpart",
+      source: "Mine",
+    };
+    return this.createScenario(sc);
+  }
+
+  async updateScenario(id: string, updates: Partial<PracticeScenario>): Promise<PracticeScenario> {
+    const existing = await this.getScenario(id);
+    const merged = { ...(existing || ({} as PracticeScenario)), ...updates, id };
+    if (window.electronAPI?.storage) {
+      await window.electronAPI.storage.createScenario(merged);
+    }
+    return merged;
+  }
+
+  async deleteScenario(id: string): Promise<boolean> {
+    if (window.electronAPI?.storage) {
+      return window.electronAPI.storage.deleteScenario(id);
+    }
+    return true;
+  }
+}
+
+export class SqliteRecordingService implements RecordingService {
+  async getRecordings(): Promise<Recording[]> {
+    if (window.electronAPI?.storage) {
+      return window.electronAPI.storage.getRecordings();
+    }
+    return [];
+  }
+
+  async getRecording(id: string): Promise<Recording | null> {
+    if (window.electronAPI?.storage) {
+      return window.electronAPI.storage.getRecording(id);
+    }
+    return null;
+  }
+
+  async saveRecording(recording: Recording): Promise<Recording> {
+    if (window.electronAPI?.storage) {
+      return window.electronAPI.storage.saveRecording(recording);
+    }
+    return recording;
+  }
+
+  async addNote(recordingId: string, timestampSeconds: number, text: string): Promise<void> {
+    if (window.electronAPI?.storage) {
+      const note = {
+        id: `note-${Date.now()}`,
+        timestampSeconds,
+        text,
+        author: "User",
+        createdAt: new Date().toISOString(),
+      };
+      await window.electronAPI.storage.addNote(recordingId, note);
+    }
+  }
+
+  async deleteRecording(id: string): Promise<boolean> {
+    if (window.electronAPI?.storage) {
+      return window.electronAPI.storage.deleteRecording(id);
+    }
+    return true;
+  }
+}
+
+export class SqliteProgressService implements ProgressService {
+  private recordingService: RecordingService;
+  private profileService: ProfileService;
+
+  constructor(
+    recordingService: RecordingService,
+    profileService: ProfileService
+  ) {
+    this.recordingService = recordingService;
+    this.profileService = profileService;
+  }
+
+  async getProgressSummary(): Promise<ProgressSummary | null> {
+    const recordings = await this.recordingService.getRecordings();
+    const profile = await this.profileService.getProfile();
+
+    if (recordings.length === 0) {
+      return {
+        averageComposure: profile?.averageComposure || 0,
+        totalSessions: 0,
+        completedSessions: 0,
+        totalPracticeTimeMinutes: 0,
+        streakDays: profile?.streakDays || 0,
+        weeklyGoalTarget: 5,
+        weeklyGoalCompleted: 0,
+        recentScores: [],
+        categoryBreakdown: [],
+        personaBreakdown: [],
+      };
+    }
+
+    const completed = recordings.filter((r) => r.durationSeconds > 0);
+    const totalMinutes = Math.round(
+      recordings.reduce((sum, r) => sum + (r.durationSeconds || 0), 0) / 60
+    );
+
+    const composureValues = recordings
+      .map((r) => r.composureScore)
+      .filter((score): score is number => typeof score === "number" && !isNaN(score));
+
+    const avgComposure =
+      composureValues.length > 0
+        ? Math.round(composureValues.reduce((a, b) => a + b, 0) / composureValues.length)
+        : profile?.averageComposure || 0;
+
+    const now = new Date();
+    const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const sessionsThisWeek = recordings.filter((r) => {
+      const d = new Date(r.date);
+      return !isNaN(d.getTime()) && d >= oneWeekAgo;
+    }).length;
+
+    const catMap = new Map<string, { count: number; totalScore: number }>();
+    const personaMap = new Map<string, { name: string; count: number; totalScore: number }>();
+
+    for (const r of recordings) {
+      const cat = "Simulation";
+      const catEntry = catMap.get(cat) || { count: 0, totalScore: 0 };
+      catEntry.count++;
+      catEntry.totalScore += r.composureScore || 0;
+      catMap.set(cat, catEntry);
+
+      if (r.personaId) {
+        const pEntry = personaMap.get(r.personaId) || {
+          name: r.personaName || "Practice Partner",
+          count: 0,
+          totalScore: 0,
+        };
+        pEntry.count++;
+        pEntry.totalScore += r.composureScore || 0;
+        personaMap.set(r.personaId, pEntry);
+      }
+    }
+
+    const categoryBreakdown = Array.from(catMap.entries()).map(([category, val]) => ({
+      category,
+      sessionCount: val.count,
+      averageComposure: val.count > 0 ? Math.round(val.totalScore / val.count) : 0,
+    }));
+
+    const personaBreakdown = Array.from(personaMap.entries()).map(([personaId, val]) => ({
+      personaId,
+      personaName: val.name,
+      sessionCount: val.count,
+      averageComposure: val.count > 0 ? Math.round(val.totalScore / val.count) : 0,
+    }));
+
+    return {
+      averageComposure: avgComposure,
+      totalSessions: recordings.length,
+      completedSessions: completed.length,
+      totalPracticeTimeMinutes: totalMinutes,
+      streakDays: profile?.streakDays || 0,
+      weeklyGoalTarget: 5,
+      weeklyGoalCompleted: sessionsThisWeek,
+      recentScores: composureValues.slice(0, 10),
+      categoryBreakdown,
+      personaBreakdown,
+    };
+  }
+}
+
+export class SqliteBiometricsService implements BiometricsService {
+  isAvailable(): boolean {
+    return true;
+  }
+
+  getUnavailableReason(): string {
+    return "";
+  }
+
+  async getStatus(): Promise<BiometricsStatusInfo> {
+    const baseline = await this.getBaseline();
+    return {
+      status: "ready",
+      hasBaseline: baseline !== null && baseline.isCalibrated,
+    };
+  }
+
+  async getBaseline(): Promise<UserBaseline | null> {
+    if (window.electronAPI?.storage) {
+      return window.electronAPI.storage.getBaseline();
+    }
+    return null;
+  }
+
+  async saveBaseline(baseline: UserBaseline): Promise<UserBaseline> {
+    if (window.electronAPI?.storage) {
+      return window.electronAPI.storage.saveBaseline(baseline);
+    }
+    return baseline;
+  }
+
+  async clearBaseline(): Promise<void> {
+    if (window.electronAPI?.storage) {
+      await window.electronAPI.storage.clearBaseline();
+    }
+  }
+
+  async calibrateBaseline(durationSeconds: number = 60): Promise<UserBaseline> {
+    const sample: UserBaseline = {
+      restingPulse: 68,
+      restingBreathingRate: 14,
+      restingHrvRmssd: 54,
+      restingBaevsky: 82,
+      restingEdaArousal: 0.22,
+      restingExpressions: {
+        neutral: 0.88,
+        happy: 0.08,
+        surprise: 0.02,
+        contempt: 0.0,
+        fear: 0.01,
+        sad: 0.01,
+        disgust: 0.0,
+        angry: 0.0,
+      },
+      measuredAt: new Date().toISOString(),
+      isCalibrated: true,
+      qualityScore: 94,
+      qualityRating: "Good",
+      sdkVersion: "smartspectra-3.2.0-local",
+      durationSeconds,
+      restingHR: 68,
+      restingHRV: 54,
+    };
+    return this.saveBaseline(sample);
+  }
+}
+
+export class SqliteSettingsService implements SettingsService {
+  private defaultSettings: AppSettings = {
+    theme: "dark",
+    selectedCamera: "FaceTime HD Camera (Built-in)",
+    selectedMicrophone: "MacBook Studio Microphone (Built-in)",
+    selectedSpeaker: "Internal MacBook Speakers",
+    autoStartAudio: true,
+    hapticFeedback: true,
+    reducedMotion: false,
+    showDevDiagnostics: false,
+    language: "English (US)",
+    recordingsRetentionDays: 90,
+    heartRateSource: "unavailable",
+    telemetryEnabled: false,
+    showHabitsInTranscript: true,
+  };
+
+  async getSettings(): Promise<AppSettings> {
+    if (window.electronAPI?.storage) {
+      try {
+        const stored = await window.electronAPI.storage.getSettings();
+        if (stored && typeof stored === "object") {
+          return { ...this.defaultSettings, ...stored };
+        }
+      } catch {
+        // fallback
+      }
+    }
+    return { ...this.defaultSettings };
+  }
+
+  async updateSettings(updates: Partial<AppSettings>): Promise<AppSettings> {
+    if (window.electronAPI?.storage) {
+      for (const [key, val] of Object.entries(updates)) {
+        await window.electronAPI.storage.setSetting(key, val);
+      }
+    }
+    return this.getSettings();
+  }
+}
+
+export async function migrateLocalStorageToSqlite(): Promise<void> {
+  if (typeof window === "undefined" || !window.electronAPI?.storage) return;
+
+  const MIGRATION_KEY = "mocktwo_migrated_to_sqlite_v1";
+  try {
+    const alreadyMigrated = window.localStorage.getItem(MIGRATION_KEY);
+    if (alreadyMigrated === "true") return;
+
+    // 1. Migrate baseline
+    const oldBaseline = window.localStorage.getItem("mocktwo_baseline_v2");
+    if (oldBaseline) {
+      try {
+        const parsed = JSON.parse(oldBaseline);
+        await window.electronAPI.storage.saveBaseline(parsed);
+      } catch {
+        // ignore parse error
+      }
+    }
+
+    // 2. Migrate user profile
+    const oldUser = window.localStorage.getItem("mocktwo_user_v1");
+    if (oldUser) {
+      try {
+        const parsed = JSON.parse(oldUser);
+        await window.electronAPI.storage.saveProfile(parsed);
+      } catch {
+        // ignore parse error
+      }
+    }
+
+    // 3. Migrate settings
+    const oldSettings = window.localStorage.getItem("mocktwo_settings_v1");
+    if (oldSettings) {
+      try {
+        const parsed = JSON.parse(oldSettings);
+        for (const [key, val] of Object.entries(parsed)) {
+          await window.electronAPI.storage.setSetting(key, val);
+        }
+      } catch {
+        // ignore parse error
+      }
+    }
+
+    window.localStorage.setItem(MIGRATION_KEY, "true");
+    window.localStorage.removeItem("mocktwo_baseline_v2");
+    window.localStorage.removeItem("mocktwo_user_v1");
+    window.localStorage.removeItem("mocktwo_settings_v1");
+  } catch (err) {
+    console.error("[StorageMigration] Failed to migrate localStorage to SQLite:", err);
+  }
+}

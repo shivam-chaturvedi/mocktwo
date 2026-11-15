@@ -1,6 +1,8 @@
 const { app, BrowserWindow, Menu, ipcMain, shell, dialog, screen, session } = require("electron");
 const path = require("path");
 const fs = require("fs");
+const { StorageManager } = require("./storage/storageManager.cjs");
+const { PermissionsService } = require("./permissions/permissionsService.cjs");
 
 // 1. Platform Identity for persistent permissions & notification grouping
 app.setName("mocktwo");
@@ -13,6 +15,8 @@ const DEV_PORT = 5173;
 const DEV_SERVER_URL = `http://${DEV_HOST}:${DEV_PORT}`;
 
 let mainWindow = null;
+let storageManager = null;
+let permissionsService = null;
 const boundsFilePath = path.join(app.getPath("userData"), "window-bounds.json");
 const logsDir = path.join(app.getPath("userData"), "logs");
 const primaryLogPath = path.join(logsDir, "mocktwo.log");
@@ -497,7 +501,11 @@ function createWindow() {
   }
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  storageManager = new StorageManager(app.getPath("userData"));
+  permissionsService = new PermissionsService(storageManager, () => mainWindow);
+  createWindow();
+});
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
@@ -505,6 +513,20 @@ app.on("window-all-closed", () => {
 
 app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow();
+});
+
+app.on("browser-window-focus", () => {
+  if (permissionsService) {
+    permissionsService.refreshOnFocus().catch((err) => {
+      console.error("[main] Failed to refresh permissions on focus:", err);
+    });
+  }
+});
+
+app.on("before-quit", () => {
+  if (storageManager) {
+    storageManager.close();
+  }
 });
 
 // -----------------------------------------------------------------------------
@@ -556,4 +578,139 @@ ipcMain.handle("open-system-settings", async (event, pane) => {
     }
   }
   return false;
+});
+
+// Storage IPC Handlers
+ipcMain.handle("storage:get-profile", async (event) => {
+  if (!isValidSender(event.senderFrame) || !storageManager) return null;
+  return storageManager.execute("profile:get");
+});
+
+ipcMain.handle("storage:save-profile", async (event, profile) => {
+  if (!isValidSender(event.senderFrame) || !storageManager) return null;
+  return storageManager.execute("profile:save", profile);
+});
+
+ipcMain.handle("storage:get-personas", async (event) => {
+  if (!isValidSender(event.senderFrame) || !storageManager) return [];
+  return storageManager.execute("personas:list");
+});
+
+ipcMain.handle("storage:create-persona", async (event, persona) => {
+  if (!isValidSender(event.senderFrame) || !storageManager) return null;
+  return storageManager.execute("personas:create", persona);
+});
+
+ipcMain.handle("storage:update-persona", async (event, payload) => {
+  if (!isValidSender(event.senderFrame) || !storageManager) return null;
+  return storageManager.execute("personas:update", payload);
+});
+
+ipcMain.handle("storage:delete-persona", async (event, id) => {
+  if (!isValidSender(event.senderFrame) || !storageManager) return false;
+  return storageManager.execute("personas:delete", id);
+});
+
+ipcMain.handle("storage:get-scenarios", async (event) => {
+  if (!isValidSender(event.senderFrame) || !storageManager) return [];
+  return storageManager.execute("scenarios:list");
+});
+
+ipcMain.handle("storage:create-scenario", async (event, scenario) => {
+  if (!isValidSender(event.senderFrame) || !storageManager) return null;
+  return storageManager.execute("scenarios:create", scenario);
+});
+
+ipcMain.handle("storage:delete-scenario", async (event, id) => {
+  if (!isValidSender(event.senderFrame) || !storageManager) return false;
+  return storageManager.execute("scenarios:delete", id);
+});
+
+ipcMain.handle("storage:get-recordings", async (event, params) => {
+  if (!isValidSender(event.senderFrame) || !storageManager) return [];
+  return storageManager.execute("recordings:list", params);
+});
+
+ipcMain.handle("storage:get-recording", async (event, id) => {
+  if (!isValidSender(event.senderFrame) || !storageManager) return null;
+  return storageManager.execute("recordings:get", id);
+});
+
+ipcMain.handle("storage:save-recording", async (event, rec) => {
+  if (!isValidSender(event.senderFrame) || !storageManager) return null;
+  return storageManager.execute("recordings:save", rec);
+});
+
+ipcMain.handle("storage:delete-recording", async (event, id) => {
+  if (!isValidSender(event.senderFrame) || !storageManager) return false;
+  return storageManager.execute("recordings:delete", id);
+});
+
+ipcMain.handle("storage:add-note", async (event, payload) => {
+  if (!isValidSender(event.senderFrame) || !storageManager) return null;
+  return storageManager.execute("recordings:add-note", payload);
+});
+
+ipcMain.handle("storage:get-baseline", async (event) => {
+  if (!isValidSender(event.senderFrame) || !storageManager) return null;
+  return storageManager.execute("baseline:get");
+});
+
+ipcMain.handle("storage:save-baseline", async (event, baseline) => {
+  if (!isValidSender(event.senderFrame) || !storageManager) return null;
+  return storageManager.execute("baseline:save", baseline);
+});
+
+ipcMain.handle("storage:clear-baseline", async (event) => {
+  if (!isValidSender(event.senderFrame) || !storageManager) return false;
+  return storageManager.execute("baseline:clear");
+});
+
+ipcMain.handle("storage:get-settings", async (event) => {
+  if (!isValidSender(event.senderFrame) || !storageManager) return {};
+  return storageManager.execute("settings:get-all");
+});
+
+ipcMain.handle("storage:set-setting", async (event, payload) => {
+  if (!isValidSender(event.senderFrame) || !storageManager) return false;
+  return storageManager.execute("settings:set", payload);
+});
+
+ipcMain.handle("storage:clear-all", async (event) => {
+  if (!isValidSender(event.senderFrame) || !storageManager) return false;
+  return storageManager.execute("data:clear-all");
+});
+
+ipcMain.handle("storage:check-space", async (event) => {
+  if (!isValidSender(event.senderFrame) || !storageManager) return Number.MAX_SAFE_INTEGER;
+  return storageManager.checkFreeSpaceBytes();
+});
+
+// Audio Chunk Recording Handlers
+ipcMain.handle("audio:start-recording", async (event, id) => {
+  if (!isValidSender(event.senderFrame) || !storageManager) return null;
+  return storageManager.startAudioRecording(id);
+});
+
+ipcMain.handle("audio:append-chunk", async (event, { id, chunk }) => {
+  if (!isValidSender(event.senderFrame) || !storageManager) return false;
+  const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+  await storageManager.appendAudioChunk(id, buffer);
+  return true;
+});
+
+ipcMain.handle("audio:finalize-recording", async (event, id) => {
+  if (!isValidSender(event.senderFrame) || !storageManager) return null;
+  return storageManager.finalizeAudioRecording(id);
+});
+
+// Permissions Handlers
+ipcMain.handle("permissions:get-status", async (event, resource) => {
+  if (!isValidSender(event.senderFrame) || !permissionsService) return "unknown";
+  return permissionsService.getStatus(resource);
+});
+
+ipcMain.handle("permissions:request", async (event, resource) => {
+  if (!isValidSender(event.senderFrame) || !permissionsService) return false;
+  return permissionsService.requestAccess(resource);
 });

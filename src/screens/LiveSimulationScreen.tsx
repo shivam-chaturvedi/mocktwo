@@ -41,6 +41,58 @@ export const LiveSimulationScreen: React.FC = () => {
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasFinishedRef = useRef(false);
   const startTimeRef = useRef<number | null>(null);
+  const sessionIdRef = useRef<string | null>(null);
+
+  // Audio chunk recording subsystem for rehearsals
+  useEffect(() => {
+    if (!sessionIdRef.current) {
+      sessionIdRef.current = `session-${Date.now()}`;
+    }
+    const sessionId = sessionIdRef.current;
+    let mediaRecorder: MediaRecorder | null = null;
+    let audioStream: MediaStream | null = null;
+
+    const initAudio = async () => {
+      if (window.electronAPI?.audio) {
+        try {
+          await window.electronAPI.audio.startRecording(sessionId);
+          if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+            audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(audioStream);
+            mediaRecorder.ondataavailable = async (e) => {
+              if (e.data && e.data.size > 0 && window.electronAPI?.audio) {
+                const buffer = await e.data.arrayBuffer();
+                await window.electronAPI.audio.appendChunk(sessionId, buffer);
+              }
+            };
+            mediaRecorder.start(1000);
+          }
+        } catch (err) {
+          console.error("[LiveSimulationScreen] Audio recording setup error:", err);
+        }
+      }
+    };
+
+    initAudio();
+
+    return () => {
+      if (mediaRecorder && mediaRecorder.state !== "inactive") {
+        try {
+          mediaRecorder.stop();
+        } catch {
+          // ignore
+        }
+      }
+      if (audioStream) {
+        audioStream.getTracks().forEach((t) => t.stop());
+      }
+      if (window.electronAPI?.audio) {
+        window.electronAPI.audio.finalizeRecording(sessionId).catch((err) => {
+          console.error("[LiveSimulationScreen] Failed to finalize audio recording:", err);
+        });
+      }
+    };
+  }, []);
 
   // Optical sensor validation status: simulated briefly without showing live numbers
   const currentValidationStatus: ValidationStatusCode = useMemo(() => {
