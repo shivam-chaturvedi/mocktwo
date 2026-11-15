@@ -26,6 +26,10 @@ export function useGlobalShortcuts() {
           case "open-settings":
             openSettings();
             break;
+          case "open-settings-privacy":
+            openSettings();
+            window.dispatchEvent(new CustomEvent("mocktwo-open-privacy-tab"));
+            break;
           case "quick-practice":
             openQuickPractice();
             break;

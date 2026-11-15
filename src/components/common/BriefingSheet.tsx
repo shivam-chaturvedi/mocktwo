@@ -39,6 +39,7 @@ export const BriefingSheet: React.FC = () => {
   const [micMuted, setMicMuted] = useState(false);
   const [cameraOff, setCameraOff] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
+  const [permissionError, setPermissionError] = useState<"camera" | "microphone" | null>(null);
   const [isCrossfading, setIsCrossfading] = useState(false);
   const [isMeasuringBaseline, setIsMeasuringBaseline] = useState(false);
   const [miniBaselineProgress, setMiniBaselineProgress] = useState<number | null>(null);
@@ -131,8 +132,23 @@ export const BriefingSheet: React.FC = () => {
     "External USB Microphone",
   ];
 
-  const handleStartSession = () => {
+  const handleStartSession = async () => {
     if (countdown !== null) return;
+    setPermissionError(null);
+
+    if (window.electronAPI?.requestMediaAccess) {
+      const camOk = await window.electronAPI.requestMediaAccess("camera");
+      if (!camOk) {
+        setPermissionError("camera");
+        return;
+      }
+      const micOk = await window.electronAPI.requestMediaAccess("microphone");
+      if (!micOk) {
+        setPermissionError("microphone");
+        return;
+      }
+    }
+
     setCountdown(3);
   };
 
@@ -732,6 +748,40 @@ export const BriefingSheet: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* Permission Declined In-Sheet Recovery */}
+        {permissionError && (
+          <div
+            style={{
+              padding: "10px 24px",
+              backgroundColor: "rgba(239, 68, 68, 0.12)",
+              borderTop: "1px solid rgba(239, 68, 68, 0.3)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              fontSize: "12px",
+              color: "#fca5a5",
+            }}
+          >
+            <span>
+              {permissionError === "camera"
+                ? "Camera access was declined. Enable camera in System Settings to start rehearsal."
+                : "Microphone access was declined. Enable microphone in System Settings to start rehearsal."}
+            </span>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                if (window.electronAPI?.openSystemSettings) {
+                  window.electronAPI.openSystemSettings(permissionError);
+                }
+              }}
+              style={{ height: "26px", fontSize: "11px", padding: "0 10px" }}
+            >
+              Open Settings
+            </Button>
+          </div>
+        )}
 
         {/* Sheet Footer */}
         <div

@@ -101,6 +101,14 @@ export const BaselineSheetModal: React.FC = () => {
   // Request camera access
   const handleStartCamera = async () => {
     try {
+      if (window.electronAPI?.requestMediaAccess) {
+        const granted = await window.electronAPI.requestMediaAccess("camera");
+        if (!granted) {
+          setStep("permission-denied");
+          return;
+        }
+      }
+
       if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== "function") {
         setStep("no-camera");
         return;

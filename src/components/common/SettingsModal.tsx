@@ -2,6 +2,8 @@ import React, { useState, useEffect } from "react";
 import { useApp } from "../../context";
 import { Button } from "./Button";
 import { EmptyState } from "./EmptyState";
+import { PermissionPrompt } from "./PermissionPrompt";
+import { usePermission } from "../../hooks/usePermission";
 import {
   X,
   Sliders,
@@ -11,6 +13,10 @@ import {
   Shield,
   Film,
   Activity,
+  ExternalLink,
+  Trash2,
+  FolderOpen,
+  Camera,
 } from "lucide-react";
 import { WELLNESS_DISCLAIMER } from "../../services/biometrics";
 import type { AppSettings } from "../../types";
@@ -31,13 +37,24 @@ export const SettingsModal: React.FC = () => {
     navigateTo,
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<"general" | "hardware" | "notifications" | "recordings" | "account">("general");
+  const [activeTab, setActiveTab] = useState<"general" | "hardware" | "privacy" | "notifications" | "recordings" | "account">("general");
   const [name, setName] = useState(user.name);
   const [role, setRole] = useState(user.role);
   const [workspace, setWorkspace] = useState(user.workspace || "mocktwo Workspace");
   const [isTestingMic, setIsTestingMic] = useState(false);
   const [isRecalibrating, setIsRecalibrating] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
+
+  const cameraPermission = usePermission("camera");
+  const micPermission = usePermission("microphone");
+
+  useEffect(() => {
+    const handleOpenPrivacy = () => setActiveTab("privacy");
+    window.addEventListener("mocktwo-open-privacy-tab", handleOpenPrivacy);
+    return () => window.removeEventListener("mocktwo-open-privacy-tab", handleOpenPrivacy);
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -86,9 +103,10 @@ export const SettingsModal: React.FC = () => {
     "Studio Display Audio",
   ];
 
-  const tabs: { id: "general" | "hardware" | "notifications" | "recordings" | "account"; label: string; icon: React.ReactNode }[] = [
+  const tabs: { id: "general" | "hardware" | "privacy" | "notifications" | "recordings" | "account"; label: string; icon: React.ReactNode }[] = [
     { id: "general", label: "General", icon: <Sliders size={13} /> },
     { id: "hardware", label: "Audio, Video & Sensors", icon: <Mic size={13} /> },
+    { id: "privacy", label: "Privacy & Data", icon: <Shield size={13} /> },
     { id: "notifications", label: "Notifications", icon: <Bell size={13} /> },
     { id: "recordings", label: "Recordings", icon: <Film size={13} /> },
     { id: "account", label: "Account", icon: <User size={13} /> },
@@ -270,39 +288,29 @@ export const SettingsModal: React.FC = () => {
           {/* AUDIO, VIDEO & SENSORS TAB */}
           {activeTab === "hardware" && (
             <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
-              <div>
-                <label style={{ fontSize: "12.5px", fontWeight: 600, color: "var(--text-primary)", display: "block", marginBottom: "6px" }}>
-                  Camera Source
-                </label>
-                <select
-                  value={settings.selectedCamera}
-                  onChange={(e) => updateSettings({ selectedCamera: e.target.value })}
-                  style={{
-                    width: "100%",
-                    padding: "8px 12px",
-                    backgroundColor: "var(--bg-control)",
-                    border: "1px solid var(--separator)",
-                    borderRadius: "var(--radius-sm)",
-                    color: "var(--text-primary)",
-                    fontSize: "13px",
-                  }}
-                >
-                  {cameraOptions.map((c) => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label style={{ fontSize: "12.5px", fontWeight: 600, color: "var(--text-primary)", display: "block", marginBottom: "6px" }}>
-                  Microphone Input
-                </label>
-                <div style={{ display: "flex", gap: "10px" }}>
+              {!cameraPermission.isGranted ? (
+                <div>
+                  <label style={{ fontSize: "12.5px", fontWeight: 600, color: "var(--text-primary)", display: "block", marginBottom: "6px" }}>
+                    Camera Source
+                  </label>
+                  <PermissionPrompt
+                    resource="camera"
+                    status={cameraPermission.status}
+                    onRequest={cameraPermission.request}
+                    onOpenSettings={cameraPermission.openSettings}
+                    compact
+                  />
+                </div>
+              ) : (
+                <div>
+                  <label style={{ fontSize: "12.5px", fontWeight: 600, color: "var(--text-primary)", display: "block", marginBottom: "6px" }}>
+                    Camera Source
+                  </label>
                   <select
-                    value={settings.selectedMicrophone}
-                    onChange={(e) => updateSettings({ selectedMicrophone: e.target.value })}
+                    value={settings.selectedCamera}
+                    onChange={(e) => updateSettings({ selectedCamera: e.target.value })}
                     style={{
-                      flex: 1,
+                      width: "100%",
                       padding: "8px 12px",
                       backgroundColor: "var(--bg-control)",
                       border: "1px solid var(--separator)",
@@ -311,22 +319,62 @@ export const SettingsModal: React.FC = () => {
                       fontSize: "13px",
                     }}
                   >
-                    {micOptions.map((m) => (
-                      <option key={m} value={m}>{m}</option>
+                    {cameraOptions.map((c) => (
+                      <option key={c} value={c}>{c}</option>
                     ))}
                   </select>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => {
-                      setIsTestingMic(true);
-                      setTimeout(() => setIsTestingMic(false), 2000);
-                    }}
-                  >
-                    {isTestingMic ? "Testing (98%)…" : "Test Mic"}
-                  </Button>
                 </div>
-              </div>
+              )}
+
+              {!micPermission.isGranted ? (
+                <div>
+                  <label style={{ fontSize: "12.5px", fontWeight: 600, color: "var(--text-primary)", display: "block", marginBottom: "6px" }}>
+                    Microphone Input
+                  </label>
+                  <PermissionPrompt
+                    resource="microphone"
+                    status={micPermission.status}
+                    onRequest={micPermission.request}
+                    onOpenSettings={micPermission.openSettings}
+                    compact
+                  />
+                </div>
+              ) : (
+                <div>
+                  <label style={{ fontSize: "12.5px", fontWeight: 600, color: "var(--text-primary)", display: "block", marginBottom: "6px" }}>
+                    Microphone Input
+                  </label>
+                  <div style={{ display: "flex", gap: "10px" }}>
+                    <select
+                      value={settings.selectedMicrophone}
+                      onChange={(e) => updateSettings({ selectedMicrophone: e.target.value })}
+                      style={{
+                        flex: 1,
+                        padding: "8px 12px",
+                        backgroundColor: "var(--bg-control)",
+                        border: "1px solid var(--separator)",
+                        borderRadius: "var(--radius-sm)",
+                        color: "var(--text-primary)",
+                        fontSize: "13px",
+                      }}
+                    >
+                      {micOptions.map((m) => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        setIsTestingMic(true);
+                        setTimeout(() => setIsTestingMic(false), 2000);
+                      }}
+                    >
+                      {isTestingMic ? "Testing (98%)…" : "Test Mic"}
+                    </Button>
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label style={{ fontSize: "12.5px", fontWeight: 600, color: "var(--text-primary)", display: "block", marginBottom: "6px" }}>
@@ -466,6 +514,239 @@ export const SettingsModal: React.FC = () => {
                 >
                   <strong style={{ color: "var(--text-primary)" }}>Device-Only Privacy: </strong>
                   Video is analyzed on your device. Results are stored locally. {WELLNESS_DISCLAIMER}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* PRIVACY & DATA TAB */}
+          {activeTab === "privacy" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
+              <div>
+                <h4 style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", margin: "0 0 4px 0" }}>
+                  Hardware &amp; OS Permissions
+                </h4>
+                <p style={{ fontSize: "12px", color: "var(--text-secondary)", margin: "0 0 14px 0" }}>
+                  mocktwo requests camera and microphone permissions just-in-time when you start a baseline calibration or rehearsal simulation.
+                </p>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                  {/* Camera Row */}
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      padding: "12px 14px",
+                      borderRadius: "var(--radius-md)",
+                      backgroundColor: "var(--bg-control)",
+                      border: "1px solid var(--separator)",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      <Camera size={16} style={{ color: "var(--text-secondary)" }} />
+                      <div>
+                        <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)" }}>
+                          Camera Access
+                        </div>
+                        <div style={{ fontSize: "11.5px", color: "var(--text-secondary)" }}>
+                          Used exclusively for local optical pulse and composure estimation
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      <span
+                        style={{
+                          fontSize: "11px",
+                          fontWeight: 600,
+                          padding: "3px 8px",
+                          borderRadius: "10px",
+                          backgroundColor:
+                            cameraPermission.status === "granted"
+                              ? "rgba(48, 209, 88, 0.15)"
+                              : cameraPermission.status === "denied"
+                                ? "rgba(239, 68, 68, 0.15)"
+                                : "rgba(245, 158, 11, 0.15)",
+                          color:
+                            cameraPermission.status === "granted"
+                              ? "#34d399"
+                              : cameraPermission.status === "denied"
+                                ? "#f87171"
+                                : "#fbbf24",
+                        }}
+                      >
+                        {cameraPermission.status === "granted"
+                          ? "Allowed"
+                          : cameraPermission.status === "denied"
+                            ? "Turned off"
+                            : "Not configured"}
+                      </span>
+                      {cameraPermission.status === "denied" ? (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          icon={<ExternalLink size={12} />}
+                          onClick={cameraPermission.openSettings}
+                          style={{ height: "26px", fontSize: "11px", padding: "0 10px" }}
+                        >
+                          Settings
+                        </Button>
+                      ) : cameraPermission.status !== "granted" ? (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={cameraPermission.request}
+                          style={{ height: "26px", fontSize: "11px", padding: "0 10px" }}
+                        >
+                          Allow
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  {/* Microphone Row */}
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      padding: "12px 14px",
+                      borderRadius: "var(--radius-md)",
+                      backgroundColor: "var(--bg-control)",
+                      border: "1px solid var(--separator)",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      <Mic size={16} style={{ color: "var(--text-secondary)" }} />
+                      <div>
+                        <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)" }}>
+                          Microphone Access
+                        </div>
+                        <div style={{ fontSize: "11.5px", color: "var(--text-secondary)" }}>
+                          Used for simulation dialogue and vocal cadence feedback
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      <span
+                        style={{
+                          fontSize: "11px",
+                          fontWeight: 600,
+                          padding: "3px 8px",
+                          borderRadius: "10px",
+                          backgroundColor:
+                            micPermission.status === "granted"
+                              ? "rgba(48, 209, 88, 0.15)"
+                              : micPermission.status === "denied"
+                                ? "rgba(239, 68, 68, 0.15)"
+                                : "rgba(245, 158, 11, 0.15)",
+                          color:
+                            micPermission.status === "granted"
+                              ? "#34d399"
+                              : micPermission.status === "denied"
+                                ? "#f87171"
+                                : "#fbbf24",
+                        }}
+                      >
+                        {micPermission.status === "granted"
+                          ? "Allowed"
+                          : micPermission.status === "denied"
+                            ? "Turned off"
+                            : "Not configured"}
+                      </span>
+                      {micPermission.status === "denied" ? (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          icon={<ExternalLink size={12} />}
+                          onClick={micPermission.openSettings}
+                          style={{ height: "26px", fontSize: "11px", padding: "0 10px" }}
+                        >
+                          Settings
+                        </Button>
+                      ) : micPermission.status !== "granted" ? (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={micPermission.request}
+                          style={{ height: "26px", fontSize: "11px", padding: "0 10px" }}
+                        >
+                          Allow
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 100% On-Device Guarantee Card */}
+              <div
+                style={{
+                  padding: "12px 14px",
+                  borderRadius: "var(--radius-md)",
+                  backgroundColor: "rgba(59, 130, 246, 0.08)",
+                  border: "1px solid rgba(59, 130, 246, 0.25)",
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: "10px",
+                }}
+              >
+                <Shield size={16} style={{ color: "#60a5fa", flexShrink: 0, marginTop: "2px" }} />
+                <div>
+                  <div style={{ fontSize: "12.5px", fontWeight: 600, color: "#93c5fd" }}>
+                    100% On-Device Storage
+                  </div>
+                  <div style={{ fontSize: "11.5px", color: "var(--text-secondary)", marginTop: "2px", lineHeight: 1.45 }}>
+                    All recordings, physiological vitals, personal baselines, and notes remain strictly on this computer in a local SQLite database. No video or biometric telemetry is ever sent to external cloud servers.
+                  </div>
+                </div>
+              </div>
+
+              {/* Diagnostic Logs & Data Reset */}
+              <div style={{ borderTop: "1px solid var(--separator)", paddingTop: "14px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <span style={{ fontSize: "12.5px", fontWeight: 600, color: "var(--text-primary)", display: "block" }}>
+                      Diagnostic Logs
+                    </span>
+                    <span style={{ fontSize: "11.5px", color: "var(--text-secondary)" }}>
+                      Rotated local log files tracking application events and hardware states.
+                    </span>
+                  </div>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    icon={<FolderOpen size={12} />}
+                    onClick={() => {
+                      if (window.electronAPI?.revealLogs) {
+                        window.electronAPI.revealLogs();
+                      }
+                    }}
+                  >
+                    Reveal Logs
+                  </Button>
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--separator)", paddingTop: "12px" }}>
+                  <div>
+                    <span style={{ fontSize: "12.5px", fontWeight: 650, color: "#ef4444", display: "block" }}>
+                      Clear All Local Data
+                    </span>
+                    <span style={{ fontSize: "11.5px", color: "var(--text-secondary)" }}>
+                      Permanently wipe all stored recordings, baselines, scenarios, and preferences.
+                    </span>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    icon={<Trash2 size={12} />}
+                    onClick={() => setShowClearConfirm(true)}
+                    style={{ color: "#ef4444", borderColor: "rgba(239, 68, 68, 0.3)" }}
+                  >
+                    Clear All Data…
+                  </Button>
                 </div>
               </div>
             </div>
@@ -674,6 +955,99 @@ export const SettingsModal: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Clear All Data Confirmation Modal */}
+      {showClearConfirm && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 1100,
+            backgroundColor: "rgba(0, 0, 0, 0.75)",
+            backdropFilter: "blur(6px)",
+            WebkitBackdropFilter: "blur(6px)",
+            display: "grid",
+            placeItems: "center",
+            padding: "20px",
+          }}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (!isClearing) setShowClearConfirm(false);
+          }}
+        >
+          <div
+            className="glass-surface"
+            style={{
+              width: "100%",
+              maxWidth: "420px",
+              padding: "24px",
+              borderRadius: "16px",
+              border: "1px solid rgba(239, 68, 68, 0.3)",
+              backgroundColor: "#161618",
+              boxShadow: "0 20px 40px rgba(0,0,0,0.6)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px" }}>
+              <div
+                style={{
+                  width: "36px",
+                  height: "36px",
+                  borderRadius: "50%",
+                  backgroundColor: "rgba(239, 68, 68, 0.15)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Trash2 size={18} style={{ color: "#ef4444" }} />
+              </div>
+              <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 600, color: "#f3f4f6" }}>
+                Clear All Local Data?
+              </h3>
+            </div>
+            <p style={{ margin: "0 0 20px 0", fontSize: "13px", lineHeight: 1.5, color: "#9ca3af" }}>
+              This will permanently delete all your rehearsal recordings, baseline calibrations, scenarios, and local settings from this computer. This action cannot be undone.
+            </p>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+              <Button
+                variant="secondary"
+                size="md"
+                disabled={isClearing}
+                onClick={() => setShowClearConfirm(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="md"
+                disabled={isClearing}
+                onClick={async () => {
+                  setIsClearing(true);
+                  try {
+                    if (window.electronAPI?.storage) {
+                      await window.electronAPI.storage.clearAllData();
+                    }
+                    if (typeof localStorage !== "undefined") {
+                      localStorage.clear();
+                    }
+                    showToast("All local data has been erased.");
+                    setShowClearConfirm(false);
+                    closeSettings();
+                    window.location.reload();
+                  } catch (err) {
+                    console.error("Failed to clear data:", err);
+                    setIsClearing(false);
+                  }
+                }}
+                style={{ backgroundColor: "#ef4444", color: "#ffffff" }}
+              >
+                {isClearing ? "Clearing…" : "Yes, Erase Everything"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
