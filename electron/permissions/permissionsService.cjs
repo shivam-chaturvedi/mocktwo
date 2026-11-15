@@ -139,12 +139,21 @@ class PermissionsService {
   }
 
   notifyRenderer() {
-    const win = typeof this.getMainWindow === "function" ? this.getMainWindow() : null;
-    if (win && !win.isDestroyed() && win.webContents) {
-      win.webContents.send("permissions:updated", {
-        camera: this.cachedStatus.camera,
-        microphone: this.cachedStatus.microphone,
-      });
+    try {
+      const win = typeof this.getMainWindow === "function" ? this.getMainWindow() : null;
+      if (
+        win &&
+        !win.isDestroyed() &&
+        win.webContents &&
+        (typeof win.webContents.isDestroyed !== "function" || !win.webContents.isDestroyed())
+      ) {
+        win.webContents.send("permissions:updated", {
+          camera: this.cachedStatus.camera,
+          microphone: this.cachedStatus.microphone,
+        });
+      }
+    } catch {
+      // webContents was disposing or destroyed
     }
   }
 }

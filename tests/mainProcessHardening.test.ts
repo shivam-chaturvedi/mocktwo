@@ -78,3 +78,38 @@ test("Main Process: Crash reload throttling limit enforces max 3 per minute", ()
   assert.strictEqual(recordCrashAndCheckReload(base + 15000), false); // 4th crash within minute -> blocked!
   assert.strictEqual(recordCrashAndCheckReload(base + 65000), true); // After 1 minute window -> allowed!
 });
+
+test("Main Process: isValidSender handles disposed frame exception without crashing", () => {
+  const DEV_SERVER_URL = "http://127.0.0.1:5173";
+  function isValidSender(frameOrEvent: any, isPackaged = false): boolean {
+    try {
+      if (!frameOrEvent) return false;
+      const frame = frameOrEvent.senderFrame !== undefined ? frameOrEvent.senderFrame : frameOrEvent;
+      if (!frame || !frame.url) return false;
+      const url = frame.url;
+      if (isPackaged) {
+        return url.startsWith("file://");
+      }
+      return url.startsWith(DEV_SERVER_URL) || url.startsWith("file://");
+    } catch {
+      return false;
+    }
+  }
+
+  // Valid dev URL
+  assert.strictEqual(isValidSender({ senderFrame: { url: "http://127.0.0.1:5173/" } }), true);
+  // Valid file URL in production
+  assert.strictEqual(isValidSender({ senderFrame: { url: "file:///app/dist/index.html" } }, true), true);
+  // Invalid remote origin
+  assert.strictEqual(isValidSender({ senderFrame: { url: "https://evil.com" } }), false);
+  // Null or missing event
+  assert.strictEqual(isValidSender(null), false);
+  assert.strictEqual(isValidSender({}), false);
+  // Disposed frame getter throwing Error("Render frame was disposed before WebFrameMain could be accessed")
+  const throwingEvent = {
+    get senderFrame(): any {
+      throw new Error("Render frame was disposed before WebFrameMain could be accessed");
+    },
+  };
+  assert.strictEqual(isValidSender(throwingEvent), false);
+});

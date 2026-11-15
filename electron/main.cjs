@@ -163,8 +163,17 @@ function flushBoundsNow(win) {
 // Native Application Menu & Action Bridge
 // -----------------------------------------------------------------------------
 function sendAction(action) {
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send("menu-action", action);
+  try {
+    if (
+      mainWindow &&
+      !mainWindow.isDestroyed() &&
+      mainWindow.webContents &&
+      (typeof mainWindow.webContents.isDestroyed !== "function" || !mainWindow.webContents.isDestroyed())
+    ) {
+      mainWindow.webContents.send("menu-action", action);
+    }
+  } catch {
+    // window or webContents was disposed
   }
 }
 
@@ -337,13 +346,20 @@ function isAllowedReload() {
   return recentCrashTimestamps.length < 3;
 }
 
-function isValidSender(frame) {
-  if (!frame || !frame.url) return false;
-  const url = frame.url;
-  if (app.isPackaged) {
-    return url.startsWith("file://");
+function isValidSender(frameOrEvent) {
+  try {
+    if (!frameOrEvent) return false;
+    const frame = frameOrEvent.senderFrame !== undefined ? frameOrEvent.senderFrame : frameOrEvent;
+    if (!frame || !frame.url) return false;
+    const url = frame.url;
+    if (app.isPackaged) {
+      return url.startsWith("file://");
+    }
+    return url.startsWith(DEV_SERVER_URL) || url.startsWith("file://");
+  } catch {
+    // Gracefully handle frame disposal during rapid navigation/reload
+    return false;
   }
-  return url.startsWith(DEV_SERVER_URL) || url.startsWith("file://");
 }
 
 function createWindow() {
@@ -600,135 +616,265 @@ ipcMain.handle("open-system-settings", async (event, pane) => {
 
 // Storage IPC Handlers
 ipcMain.handle("storage:get-profile", async (event) => {
-  if (!isValidSender(event.senderFrame) || !storageManager) return null;
-  return storageManager.execute("profile:get");
+  try {
+    if (!isValidSender(event) || !storageManager) return null;
+    return await storageManager.execute("profile:get");
+  } catch (err) {
+    writeLogEntry("warn", "ipc:storage:get-profile", err.message);
+    return null;
+  }
 });
 
 ipcMain.handle("storage:save-profile", async (event, profile) => {
-  if (!isValidSender(event.senderFrame) || !storageManager) return null;
-  return storageManager.execute("profile:save", profile);
+  try {
+    if (!isValidSender(event) || !storageManager) return null;
+    return await storageManager.execute("profile:save", profile);
+  } catch (err) {
+    writeLogEntry("warn", "ipc:storage:save-profile", err.message);
+    return null;
+  }
 });
 
 ipcMain.handle("storage:get-personas", async (event) => {
-  if (!isValidSender(event.senderFrame) || !storageManager) return [];
-  return storageManager.execute("personas:list");
+  try {
+    if (!isValidSender(event) || !storageManager) return [];
+    return await storageManager.execute("personas:list");
+  } catch (err) {
+    writeLogEntry("warn", "ipc:storage:get-personas", err.message);
+    return [];
+  }
 });
 
 ipcMain.handle("storage:create-persona", async (event, persona) => {
-  if (!isValidSender(event.senderFrame) || !storageManager) return null;
-  return storageManager.execute("personas:create", persona);
+  try {
+    if (!isValidSender(event) || !storageManager) return null;
+    return await storageManager.execute("personas:create", persona);
+  } catch (err) {
+    writeLogEntry("warn", "ipc:storage:create-persona", err.message);
+    return null;
+  }
 });
 
 ipcMain.handle("storage:update-persona", async (event, payload) => {
-  if (!isValidSender(event.senderFrame) || !storageManager) return null;
-  return storageManager.execute("personas:update", payload);
+  try {
+    if (!isValidSender(event) || !storageManager) return null;
+    return await storageManager.execute("personas:update", payload);
+  } catch (err) {
+    writeLogEntry("warn", "ipc:storage:update-persona", err.message);
+    return null;
+  }
 });
 
 ipcMain.handle("storage:delete-persona", async (event, id) => {
-  if (!isValidSender(event.senderFrame) || !storageManager) return false;
-  return storageManager.execute("personas:delete", id);
+  try {
+    if (!isValidSender(event) || !storageManager) return false;
+    return await storageManager.execute("personas:delete", id);
+  } catch (err) {
+    writeLogEntry("warn", "ipc:storage:delete-persona", err.message);
+    return false;
+  }
 });
 
 ipcMain.handle("storage:get-scenarios", async (event) => {
-  if (!isValidSender(event.senderFrame) || !storageManager) return [];
-  return storageManager.execute("scenarios:list");
+  try {
+    if (!isValidSender(event) || !storageManager) return [];
+    return await storageManager.execute("scenarios:list");
+  } catch (err) {
+    writeLogEntry("warn", "ipc:storage:get-scenarios", err.message);
+    return [];
+  }
 });
 
 ipcMain.handle("storage:create-scenario", async (event, scenario) => {
-  if (!isValidSender(event.senderFrame) || !storageManager) return null;
-  return storageManager.execute("scenarios:create", scenario);
+  try {
+    if (!isValidSender(event) || !storageManager) return null;
+    return await storageManager.execute("scenarios:create", scenario);
+  } catch (err) {
+    writeLogEntry("warn", "ipc:storage:create-scenario", err.message);
+    return null;
+  }
 });
 
 ipcMain.handle("storage:delete-scenario", async (event, id) => {
-  if (!isValidSender(event.senderFrame) || !storageManager) return false;
-  return storageManager.execute("scenarios:delete", id);
+  try {
+    if (!isValidSender(event) || !storageManager) return false;
+    return await storageManager.execute("scenarios:delete", id);
+  } catch (err) {
+    writeLogEntry("warn", "ipc:storage:delete-scenario", err.message);
+    return false;
+  }
 });
 
 ipcMain.handle("storage:get-recordings", async (event, params) => {
-  if (!isValidSender(event.senderFrame) || !storageManager) return [];
-  return storageManager.execute("recordings:list", params);
+  try {
+    if (!isValidSender(event) || !storageManager) return [];
+    return await storageManager.execute("recordings:list", params);
+  } catch (err) {
+    writeLogEntry("warn", "ipc:storage:get-recordings", err.message);
+    return [];
+  }
 });
 
 ipcMain.handle("storage:get-recording", async (event, id) => {
-  if (!isValidSender(event.senderFrame) || !storageManager) return null;
-  return storageManager.execute("recordings:get", id);
+  try {
+    if (!isValidSender(event) || !storageManager) return null;
+    return await storageManager.execute("recordings:get", id);
+  } catch (err) {
+    writeLogEntry("warn", "ipc:storage:get-recording", err.message);
+    return null;
+  }
 });
 
 ipcMain.handle("storage:save-recording", async (event, rec) => {
-  if (!isValidSender(event.senderFrame) || !storageManager) return null;
-  return storageManager.execute("recordings:save", rec);
+  try {
+    if (!isValidSender(event) || !storageManager) return null;
+    return await storageManager.execute("recordings:save", rec);
+  } catch (err) {
+    writeLogEntry("warn", "ipc:storage:save-recording", err.message);
+    return null;
+  }
 });
 
 ipcMain.handle("storage:delete-recording", async (event, id) => {
-  if (!isValidSender(event.senderFrame) || !storageManager) return false;
-  return storageManager.execute("recordings:delete", id);
+  try {
+    if (!isValidSender(event) || !storageManager) return false;
+    return await storageManager.execute("recordings:delete", id);
+  } catch (err) {
+    writeLogEntry("warn", "ipc:storage:delete-recording", err.message);
+    return false;
+  }
 });
 
 ipcMain.handle("storage:add-note", async (event, payload) => {
-  if (!isValidSender(event.senderFrame) || !storageManager) return null;
-  return storageManager.execute("recordings:add-note", payload);
+  try {
+    if (!isValidSender(event) || !storageManager) return null;
+    return await storageManager.execute("recordings:add-note", payload);
+  } catch (err) {
+    writeLogEntry("warn", "ipc:storage:add-note", err.message);
+    return null;
+  }
 });
 
 ipcMain.handle("storage:get-baseline", async (event) => {
-  if (!isValidSender(event.senderFrame) || !storageManager) return null;
-  return storageManager.execute("baseline:get");
+  try {
+    if (!isValidSender(event) || !storageManager) return null;
+    return await storageManager.execute("baseline:get");
+  } catch (err) {
+    writeLogEntry("warn", "ipc:storage:get-baseline", err.message);
+    return null;
+  }
 });
 
 ipcMain.handle("storage:save-baseline", async (event, baseline) => {
-  if (!isValidSender(event.senderFrame) || !storageManager) return null;
-  return storageManager.execute("baseline:save", baseline);
+  try {
+    if (!isValidSender(event) || !storageManager) return null;
+    return await storageManager.execute("baseline:save", baseline);
+  } catch (err) {
+    writeLogEntry("warn", "ipc:storage:save-baseline", err.message);
+    return null;
+  }
 });
 
 ipcMain.handle("storage:clear-baseline", async (event) => {
-  if (!isValidSender(event.senderFrame) || !storageManager) return false;
-  return storageManager.execute("baseline:clear");
+  try {
+    if (!isValidSender(event) || !storageManager) return false;
+    return await storageManager.execute("baseline:clear");
+  } catch (err) {
+    writeLogEntry("warn", "ipc:storage:clear-baseline", err.message);
+    return false;
+  }
 });
 
 ipcMain.handle("storage:get-settings", async (event) => {
-  if (!isValidSender(event.senderFrame) || !storageManager) return {};
-  return storageManager.execute("settings:get-all");
+  try {
+    if (!isValidSender(event) || !storageManager) return {};
+    return await storageManager.execute("settings:get-all");
+  } catch (err) {
+    writeLogEntry("warn", "ipc:storage:get-settings", err.message);
+    return {};
+  }
 });
 
 ipcMain.handle("storage:set-setting", async (event, payload) => {
-  if (!isValidSender(event.senderFrame) || !storageManager) return false;
-  return storageManager.execute("settings:set", payload);
+  try {
+    if (!isValidSender(event) || !storageManager) return false;
+    return await storageManager.execute("settings:set", payload);
+  } catch (err) {
+    writeLogEntry("warn", "ipc:storage:set-setting", err.message);
+    return false;
+  }
 });
 
 ipcMain.handle("storage:clear-all", async (event) => {
-  if (!isValidSender(event.senderFrame) || !storageManager) return false;
-  return storageManager.execute("data:clear-all");
+  try {
+    if (!isValidSender(event) || !storageManager) return false;
+    return await storageManager.execute("data:clear-all");
+  } catch (err) {
+    writeLogEntry("warn", "ipc:storage:clear-all", err.message);
+    return false;
+  }
 });
 
 ipcMain.handle("storage:check-space", async (event) => {
-  if (!isValidSender(event.senderFrame) || !storageManager) return Number.MAX_SAFE_INTEGER;
-  return storageManager.checkFreeSpaceBytes();
+  try {
+    if (!isValidSender(event) || !storageManager) return Number.MAX_SAFE_INTEGER;
+    return await storageManager.checkFreeSpaceBytes();
+  } catch (err) {
+    writeLogEntry("warn", "ipc:storage:check-space", err.message);
+    return Number.MAX_SAFE_INTEGER;
+  }
 });
 
 // Audio Chunk Recording Handlers
 ipcMain.handle("audio:start-recording", async (event, id) => {
-  if (!isValidSender(event.senderFrame) || !storageManager) return null;
-  return storageManager.startAudioRecording(id);
+  try {
+    if (!isValidSender(event) || !storageManager) return null;
+    return await storageManager.startAudioRecording(id);
+  } catch (err) {
+    writeLogEntry("warn", "ipc:audio:start-recording", err.message);
+    return null;
+  }
 });
 
 ipcMain.handle("audio:append-chunk", async (event, { id, chunk }) => {
-  if (!isValidSender(event.senderFrame) || !storageManager) return false;
-  const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-  await storageManager.appendAudioChunk(id, buffer);
-  return true;
+  try {
+    if (!isValidSender(event) || !storageManager) return false;
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    await storageManager.appendAudioChunk(id, buffer);
+    return true;
+  } catch (err) {
+    writeLogEntry("warn", "ipc:audio:append-chunk", err.message);
+    return false;
+  }
 });
 
 ipcMain.handle("audio:finalize-recording", async (event, id) => {
-  if (!isValidSender(event.senderFrame) || !storageManager) return null;
-  return storageManager.finalizeAudioRecording(id);
+  try {
+    if (!isValidSender(event) || !storageManager) return null;
+    return await storageManager.finalizeAudioRecording(id);
+  } catch (err) {
+    writeLogEntry("warn", "ipc:audio:finalize-recording", err.message);
+    return null;
+  }
 });
 
 // Permissions Handlers
 ipcMain.handle("permissions:get-status", async (event, resource) => {
-  if (!isValidSender(event.senderFrame) || !permissionsService) return "unknown";
-  return permissionsService.getStatus(resource);
+  try {
+    if (!isValidSender(event) || !permissionsService) return "unknown";
+    return await permissionsService.getStatus(resource);
+  } catch (err) {
+    writeLogEntry("warn", "ipc:permissions:get-status", err.message);
+    return "unknown";
+  }
 });
 
 ipcMain.handle("permissions:request", async (event, resource) => {
-  if (!isValidSender(event.senderFrame) || !permissionsService) return false;
-  return permissionsService.requestAccess(resource);
+  try {
+    if (!isValidSender(event) || !permissionsService) return false;
+    return await permissionsService.requestAccess(resource);
+  } catch (err) {
+    writeLogEntry("warn", "ipc:permissions:request", err.message);
+    return false;
+  }
 });

@@ -22,8 +22,12 @@ import type {
 export class SqliteProfileService implements ProfileService {
   async getProfile(): Promise<UserProfile | null> {
     if (window.electronAPI?.storage) {
-      const p = await window.electronAPI.storage.getProfile();
-      if (p) return p;
+      try {
+        const p = await window.electronAPI.storage.getProfile();
+        if (p) return p;
+      } catch (err) {
+        console.warn("[SqliteProfileService] getProfile failed:", err);
+      }
     }
     return null;
   }
@@ -46,7 +50,11 @@ export class SqliteProfileService implements ProfileService {
     };
 
     if (window.electronAPI?.storage) {
-      await window.electronAPI.storage.saveProfile(merged);
+      try {
+        await window.electronAPI.storage.saveProfile(merged);
+      } catch (err) {
+        console.warn("[SqliteProfileService] saveProfile failed:", err);
+      }
     }
     return merged;
   }
@@ -55,7 +63,11 @@ export class SqliteProfileService implements ProfileService {
 export class SqlitePersonaService implements PersonaService {
   async getPersonas(): Promise<Persona[]> {
     if (window.electronAPI?.storage) {
-      return window.electronAPI.storage.getPersonas();
+      try {
+        return await window.electronAPI.storage.getPersonas();
+      } catch (err) {
+        console.warn("[SqlitePersonaService] getPersonas failed:", err);
+      }
     }
     return [];
   }
@@ -67,7 +79,11 @@ export class SqlitePersonaService implements PersonaService {
 
   async createPersona(persona: Omit<Persona, "id">): Promise<Persona> {
     if (window.electronAPI?.storage) {
-      return window.electronAPI.storage.createPersona(persona);
+      try {
+        return await window.electronAPI.storage.createPersona(persona);
+      } catch (err) {
+        console.warn("[SqlitePersonaService] createPersona failed:", err);
+      }
     }
     const newPersona: Persona = {
       ...persona,
@@ -78,7 +94,11 @@ export class SqlitePersonaService implements PersonaService {
 
   async updatePersona(id: string, updates: Partial<Persona>): Promise<Persona> {
     if (window.electronAPI?.storage) {
-      return window.electronAPI.storage.updatePersona(id, updates);
+      try {
+        return await window.electronAPI.storage.updatePersona(id, updates);
+      } catch (err) {
+        console.warn("[SqlitePersonaService] updatePersona failed:", err);
+      }
     }
     const current = await this.getPersona(id);
     return { ...(current || ({} as Persona)), ...updates, id };
@@ -86,7 +106,11 @@ export class SqlitePersonaService implements PersonaService {
 
   async deletePersona(id: string): Promise<boolean> {
     if (window.electronAPI?.storage) {
-      return window.electronAPI.storage.deletePersona(id);
+      try {
+        return await window.electronAPI.storage.deletePersona(id);
+      } catch (err) {
+        console.warn("[SqlitePersonaService] deletePersona failed:", err);
+      }
     }
     return true;
   }
@@ -95,7 +119,11 @@ export class SqlitePersonaService implements PersonaService {
 export class SqliteScenarioService implements ScenarioService {
   async getScenarios(): Promise<PracticeScenario[]> {
     if (window.electronAPI?.storage) {
-      return window.electronAPI.storage.getScenarios();
+      try {
+        return await window.electronAPI.storage.getScenarios();
+      } catch (err) {
+        console.warn("[SqliteScenarioService] getScenarios failed:", err);
+      }
     }
     return [];
   }
@@ -107,7 +135,11 @@ export class SqliteScenarioService implements ScenarioService {
 
   async createScenario(scenario: Omit<PracticeScenario, "id">): Promise<PracticeScenario> {
     if (window.electronAPI?.storage) {
-      return window.electronAPI.storage.createScenario(scenario);
+      try {
+        return await window.electronAPI.storage.createScenario(scenario);
+      } catch (err) {
+        console.warn("[SqliteScenarioService] createScenario failed:", err);
+      }
     }
     const newScenario: PracticeScenario = {
       ...scenario,
@@ -152,7 +184,11 @@ export class SqliteScenarioService implements ScenarioService {
 
   async deleteScenario(id: string): Promise<boolean> {
     if (window.electronAPI?.storage) {
-      return window.electronAPI.storage.deleteScenario(id);
+      try {
+        return await window.electronAPI.storage.deleteScenario(id);
+      } catch (err) {
+        console.warn("[SqliteScenarioService] deleteScenario failed:", err);
+      }
     }
     return true;
   }
@@ -161,41 +197,61 @@ export class SqliteScenarioService implements ScenarioService {
 export class SqliteRecordingService implements RecordingService {
   async getRecordings(): Promise<Recording[]> {
     if (window.electronAPI?.storage) {
-      return window.electronAPI.storage.getRecordings();
+      try {
+        return await window.electronAPI.storage.getRecordings();
+      } catch (err) {
+        console.warn("[SqliteRecordingService] getRecordings failed:", err);
+      }
     }
     return [];
   }
 
   async getRecording(id: string): Promise<Recording | null> {
     if (window.electronAPI?.storage) {
-      return window.electronAPI.storage.getRecording(id);
+      try {
+        return await window.electronAPI.storage.getRecording(id);
+      } catch (err) {
+        console.warn("[SqliteRecordingService] getRecording failed:", err);
+      }
     }
     return null;
   }
 
   async saveRecording(recording: Recording): Promise<Recording> {
     if (window.electronAPI?.storage) {
-      return window.electronAPI.storage.saveRecording(recording);
+      try {
+        return await window.electronAPI.storage.saveRecording(recording);
+      } catch (err) {
+        console.warn("[SqliteRecordingService] saveRecording failed:", err);
+      }
     }
     return recording;
   }
 
   async addNote(recordingId: string, timestampSeconds: number, text: string): Promise<void> {
     if (window.electronAPI?.storage) {
-      const note = {
-        id: `note-${Date.now()}`,
-        timestampSeconds,
-        text,
-        author: "User",
-        createdAt: new Date().toISOString(),
-      };
-      await window.electronAPI.storage.addNote(recordingId, note);
+      try {
+        const note = {
+          id: `note-${Date.now()}`,
+          timestampSeconds,
+          text,
+          author: "User",
+          createdAt: new Date().toISOString(),
+        };
+        await window.electronAPI.storage.addNote(recordingId, note);
+      } catch (err) {
+        console.warn("[SqliteRecordingService] addNote failed:", err);
+      }
     }
   }
 
   async deleteRecording(id: string): Promise<boolean> {
     if (window.electronAPI?.storage) {
-      return window.electronAPI.storage.deleteRecording(id);
+      try {
+        return await window.electronAPI.storage.deleteRecording(id);
+      } catch (err) {
+        console.warn("[SqliteRecordingService] deleteRecording failed:", err);
+      }
     }
     return true;
   }
@@ -322,21 +378,33 @@ export class SqliteBiometricsService implements BiometricsService {
 
   async getBaseline(): Promise<UserBaseline | null> {
     if (window.electronAPI?.storage) {
-      return window.electronAPI.storage.getBaseline();
+      try {
+        return await window.electronAPI.storage.getBaseline();
+      } catch (err) {
+        console.warn("[SqliteBaselineService] getBaseline failed:", err);
+      }
     }
     return null;
   }
 
   async saveBaseline(baseline: UserBaseline): Promise<UserBaseline> {
     if (window.electronAPI?.storage) {
-      return window.electronAPI.storage.saveBaseline(baseline);
+      try {
+        return await window.electronAPI.storage.saveBaseline(baseline);
+      } catch (err) {
+        console.warn("[SqliteBaselineService] saveBaseline failed:", err);
+      }
     }
     return baseline;
   }
 
   async clearBaseline(): Promise<void> {
     if (window.electronAPI?.storage) {
-      await window.electronAPI.storage.clearBaseline();
+      try {
+        await window.electronAPI.storage.clearBaseline();
+      } catch (err) {
+        console.warn("[SqliteBaselineService] clearBaseline failed:", err);
+      }
     }
   }
 

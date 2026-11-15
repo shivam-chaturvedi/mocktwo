@@ -115,39 +115,69 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   useEffect(() => {
     runDataMigration();
 
-    serviceRegistry.scenarios.getScenarios().then((list) => {
-      setScenarios(list);
-      if (list.length > 0) {
-        setSelectedScenario(list[0]);
-      }
-    });
+    serviceRegistry.scenarios
+      .getScenarios()
+      .then((list) => {
+        setScenarios(list);
+        if (list.length > 0) {
+          setSelectedScenario(list[0]);
+        }
+      })
+      .catch((err) => {
+        console.warn("[AppContext] Failed to load scenarios:", err);
+      });
 
-    serviceRegistry.personas.getPersonas().then((list) => {
-      setPersonas(list);
-    });
+    serviceRegistry.personas
+      .getPersonas()
+      .then((list) => {
+        setPersonas(list);
+      })
+      .catch((err) => {
+        console.warn("[AppContext] Failed to load personas:", err);
+      });
 
-    serviceRegistry.recordings.getRecordings().then((list) => {
-      setRecordings(list);
-      if (list.length > 0) {
-        setSelectedRecordingId(list[0].id);
-      }
-    });
+    serviceRegistry.recordings
+      .getRecordings()
+      .then((list) => {
+        setRecordings(list);
+        if (list.length > 0) {
+          setSelectedRecordingId(list[0].id);
+        }
+      })
+      .catch((err) => {
+        console.warn("[AppContext] Failed to load recordings:", err);
+      });
 
-    serviceRegistry.profile.getProfile().then((prof) => {
-      if (prof) {
-        setUser(prof);
-      }
-    });
+    serviceRegistry.profile
+      .getProfile()
+      .then((prof) => {
+        if (prof) {
+          setUser(prof);
+        }
+      })
+      .catch((err) => {
+        console.warn("[AppContext] Failed to load profile:", err);
+      });
 
-    serviceRegistry.settings.getSettings().then((s) => {
-      if (s) {
-        setSettings(s);
-      }
-    });
+    serviceRegistry.settings
+      .getSettings()
+      .then((s) => {
+        if (s) {
+          setSettings(s);
+        }
+      })
+      .catch((err) => {
+        console.warn("[AppContext] Failed to load settings:", err);
+      });
 
-    serviceRegistry.biometrics.getBaseline().then((b) => {
-      setBaseline(b);
-    });
+    serviceRegistry.biometrics
+      .getBaseline()
+      .then((b) => {
+        setBaseline(b);
+      })
+      .catch((err) => {
+        console.warn("[AppContext] Failed to load baseline:", err);
+      });
   }, []);
 
   // Test fixture helper for automated test suites

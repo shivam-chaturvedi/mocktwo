@@ -61,8 +61,12 @@ export const LiveSimulationScreen: React.FC = () => {
             mediaRecorder = new MediaRecorder(audioStream);
             mediaRecorder.ondataavailable = async (e) => {
               if (e.data && e.data.size > 0 && window.electronAPI?.audio) {
-                const buffer = await e.data.arrayBuffer();
-                await window.electronAPI.audio.appendChunk(sessionId, buffer);
+                try {
+                  const buffer = await e.data.arrayBuffer();
+                  await window.electronAPI.audio.appendChunk(sessionId, buffer);
+                } catch (err) {
+                  console.warn("[LiveSimulationScreen] Failed to append audio chunk:", err);
+                }
               }
             };
             mediaRecorder.start(1000);
