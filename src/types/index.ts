@@ -557,7 +557,8 @@ export function renderScenarioText(text: string, scenario?: PracticeScenario | n
       const personaNameParts = persona.name.split(" ");
       const personaLastName = personaNameParts[personaNameParts.length - 1];
       if (defaultLastName && personaLastName && defaultLastName !== personaLastName) {
-        const lastNameRegex = new RegExp(`\\b${defaultLastName}\\b`, "g");
+        const escapedLastName = defaultLastName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const lastNameRegex = new RegExp(`\\b${escapedLastName}\\b`, "g");
         rendered = rendered.replace(lastNameRegex, personaLastName);
       }
     }

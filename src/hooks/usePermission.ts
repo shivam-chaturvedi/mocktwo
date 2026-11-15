@@ -99,7 +99,7 @@ export function usePermission(resource: "camera" | "microphone"): UsePermissionR
           return false;
         }
       } catch (err) {
-        console.error(`[usePermission] Failed to request ${resource}:`, err);
+        console.error("[usePermission] Failed to request", resource, err);
         return false;
       }
     }

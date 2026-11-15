@@ -477,7 +477,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const triggerRandomPractice = useCallback(() => {
     if (scenarios.length === 0) return;
-    const chosen = scenarios[0];
+    const chosen = scenarios[Math.floor(Math.random() * scenarios.length)];
     openBriefing(chosen);
     setIsQuickPracticeOpen(false);
   }, [scenarios, openBriefing]);

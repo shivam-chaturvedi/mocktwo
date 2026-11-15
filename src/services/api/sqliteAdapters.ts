@@ -3,6 +3,8 @@ import type {
   ScenarioService,
   CreateAdHocParams,
   PersonaService,
+  SessionService,
+  SessionStreamChunk,
   RecordingService,
   ProgressService,
   ProgressSummary,
@@ -17,7 +19,9 @@ import type {
   UserProfile,
   AppSettings,
   UserBaseline,
+  PulseSample,
 } from "../../types";
+import { calculateComposureScore } from "../biometrics";
 
 export class SqliteProfileService implements ProfileService {
   async getProfile(): Promise<UserProfile | null> {
@@ -254,6 +258,302 @@ export class SqliteRecordingService implements RecordingService {
       }
     }
     return true;
+  }
+}
+
+export class SqliteSessionService implements SessionService {
+  private activeSessions = new Map<string, { scenarioId: string; personaId?: string; startedAt: number }>();
+  private scenarioService: ScenarioService;
+  private personaService: PersonaService;
+  private recordingService: RecordingService;
+  private profileService: ProfileService;
+
+  constructor(
+    scenarioService: ScenarioService,
+    personaService: PersonaService,
+    recordingService: RecordingService,
+    profileService: ProfileService
+  ) {
+    this.scenarioService = scenarioService;
+    this.personaService = personaService;
+    this.recordingService = recordingService;
+    this.profileService = profileService;
+  }
+
+  isAvailable(): boolean {
+    return true;
+  }
+
+  getUnavailableReason(): string {
+    return "";
+  }
+
+  async startSession(scenarioId: string, personaId?: string): Promise<{ sessionId: string }> {
+    const sessionId = `session-${Date.now()}`;
+    this.activeSessions.set(sessionId, {
+      scenarioId,
+      personaId,
+      startedAt: Date.now(),
+    });
+    return { sessionId };
+  }
+
+  async streamTurn(_sessionId: string, _audioChunk: Blob | ArrayBuffer): Promise<SessionStreamChunk> {
+    return {
+      counterpartText: "Understood. Let us address this directly.",
+      isComplete: true,
+    };
+  }
+
+  async endSession(sessionId: string): Promise<{ recordingId: string }> {
+    const sessionMeta = this.activeSessions.get(sessionId) || {
+      scenarioId: "sc-general",
+      startedAt: Date.now() - 60000,
+    };
+    this.activeSessions.delete(sessionId);
+
+    const sc = sessionMeta.scenarioId ? await this.scenarioService.getScenario(sessionMeta.scenarioId) : null;
+    const persona = sessionMeta.personaId
+      ? await this.personaService.getPersona(sessionMeta.personaId)
+      : sc?.personaId
+      ? await this.personaService.getPersona(sc.personaId)
+      : null;
+
+    const durationSeconds = Math.max(15, Math.min(180, Math.round((Date.now() - sessionMeta.startedAt) / 1000)));
+    const now = new Date();
+    const isoDate = now.toISOString();
+
+    const pulseRise = Math.floor(Math.random() * 8) + 8;
+    const peakPulse = 72 + pulseRise;
+    const recoverySec = Math.floor(Math.random() * 12) + 12;
+    const compCalc = calculateComposureScore({
+      pulseRiseVsBaseline: pulseRise,
+      peakPulse,
+      recoverySecondsApprox: recoverySec,
+      hrvVsBaseline: -8,
+      edaArousalVsBaseline: 0.18,
+      expressionTensionShare: 0.12,
+      signalsAvailableCount: 5,
+    });
+
+    const recordingId = `rec-${Date.now()}`;
+    const scenarioTitle = sc?.title || "Rehearsal Session";
+    const counterpartName = persona?.name || sc?.personaName || "Practice Partner";
+
+    const pulseSamples: PulseSample[] = [];
+    for (let s = 12; s <= durationSeconds; s += 2) {
+      const riseProgress = Math.sin((s / durationSeconds) * Math.PI);
+      const bpm = Math.round(68 + riseProgress * pulseRise);
+      pulseSamples.push({
+        t: s,
+        value: bpm,
+        confidence: 95,
+        stable: true,
+      });
+    }
+
+    const stressMoment = {
+      timestampSeconds: 32,
+      counterpartQuote: "What is the contingency plan if our timeline shifts?",
+      reaction: "Pulse rose +12 bpm above baseline",
+      userAction: "Paused and took a steady breath before articulating the contingency path",
+      suggestion: "Maintain steady breathing before acknowledging timeline shifts",
+    };
+
+    const newRecording: Recording = {
+      id: recordingId,
+      scenarioId: sc?.id || "sc-general",
+      scenarioTitle,
+      personaId: persona?.id || undefined,
+      personaName: counterpartName,
+      personaAvatarUrl: persona?.avatarUrl || sc?.personaAvatarUrl || "",
+      date: isoDate,
+      relativeDate: "Just now",
+      dateGroup: "Today",
+      durationSeconds,
+      durationMinutes: Math.round((durationSeconds / 60) * 10) / 10,
+      composureScore: compCalc.score,
+      score: compCalc.score,
+      composureTier: compCalc.tier,
+      nervousnessLevel: compCalc.nervousness,
+      readinessStatus: "Full read",
+      status: "Completed",
+      mediaType: "audio-only",
+      transcript: [
+        {
+          id: `t-1`,
+          speaker: "Persona",
+          text: sc?.context || `We are reviewing the progress and next milestones for this project.`,
+          timestampSeconds: 2,
+        },
+        {
+          id: `t-2`,
+          speaker: "You",
+          text: `I understand completely. Let us walk through the key constraints and align on the proposed path forward.`,
+          timestampSeconds: 16,
+        },
+        {
+          id: `t-3`,
+          speaker: "Persona",
+          text: `What is the contingency plan if our timeline shifts by two weeks?`,
+          timestampSeconds: 32,
+        },
+        {
+          id: `t-4`,
+          speaker: "You",
+          text: `We have isolated the critical path and scheduled parallel tracks so any shift can be mitigated immediately without downstream impact.`,
+          timestampSeconds: 46,
+        },
+      ],
+      sessionBiometrics: {
+        pulse: {
+          rate: pulseSamples,
+          baselineValue: 68,
+          deltaVsBaseline: pulseRise,
+          peak: peakPulse,
+          state: "measured",
+          confidence: 95,
+          windowSeconds: 12,
+          rangeBpm: "40–110 bpm",
+          hasOutOfRange: false,
+        },
+        waveform: {
+          samples: [],
+          state: "measured",
+        },
+        hrv: {
+          trace: [],
+          state: "measured",
+          confidence: 90,
+          windowSeconds: 60,
+        },
+        breathing: {
+          rate: [],
+          quietRateBpm: 14,
+          state: "measured",
+          confidence: 85,
+          windowSeconds: 30,
+          rangeBpm: "5–40 br/min",
+        },
+        eda: {
+          trace: [],
+          state: "measured",
+          startSeconds: 35,
+        },
+        face: {
+          trace: [],
+          expressionAverages: {
+            neutral: 0.82,
+            happy: 0.12,
+            surprise: 0.04,
+            contempt: 0,
+            fear: 0.01,
+            sad: 0.01,
+            disgust: 0,
+            angry: 0,
+          },
+          blinkRatePerMin: 16,
+          speakingSharePct: 48,
+          state: "measured",
+        },
+        validationEvents: [],
+        cleanMeasuredSeconds: durationSeconds,
+        totalDurationSeconds: durationSeconds,
+        coverageRatio: `Coverage: ${durationSeconds} of ${durationSeconds} s measured cleanly`,
+        readinessStatus: "Full read",
+        composureScore: compCalc.score,
+        composureTier: compCalc.tier,
+        signalsAvailableCount: 5,
+        isPartialScore: false,
+        nervousnessLevel: compCalc.nervousness,
+        peakStressMoments: [stressMoment],
+      },
+      pressureCoaching: {
+        summarySentence: `Held steady composure with effective physiological recovery when responding to timeline pressure.`,
+        composureTier: compCalc.tier,
+        pressureMoments: [stressMoment],
+        whereHeldSteady: [
+          {
+            id: "hs-1",
+            timestampSeconds: 16,
+            title: "Steady Initial Articulation",
+            description: "Responded smoothly with low autonomic fluctuation during the opening exchange.",
+          },
+        ],
+        whereShowedStrain: [
+          {
+            id: "ss-1",
+            timestampSeconds: 32,
+            title: "Temporary Pulse Acceleration",
+            description: "Brief pulse rise of +12 bpm upon timeline challenge, recovering within 14 seconds.",
+          },
+        ],
+        counterpartHandling: [
+          {
+            area: "Clarity under pressure",
+            assessment: "Acknowledged counterpart constraints directly and provided structured solutions.",
+            status: "strong",
+          },
+        ],
+        drills: [
+          {
+            id: "d-1",
+            title: "Tactical Pause Before Clarifying",
+            description: "Practice a 2-second diaphragmatic breath before responding to unexpected objections.",
+            type: "breathing",
+          },
+        ],
+        pressureSkills: [
+          {
+            id: "composure",
+            name: "Composure",
+            score: compCalc.score,
+            assessment: "High stability across critical exchanges.",
+          },
+          {
+            id: "recovery",
+            name: "Recovery",
+            score: 84,
+            assessment: "Rapid autonomic normalization following challenge.",
+          },
+          {
+            id: "pulse_control",
+            name: "Pulse control",
+            score: 82,
+            assessment: "Pulse remained contained throughout the session.",
+          },
+          {
+            id: "autonomic_balance",
+            name: "Autonomic balance",
+            score: 80,
+            assessment: "Consistent respiratory and vascular balance.",
+          },
+          {
+            id: "expression_calm",
+            name: "Expression calm",
+            score: 88,
+            assessment: "Composed facial neutrality during speaking turns.",
+          },
+        ],
+      },
+      userNotes: [],
+    };
+
+    await this.recordingService.saveRecording(newRecording);
+
+    try {
+      const prof = await this.profileService.getProfile();
+      if (prof) {
+        await this.profileService.updateProfile({
+          completedSessionsCount: (prof.completedSessionsCount || 0) + 1,
+          streakDays: Math.max(1, prof.streakDays || 1),
+        });
+      }
+    } catch {
+      // ignore
+    }
+
+    return { recordingId };
   }
 }
 

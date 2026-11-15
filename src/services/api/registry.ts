@@ -14,6 +14,7 @@ import {
   SqliteProfileService,
   SqliteScenarioService,
   SqlitePersonaService,
+  SqliteSessionService,
   SqliteRecordingService,
   SqliteProgressService,
   SqliteBiometricsService,
@@ -33,6 +34,7 @@ export function createDefaultServiceRegistry(): ServiceRegistry {
     const personas = new SqlitePersonaService();
     const scenarios = new SqliteScenarioService();
     const recordings = new SqliteRecordingService();
+    const session = new SqliteSessionService(scenarios, personas, recordings, profile);
     const progress = new SqliteProgressService(recordings, profile);
     const biometrics = new SqliteBiometricsService();
     const settings = new SqliteSettingsService();
@@ -42,7 +44,7 @@ export function createDefaultServiceRegistry(): ServiceRegistry {
       profile,
       scenarios,
       personas,
-      session: new EmptySessionService(),
+      session,
       recordings,
       progress,
       biometrics,

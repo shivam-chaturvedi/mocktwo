@@ -9,6 +9,7 @@
     "build": "tsc -b && vite build",
     "dist": "npm run build && electron-builder",
     "lint": "oxlint src",
+    "test": "node --test src/services/*.test.ts",
     "preview": "vite preview",
     "postinstall": "electron-builder install-app-deps"
   },

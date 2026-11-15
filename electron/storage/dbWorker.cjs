@@ -683,7 +683,8 @@ parentPort.on("message", ({ id, type, payload }) => {
           const isSafeFile = (filePath) => {
             if (!filePath || typeof filePath !== "string") return false;
             const resolved = path.resolve(filePath);
-            return resolved.startsWith(path.resolve(recordingsDir));
+            const base = path.resolve(recordingsDir);
+            return resolved === base || resolved.startsWith(base + path.sep);
           };
           if (row.audio_path && isSafeFile(row.audio_path) && fs.existsSync(row.audio_path)) {
             try { fs.unlinkSync(row.audio_path); } catch { /* ignore */ }

@@ -50,6 +50,10 @@ class StorageManager {
     this.worker.on("exit", (code) => {
       if (code !== 0 && !this.isClosing) {
         console.error(`[StorageManager] Worker exited with code ${code}. Restarting...`);
+        for (const [, pending] of this.pendingRequests.entries()) {
+          pending.reject(new Error(`StorageManager worker exited unexpectedly (code ${code})`));
+        }
+        this.pendingRequests.clear();
         this.initWorker();
       }
     });
@@ -58,6 +62,9 @@ class StorageManager {
   }
 
   async execute(type, payload = null) {
+    if (this.isClosing) {
+      return Promise.reject(new Error("StorageManager closed"));
+    }
     return new Promise((resolve, reject) => {
       const id = ++this.messageId;
       this.pendingRequests.set(id, { resolve, reject });
@@ -101,7 +108,8 @@ class StorageManager {
     }
     const targetPath = path.join(this.recordingsDir, `${cleanId}.${ext}`);
     const resolved = path.resolve(targetPath);
-    if (!resolved.startsWith(path.resolve(this.recordingsDir))) {
+    const base = path.resolve(this.recordingsDir);
+    if (resolved !== base && !resolved.startsWith(base + path.sep)) {
       throw new Error("Path traversal blocked");
     }
     return resolved;

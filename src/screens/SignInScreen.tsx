@@ -136,10 +136,18 @@ export const SignInScreen: React.FC = () => {
 
     if (pasted.length >= 6) {
       setIsLoading(true);
-      setTimeout(() => {
-        setIsLoading(false);
-        signIn(email);
-      }, 500);
+      setError("");
+      signIn(email)
+        .catch((err: unknown) => {
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Authentication service is unavailable offline. A connected mocktwo workspace backend is required."
+          );
+        })
+        .finally(() => {
+          setIsLoading(false);
+        });
     } else {
       inputRefs.current[pasted.length]?.focus();
     }

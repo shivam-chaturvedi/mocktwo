@@ -26,7 +26,7 @@ class PermissionsService {
       try {
         osStatus = this.systemPreferences.getMediaAccessStatus(resource);
       } catch (err) {
-        console.error(`[PermissionsService] Failed to get macOS media access status for ${resource}:`, err);
+        console.error("[PermissionsService] Failed to get macOS media access status for", resource, err);
         osStatus = "unknown";
       }
     } else if (process.platform === "win32" && this.systemPreferences) {
@@ -91,7 +91,7 @@ class PermissionsService {
           this.notifyRenderer();
           return granted || newStatus === "granted";
         } catch (err) {
-          console.error(`[PermissionsService] Error requesting macOS media access for ${resource}:`, err);
+          console.error("[PermissionsService] Error requesting macOS media access for", resource, err);
           return false;
         }
       } else {

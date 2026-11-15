@@ -353,9 +353,10 @@ function isValidSender(frameOrEvent) {
     if (!frame || !frame.url) return false;
     const url = frame.url;
     if (app.isPackaged) {
-      return url.startsWith("file://");
+      const appPath = app.getAppPath();
+      return url.startsWith(`file://${appPath}`);
     }
-    return url.startsWith(DEV_SERVER_URL) || url.startsWith("file://");
+    return url.startsWith(DEV_SERVER_URL) || url.startsWith(`file://${path.resolve(__dirname, "../dist")}`);
   } catch {
     // Gracefully handle frame disposal during rapid navigation/reload
     return false;
@@ -363,6 +364,15 @@ function isValidSender(frameOrEvent) {
 }
 
 let isSessionSecurityConfigured = false;
+
+function isAllowedAppOrigin(url) {
+  if (!url || typeof url !== "string") return false;
+  if (app.isPackaged) {
+    const appPath = app.getAppPath();
+    return url.startsWith(`file://${appPath}`);
+  }
+  return url.startsWith(DEV_SERVER_URL) || url.startsWith(`file://${path.resolve(__dirname, "../dist")}`);
+}
 
 function configureSessionSecurity() {
   if (isSessionSecurityConfigured) return;
@@ -386,11 +396,7 @@ function configureSessionSecurity() {
   // Session Permission Handlers: Media only for trusted application origin
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
     const url = details.requestingUrl || webContents.getURL();
-    const isAllowedOrigin = app.isPackaged
-      ? url.startsWith("file://")
-      : url.startsWith(DEV_SERVER_URL) || url.startsWith("file://");
-
-    if (isAllowedOrigin && permission === "media") {
+    if (isAllowedAppOrigin(url) && permission === "media") {
       callback(true);
     } else {
       writeLogEntry("warn", "security:permissionDenied", `Denied request for '${permission}' from '${url}'`);
@@ -399,11 +405,7 @@ function configureSessionSecurity() {
   });
 
   session.defaultSession.setPermissionCheckHandler((webContents, permission, requestingOrigin) => {
-    const isAllowedOrigin = app.isPackaged
-      ? requestingOrigin.startsWith("file://")
-      : requestingOrigin.startsWith(DEV_SERVER_URL) || requestingOrigin.startsWith("file://");
-
-    return isAllowedOrigin && permission === "media";
+    return isAllowedAppOrigin(requestingOrigin) && permission === "media";
   });
 }
 
@@ -439,17 +441,20 @@ function createWindow() {
   // Block unexpected window opens
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     writeLogEntry("info", "navigation:windowOpenBlocked", `Blocked window.open for ${url}`);
-    if (url.startsWith("https://")) {
-      shell.openExternal(url);
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol === "https:") {
+        shell.openExternal(url);
+      }
+    } catch {
+      // invalid URL
     }
     return { action: "deny" };
   });
 
   // Restrict in-window navigation
   mainWindow.webContents.on("will-navigate", (e, url) => {
-    const isAllowed = app.isPackaged
-      ? url.startsWith("file://")
-      : url.startsWith(DEV_SERVER_URL) || url.startsWith("file://");
+    const isAllowed = isAllowedAppOrigin(url);
     if (!isAllowed) {
       e.preventDefault();
       writeLogEntry("warn", "navigation:willNavigateBlocked", `Blocked navigation to ${url}`);

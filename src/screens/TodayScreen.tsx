@@ -142,7 +142,7 @@ export const TodayScreen: React.FC = () => {
       openQuickPractice();
       return;
     }
-    const nextScenario = scenarios[0];
+    const nextScenario = scenarios[Math.floor(Math.random() * scenarios.length)];
     openBriefing(nextScenario);
   }, [scenarios, openBriefing, openQuickPractice]);
 
