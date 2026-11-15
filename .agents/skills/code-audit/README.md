@@ -1,0 +1,303 @@
+# code-audit
+
+> A Claude Code skill that **orchestrates real tools** — static analyzers, CVE scanners, secret history scanners, git archaeology — and layers Claude's reasoning on top. Runs locally. Designed as the **gate before commit or PR**.
+
+This is intentionally different from Claude's built-in code review. Built-in review is fast, reasoning-only, and great in-flow. `code-audit` is the deep pass: it actually runs your project's linters, queries CVE databases, scans git history for secrets, and analyses churn/complexity hotspots — things raw prompting can't do.
+
+---
+
+## What makes this different
+
+| | Claude's built-in review | `code-audit` |
+|---|---|---|
+| Speed | Seconds | 1–3 minutes |
+| Reasoning | ✅ | ✅ (baked in) |
+| Real tool execution | ❌ | ✅ (ruff, eslint, gosec, semgrep, bandit, etc.) |
+| CVE scanning | ❌ | ✅ (OSV.dev + `pip-audit`/`npm audit`/etc.) |
+| Secrets in git history | ❌ | ✅ (gitleaks/trufflehog) |
+| Git hotspot analysis | ❌ | ✅ (churn × complexity, ownership) |
+| Convention compliance | ❌ | ✅ (enforces CLAUDE.md, AGENTS.md, ADRs) |
+| Stateful across reviews | ❌ | ✅ (`.codereview-baseline.json`) |
+| License compliance | ❌ | ✅ (copyleft detection) |
+
+---
+
+## The pipeline
+
+Every invocation runs this 9-step pipeline:
+
+```
+1. Resolve target + load config (baseline, ignore, conventions)
+        ↓
+2. Claude reasoning pass (bugs, security, patterns)
+        ↓
+3. Static analysis — run project's real linters/analyzers
+        ↓
+4. CVE + license scanning (CLI tools + OSV.dev fallback)
+        ↓
+5. Secrets in git history (gitleaks/trufflehog)
+        ↓
+6. Git intelligence (hotspots, ownership, temporal coupling)
+        ↓
+7. Convention compliance (CLAUDE.md, AGENTS.md, ADRs)
+        ↓
+8. Merge + dedupe + apply baseline + ignore
+        ↓
+9. Structured report with severity, confidence, tool provenance
+```
+
+**Every tool step is opportunistic** — uses what's installed, falls back to reasoning if nothing is available, and notes which tools would have added depth.
+
+---
+
+## Installation
+
+### Option A — Download from Releases (easiest)
+
+1. Go to the [Releases](../../releases) page and download `code-audit.skill`.
+2. Open **Claude Code**.
+3. **Customize/Settings → Skills → Upload skill** → select the file.
+
+### Option B — Build from source
+
+```bash
+git clone https://github.com/GabrielBhh/code-audit.git
+cd ..
+zip -r code-audit.skill code-audit/ --exclude "*.git*" --exclude "*.skill"
+```
+
+Upload via **Customize/Settings → Skills → Upload skill**.
+
+---
+
+## Usage
+
+Type `/code-audit` followed by a target. All commands run locally (except CVE/license lookups which query public APIs).
+
+### By scope
+
+| Command | What gets audited |
+|---|---|
+| `/code-audit` | All uncommitted changes (`git diff HEAD`) |
+| `/code-audit staged` | Only staged changes |
+| `/code-audit unstaged` | Only unstaged changes |
+| `/code-audit all` | Entire codebase |
+
+### By path
+
+| Command | What gets audited |
+|---|---|
+| `/code-audit src/` | All files in `src/` |
+| `/code-audit src/auth.py` | Single file |
+
+### By commit or branch
+
+| Command | What gets audited |
+|---|---|
+| `/code-audit last commit` | Most recent commit |
+| `/code-audit a3f92c1` | Specific commit by hash |
+| `/code-audit my-feature-branch` | Branch vs main |
+| `/code-audit a3f92c1..HEAD` | Range of commits |
+
+### Baseline management
+
+| Command | Effect |
+|---|---|
+| `/code-audit baseline update` | Re-snapshot current findings as accepted baseline |
+
+---
+
+## When to use
+
+**This is a gate, not an in-flow helper.**
+
+| Situation | Use |
+|---|---|
+| Writing code, asking questions | Claude directly (no skill) |
+| Quick sanity check | `review my staged changes` (Claude's built-in) |
+| Final pass before commit | `/code-audit staged` |
+| Before opening a PR | `/code-audit <branch>` |
+| Weekly drift check | `/code-audit all` |
+| Initial adoption on mature codebase | `/code-audit all` → `/code-audit baseline update` |
+
+Claude's built-in review is your **rough-draft editor**. This skill is the **fact-checking pass** before shipping.
+
+---
+
+## Tool orchestration — what it runs
+
+The skill tries the following tools per language, uses whatever is installed, and gracefully skips what isn't. You don't have to install any of them — but the more you have, the richer the audit.
+
+| Language | Tools the skill will run if available |
+|---|---|
+| Python | `ruff`, `mypy`, `bandit`, `semgrep`, `vulture`, `pip-audit` |
+| JavaScript / TypeScript | `eslint`, `tsc --noEmit`, `biome`, `semgrep`, `ts-prune`, `npm audit` |
+| Go | `go vet`, `staticcheck`, `golangci-lint`, `gosec`, `govulncheck` |
+| Rust | `cargo check`, `cargo clippy`, `cargo audit`, `cargo-udeps` |
+| Ruby | `rubocop`, `brakeman`, `bundle audit` |
+| PHP | `phpstan`, `psalm`, `composer audit` |
+| Java / Kotlin | `spotbugs`, `detekt`, `ktlint` |
+| Shell | `shellcheck` |
+| Terraform | `tflint`, `tfsec`, `checkov` |
+| Docker | `hadolint`, `trivy`, `docker scout` |
+| Git history | `gitleaks`, `trufflehog` |
+| Licenses | `pip-licenses`, `license-checker`, `cargo-license` |
+
+Missing tools appear in a "Tooling suggestions" section with the one-line install command — take them or leave them.
+
+---
+
+## Baseline mode
+
+Most teams adopting a code audit tool drown in pre-existing findings. Baseline mode fixes this.
+
+1. Run `/code-audit all` on a fresh repo
+2. Run `/code-audit baseline update` — snapshots all current findings as accepted
+3. Future audits only report **new regressions**, not legacy findings
+
+The baseline file (`.codereview-baseline.json`) should be **committed to the repo** so the whole team shares it.
+
+Each accepted finding has an `acknowledged` field with a human explanation ("Legacy code. Migration in JIRA-1234"). Empty explanations are allowed but flagged for review.
+
+See `references/baseline-and-state.md` for the full schema.
+
+---
+
+## Per-line ignores
+
+`.codereview-ignore` at repo root supports glob-style exclusions:
+
+```
+# Ignore files
+generated/**
+*_pb.go
+
+# Ignore specific rules in specific files
+src/legacy/db.py:bandit:B608
+```
+
+Inline suppression comments require a reason:
+
+```python
+password = "hunter2"  # codereview: ignore bandit:B105  (test fixture)
+```
+
+No reason = still flagged. This prevents silent muting.
+
+---
+
+## Convention compliance
+
+The skill reads the following if present and **cites them** when a finding matches a team decision:
+
+- `CLAUDE.md`, `AGENTS.md`, `.claude/instructions.md`
+- `CONTRIBUTING.md`, `ARCHITECTURE.md`, `STYLE.md`
+- `docs/adr/*.md` (only those with `Status: Accepted`)
+- Tool configs: `.editorconfig`, `.eslintrc`, `ruff.toml`, `.golangci.yml`, etc.
+
+Findings that violate an ADR get bumped in severity and **cite the source document and line** — turning generic style suggestions into "violates ADR-012."
+
+---
+
+## Supported languages
+
+Python · JavaScript · TypeScript · Go · Java · Kotlin · Ruby · Rust · C · C++ · PHP · C# · Dart/Flutter · SQL · Shell/Bash · Swift/SwiftUI · Dockerfile · YAML · Terraform
+
+---
+
+## File structure
+
+```
+code-audit/
+├── SKILL.md                               # Skill definition (loaded by Claude Code)
+├── README.md                              # This file
+└── references/
+    ├── lang/                              # Per-language rules (load only the detected one)
+    │   ├── _common.md                     #   — language-agnostic simplification
+    │   ├── python.md
+    │   ├── javascript-typescript.md
+    │   ├── go.md · rust.md · ruby.md · php.md
+    │   ├── java-kotlin.md · csharp.md · dart-flutter.md
+    │   ├── c-cpp.md · sql.md · shell.md
+    │   ├── swift.md                       #   — includes Apple Liquid Glass / iOS 26
+    │   └── dockerfile-iac.md
+    ├── security/                          # Security rules (load by applicability)
+    │   ├── core-owasp.md                  #   — always loaded
+    │   ├── web-patterns.md                #   — web languages: XSS, SSTI, XXE, CSRF, etc.
+    │   ├── api-auth.md                    #   — JWT / OAuth / session code
+    │   ├── native-patterns.md             #   — C/C++/unsafe Rust
+    │   └── secrets-regex.md               #   — only in secret-scanning step
+    ├── tools/                             # Tool orchestration (load per pipeline step)
+    │   ├── static-analysis.md             #   — Step 3 SAST tools per language
+    │   ├── cve-scanning.md                #   — Step 4 CVE + OSV.dev
+    │   ├── secret-history.md              #   — Step 5 gitleaks/trufflehog
+    │   ├── license-compliance.md          #   — Step 4 license scans
+    │   └── mutation-testing.md            #   — optional, opt-in
+    ├── api-design-rules.md                # Load only if REST/GraphQL/gRPC detected
+    ├── git-intelligence-rules.md          # Load only for `all`/branch scope
+    ├── convention-compliance-rules.md     # Load only if convention docs exist
+    └── baseline-and-state.md              # Load only if baseline file exists
+```
+
+**Lazy-loading design**: files are loaded only when needed. A typical small Python pre-commit audit loads ~5K tokens of references (vs ~16K in v2.0.x). See the SKILL.md Step 2 table for exact load rules.
+
+---
+
+## Requirements
+
+- [Claude Code](https://claude.ai/code)
+- A git repository
+- Network access (for CVE/license database lookups)
+- **Optional** tools — whatever you install adds depth. Nothing is required.
+
+---
+
+## Roadmap
+
+Things being considered for v2.1+:
+
+- Framework-specific reference files: `react-rules.md`, `django-rules.md`, `rails-rules.md`, `fastapi-rules.md`, `nextjs-rules.md`
+- Domain-specific modes: financial (money as `Decimal`), ML (data leakage), blockchain (reentrancy)
+- SARIF output format for CI integration (GitHub Code Scanning, GitLab)
+- Pre-commit hook installer: `/code-audit install-hook`
+- Mutation testing integration for deep test-quality review
+
+Opinions and PRs welcome — see Contributing below.
+
+---
+
+## Contributing
+
+Contributions are welcome. Especially:
+
+- New tool integrations in `references/tool-orchestration-rules.md`
+- Framework-specific reference files
+- Git-intelligence heuristics
+- Convention parsers for more project docs
+
+### To propose a change:
+
+1. Fork this repository
+2. Edit the relevant `references/*.md` file or `SKILL.md`
+3. Repackage (from the parent directory):
+   ```bash
+   zip -r code-audit.skill code-audit/ --exclude "*.git*" --exclude "*.skill"
+   ```
+4. Open a PR with a short description of what you added and why
+
+**When adding a new review dimension**: think carefully about what raw Claude reasoning *can't* do. The skill's value is specifically in things that require execution, state, or data from external sources. Generic "here's another best practice" entries should live in Claude's default reasoning, not here.
+
+---
+
+## License
+
+MIT
+
+---
+
+## History
+
+- `v1.0–1.1`: Originally named `claude-local-code-review`. Broad multi-language reviewer.
+- `v2.0`: Renamed to `claude-code-audit` and repositioned around tool orchestration (Option B).
+- `v2.0.1`: Renamed to `code-audit` — the skill-name field cannot contain reserved words.
+- `v2.0.2`: Lazy-loading refactor. Reference files split per-language and per-pipeline-step. Typical audit token cost reduced ~60%.
