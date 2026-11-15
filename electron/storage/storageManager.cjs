@@ -48,7 +48,7 @@ class StorageManager {
     });
 
     this.worker.on("exit", (code) => {
-      if (code !== 0) {
+      if (code !== 0 && !this.isClosing) {
         console.error(`[StorageManager] Worker exited with code ${code}. Restarting...`);
         this.initWorker();
       }
@@ -146,6 +146,7 @@ class StorageManager {
   }
 
   close() {
+    this.isClosing = true;
     if (this.worker) {
       this.worker.terminate();
     }

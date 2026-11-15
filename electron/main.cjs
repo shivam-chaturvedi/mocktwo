@@ -284,6 +284,10 @@ function buildMenu() {
           click: () => sendAction("toggle-search"),
         },
         { type: "separator" },
+        { role: "reload" },
+        { role: "forceReload" },
+        { role: "toggleDevTools" },
+        { type: "separator" },
         { role: "togglefullscreen" },
       ],
     },
@@ -374,8 +378,8 @@ function createWindow() {
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     const isDev = !app.isPackaged;
     const csp = isDev
-      ? `default-src 'self' ${DEV_SERVER_URL}; script-src 'self' 'unsafe-eval' ${DEV_SERVER_URL}; style-src 'self' 'unsafe-inline' ${DEV_SERVER_URL}; img-src 'self' data: blob: https:; media-src 'self' blob:; worker-src 'self' blob:; connect-src 'self' ws://${DEV_HOST}:${DEV_PORT} ${DEV_SERVER_URL}; object-src 'none'; base-uri 'none'; frame-ancestors 'none';`
-      : `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob:; worker-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none';`;
+      ? `default-src 'self' ${DEV_SERVER_URL}; script-src 'self' 'unsafe-inline' 'unsafe-eval' ${DEV_SERVER_URL}; style-src 'self' 'unsafe-inline' ${DEV_SERVER_URL}; font-src 'self' data: ${DEV_SERVER_URL}; img-src 'self' data: blob: https:; media-src 'self' blob:; worker-src 'self' blob:; connect-src 'self' ws://${DEV_HOST}:${DEV_PORT} ${DEV_SERVER_URL} ws://localhost:* http://localhost:*; object-src 'none'; base-uri 'none'; frame-ancestors 'none';`
+      : `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; media-src 'self' blob:; worker-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none';`;
 
     callback({
       responseHeaders: {
@@ -488,6 +492,14 @@ function createWindow() {
 
   mainWindow.webContents.on("did-finish-load", () => {
     mainWindow.webContents.setVisualZoomLevelLimits(1, 1).catch(() => {});
+  });
+
+  mainWindow.webContents.on("console-message", (_event, level, message, line, sourceId) => {
+    const levelStr = ["verbose", "info", "warning", "error"][level] || "log";
+    console.log(`[renderer ${levelStr}] ${message}`);
+    if (level >= 3) {
+      writeLogEntry("error", "renderer:console", message, { line, sourceId });
+    }
   });
 
   mainWindow.on("resize", () => debouncedSaveBounds(mainWindow));
