@@ -8,6 +8,7 @@ import type {
   AppSettings,
   UserBaseline,
 } from "../types";
+import type { StudioScenarioInput } from "../services/api/types";
 
 export interface AppContextType {
   currentScreen: Screen;
@@ -72,9 +73,10 @@ export interface AppContextType {
   
   // Studio Sheet (Create Scenario & Persona)
   isStudioOpen: boolean;
-  studioInitialTab: "scenario" | "guest" | "persona";
-  openStudio: (initialTab?: "scenario" | "guest" | "persona") => void;
+  studioInitialTab: "scenario" | "persona";
+  openStudio: (initialTab?: "scenario" | "persona") => void;
   closeStudio: () => void;
+  saveStudioScenario: (data: StudioScenarioInput) => Promise<PracticeScenario>;
 
   // Quick Practice
   isQuickPracticeOpen: boolean;

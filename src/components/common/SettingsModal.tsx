@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useApp } from "../../context";
 import { Button } from "./Button";
 import { EmptyState } from "./EmptyState";
@@ -48,6 +48,16 @@ export const SettingsModal: React.FC = () => {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
 
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const micTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+      if (micTimeoutRef.current) clearTimeout(micTimeoutRef.current);
+    };
+  }, []);
+
   const cameraPermission = usePermission("camera");
   const micPermission = usePermission("microphone");
 
@@ -74,7 +84,8 @@ export const SettingsModal: React.FC = () => {
     e.preventDefault();
     updateUser({ name, role, workspace, property: workspace });
     setIsSaved(true);
-    setTimeout(() => setIsSaved(false), 2000);
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(() => setIsSaved(false), 2000);
   };
 
   const handleRecalibrateBaseline = async () => {
@@ -381,7 +392,8 @@ export const SettingsModal: React.FC = () => {
                       size="sm"
                       onClick={() => {
                         setIsTestingMic(true);
-                        setTimeout(() => setIsTestingMic(false), 2000);
+                        if (micTimeoutRef.current) clearTimeout(micTimeoutRef.current);
+                        micTimeoutRef.current = setTimeout(() => setIsTestingMic(false), 2000);
                       }}
                     >
                       {isTestingMic ? "Testing (98%)…" : "Test Mic"}

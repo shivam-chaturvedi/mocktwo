@@ -3,6 +3,7 @@ import { useApp } from "../context";
 import { Badge } from "../components/common/Badge";
 import { CategoryIcon } from "../components/common/CategoryIcon";
 import { EmptyState } from "../components/common/EmptyState";
+import { LazyAvatarImage } from "../components/common/LazyAvatarImage";
 import {
   Search,
   ArrowRight,
@@ -15,7 +16,6 @@ import {
   Headset,
   ConciergeBell,
   Target,
-  Clock,
   Copy,
   Trash2,
   Compass,
@@ -51,6 +51,38 @@ export const ScenariosScreen: React.FC = () => {
   const [selectedPersonaId, setSelectedPersonaId] = useState<string>("");
   const [scenarioToDelete, setScenarioToDelete] = useState<PracticeScenario | null>(null);
   const [isRetryingSync, setIsRetryingSync] = useState(false);
+
+  // Pagination batching (configured from environment/config)
+  const [pageSize, setPageSize] = useState<number>(20);
+  const [visibleScenarioCount, setVisibleScenarioCount] = useState<number>(20);
+  const [visiblePersonaCount, setVisiblePersonaCount] = useState<number>(20);
+  const [seedState, setSeedState] = useState<{ isSeeding?: boolean; personasStatus?: string; scenariosStatus?: string; lastError?: string | null } | null>(null);
+
+  useEffect(() => {
+    let unmounted = false;
+    window.electronAPI?.getClientConfig?.().then((cfg) => {
+      if (!unmounted && cfg?.uiListPageSize) {
+        setPageSize(cfg.uiListPageSize);
+        setVisibleScenarioCount(cfg.uiListPageSize);
+        setVisiblePersonaCount(cfg.uiListPageSize);
+      }
+    });
+
+    window.electronAPI?.seedGetStatus?.().then((st) => {
+      if (!unmounted && st) setSeedState(st);
+    });
+
+    const cleanup = window.electronAPI?.onSeedProgress?.((progress) => {
+      if (!unmounted && progress) {
+        setSeedState(progress);
+      }
+    });
+
+    return () => {
+      unmounted = true;
+      if (typeof cleanup === "function") cleanup();
+    };
+  }, []);
 
   // Close category popover on click outside
   useEffect(() => {
@@ -149,6 +181,43 @@ export const ScenariosScreen: React.FC = () => {
         backgroundColor: "var(--bg-window)",
       }}
     >
+      {/* Sub-toolbar */}
+      {seedState?.lastError && (
+        <div
+          style={{
+            padding: "6px 24px",
+            backgroundColor: "rgba(255, 159, 10, 0.12)",
+            borderBottom: "1px solid rgba(255, 159, 10, 0.25)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            fontSize: "12px",
+            color: "var(--text-primary)",
+          }}
+        >
+          <span>Avatar synchronization: {seedState.lastError}</span>
+          <button
+            type="button"
+            onClick={() => {
+              setSeedState((prev) => (prev ? { ...prev, lastError: null } : null));
+              window.electronAPI?.seedRetry?.();
+            }}
+            className="mac-btn focus-ring"
+            style={{
+              padding: "2px 10px",
+              fontSize: "11px",
+              fontWeight: 600,
+              backgroundColor: "var(--bg-elevated)",
+              border: "1px solid var(--separator)",
+              borderRadius: "var(--radius-xs)",
+              cursor: "pointer",
+              color: "var(--accent-blue)",
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      )}
       {/* 44px Sub-Toolbar with Sub-Tabs */}
       <div
         style={{
@@ -490,75 +559,85 @@ export const ScenariosScreen: React.FC = () => {
                     }}
                   />
                 ) : (
-                  filteredPersonas.map((p) => {
-                    const isSelected = p.id === activePersona?.id;
-                    return (
-                      <div
-                        key={p.id}
-                        onClick={() => setSelectedPersonaId(p.id)}
-                        className="mac-list-row"
-                        style={{
-                          padding: "10px 12px",
-                          borderRadius: "var(--radius-md)",
-                          backgroundColor: isSelected ? "var(--bg-hover)" : "transparent",
-                          borderLeft: isSelected ? "3px solid var(--accent-blue)" : "3px solid transparent",
-                          marginBottom: "3px",
-                          cursor: "pointer",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "12px",
-                        }}
-                      >
+                  <>
+                    {filteredPersonas.slice(0, visiblePersonaCount).map((p) => {
+                      const isSelected = p.id === activePersona?.id;
+                      return (
                         <div
+                          key={p.id}
+                          onClick={() => setSelectedPersonaId(p.id)}
+                          className="mac-list-row"
                           style={{
-                            width: "36px",
-                            height: "36px",
-                            borderRadius: "50%",
-                            backgroundColor: "var(--bg-control)",
-                            display: "grid",
-                            placeItems: "center",
-                            fontSize: "12px",
-                            fontWeight: 650,
-                            color: "var(--text-primary)",
-                            overflow: "hidden",
-                            border: "1px solid var(--separator)",
-                            flexShrink: 0,
+                            padding: "10px 12px",
+                            borderRadius: "var(--radius-md)",
+                            backgroundColor: isSelected ? "var(--bg-hover)" : "transparent",
+                            borderLeft: isSelected ? "3px solid var(--accent-blue)" : "3px solid transparent",
+                            marginBottom: "3px",
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "12px",
                           }}
                         >
-                          {p.avatarUrl ? (
-                            <img src={p.avatarUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                          ) : (
-                            p.monogram || p.name.slice(0, 2)
-                          )}
-                        </div>
-                        <div style={{ minWidth: 0, flex: 1 }}>
-                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "6px" }}>
-                            <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
-                              {p.name}
+                          <LazyAvatarImage
+                            src={p.avatarUrl}
+                            name={p.name}
+                            size={36}
+                          />
+                          <div style={{ minWidth: 0, flex: 1 }}>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "6px" }}>
+                              <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
+                                {p.name}
+                              </div>
+                              {!p.tavusFaceId && (
+                                <span style={{ fontSize: "10px", padding: "1px 6px", borderRadius: "8px", backgroundColor: "rgba(255, 159, 10, 0.15)", color: "var(--accent-orange)", fontWeight: 600, flexShrink: 0 }}>
+                                  Avatar pending
+                                </span>
+                              )}
+                              {p.syncStatus === "synced" && p.tavusFaceId && (
+                                <span style={{ fontSize: "10px", padding: "1px 6px", borderRadius: "8px", backgroundColor: "rgba(48, 209, 88, 0.15)", color: "var(--accent-green)", fontWeight: 600, flexShrink: 0 }}>
+                                  Synced
+                                </span>
+                              )}
+                              {p.syncStatus === "syncing" && (
+                                <span style={{ fontSize: "10px", padding: "1px 6px", borderRadius: "8px", backgroundColor: "rgba(10, 132, 255, 0.15)", color: "var(--accent-blue)", fontWeight: 600, flexShrink: 0 }}>
+                                  Syncing…
+                                </span>
+                              )}
+                              {p.syncStatus === "failed" && (
+                                <span style={{ fontSize: "10px", padding: "1px 6px", borderRadius: "8px", backgroundColor: "rgba(255, 69, 58, 0.15)", color: "var(--accent-red)", fontWeight: 600, flexShrink: 0 }}>
+                                  Failed
+                                </span>
+                              )}
                             </div>
-                            {p.syncStatus === "synced" && (
-                              <span style={{ fontSize: "10px", padding: "1px 6px", borderRadius: "8px", backgroundColor: "rgba(48, 209, 88, 0.15)", color: "var(--accent-green)", fontWeight: 600, flexShrink: 0 }}>
-                                Synced
-                              </span>
-                            )}
-                            {p.syncStatus === "syncing" && (
-                              <span style={{ fontSize: "10px", padding: "1px 6px", borderRadius: "8px", backgroundColor: "rgba(10, 132, 255, 0.15)", color: "var(--accent-blue)", fontWeight: 600, flexShrink: 0 }}>
-                                Syncing…
-                              </span>
-                            )}
-                            {p.syncStatus === "failed" && (
-                              <span style={{ fontSize: "10px", padding: "1px 6px", borderRadius: "8px", backgroundColor: "rgba(255, 69, 58, 0.15)", color: "var(--accent-red)", fontWeight: 600, flexShrink: 0 }}>
-                                Failed
-                              </span>
-                            )}
-                          </div>
-                          <div style={{ fontSize: "11.5px", color: "var(--text-secondary)", marginTop: "1px", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
-                            {p.title} · {formatContextSetting(p.contextSetting)}
+                            <div style={{ fontSize: "11.5px", color: "var(--text-secondary)", marginTop: "1px", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
+                              {p.title} · {formatContextSetting(p.contextSetting)}
+                            </div>
                           </div>
                         </div>
+                      );
+                    })}
+                    {filteredPersonas.length > visiblePersonaCount && (
+                      <div style={{ padding: "8px 12px", textAlign: "center" }}>
+                        <button
+                          type="button"
+                          onClick={() => setVisiblePersonaCount((prev) => prev + pageSize)}
+                          style={{
+                            padding: "6px 14px",
+                            fontSize: "12px",
+                            fontWeight: 600,
+                            color: "var(--accent-blue)",
+                            backgroundColor: "var(--bg-control)",
+                            border: "1px solid var(--separator)",
+                            borderRadius: "var(--radius-sm)",
+                            cursor: "pointer",
+                          }}
+                        >
+                          Load more personas ({filteredPersonas.length - visiblePersonaCount} remaining)
+                        </button>
                       </div>
-                    );
-                  })
+                    )}
+                  </>
                 )
               ) : scenarios.length === 0 ? (
                 <EmptyState
@@ -584,47 +663,66 @@ export const ScenariosScreen: React.FC = () => {
                   }}
                 />
               ) : (
-                sortedScenarios.map((sc) => {
-                  const isSelected = sc.id === activeScenario?.id;
-                  return (
-                    <div
-                      key={sc.id}
-                      onClick={() => setSelectedScenarioId(sc.id)}
-                      className="mac-list-row"
-                      style={{
-                        padding: "10px 12px",
-                        borderRadius: "var(--radius-md)",
-                        backgroundColor: isSelected ? "var(--bg-hover)" : "transparent",
-                        borderLeft: isSelected ? "3px solid var(--accent-blue)" : "3px solid transparent",
-                        marginBottom: "3px",
-                        cursor: "pointer",
-                        display: "flex",
-                        alignItems: "flex-start",
-                        gap: "10px",
-                      }}
-                    >
-                      <div style={{ marginTop: "2px", flexShrink: 0 }}>
-                        <CategoryIcon category={sc.interactionType} size={15} />
+                <>
+                  {sortedScenarios.slice(0, visibleScenarioCount).map((sc) => {
+                    const isSelected = sc.id === activeScenario?.id;
+                    return (
+                      <div
+                        key={sc.id}
+                        onClick={() => setSelectedScenarioId(sc.id)}
+                        className="mac-list-row"
+                        style={{
+                          padding: "10px 12px",
+                          borderRadius: "var(--radius-md)",
+                          backgroundColor: isSelected ? "var(--bg-hover)" : "transparent",
+                          borderLeft: isSelected ? "3px solid var(--accent-blue)" : "3px solid transparent",
+                          marginBottom: "3px",
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "flex-start",
+                          gap: "10px",
+                        }}
+                      >
+                        <div style={{ marginTop: "2px", flexShrink: 0 }}>
+                          <CategoryIcon category={sc.interactionType} size={15} />
+                        </div>
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
+                            {sc.title}
+                          </div>
+                          <div style={{ fontSize: "11.5px", color: "var(--text-secondary)", marginTop: "2px", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
+                            With {sc.personaName || sc.guestName || "Counterpart"} ({formatContextSetting(sc.contextSetting)})
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "6px" }}>
+                            <span style={{ fontSize: "10px", padding: "1px 6px", borderRadius: "3px", backgroundColor: "var(--bg-control)", color: "var(--text-tertiary)" }}>
+                              {sc.difficulty}
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                      <div style={{ minWidth: 0, flex: 1 }}>
-                        <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
-                          {sc.title}
-                        </div>
-                        <div style={{ fontSize: "11.5px", color: "var(--text-secondary)", marginTop: "2px", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
-                          With {sc.personaName || sc.guestName || "Counterpart"} ({formatContextSetting(sc.contextSetting)})
-                        </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "6px" }}>
-                          <span style={{ fontSize: "10px", padding: "1px 6px", borderRadius: "3px", backgroundColor: "var(--bg-control)", color: "var(--text-tertiary)" }}>
-                            {sc.difficulty}
-                          </span>
-                          <span style={{ fontSize: "10px", color: "var(--text-tertiary)" }}>
-                            ~{sc.durationMinutes}m
-                          </span>
-                        </div>
-                      </div>
+                    );
+                  })}
+                  {sortedScenarios.length > visibleScenarioCount && (
+                    <div style={{ padding: "8px 12px", textAlign: "center" }}>
+                      <button
+                        type="button"
+                        onClick={() => setVisibleScenarioCount((prev) => prev + pageSize)}
+                        style={{
+                          padding: "6px 14px",
+                          fontSize: "12px",
+                          fontWeight: 600,
+                          color: "var(--accent-blue)",
+                          backgroundColor: "var(--bg-control)",
+                          border: "1px solid var(--separator)",
+                          borderRadius: "var(--radius-sm)",
+                          cursor: "pointer",
+                        }}
+                      >
+                        Load more scenarios ({sortedScenarios.length - visibleScenarioCount} remaining)
+                      </button>
                     </div>
-                  );
-                })
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -645,28 +743,11 @@ export const ScenariosScreen: React.FC = () => {
                 /* Persona Detail View */
                 <div style={{ maxWidth: "680px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: "18px" }}>
-                    <div
-                      style={{
-                        width: "60px",
-                        height: "60px",
-                        borderRadius: "50%",
-                        backgroundColor: "var(--bg-control)",
-                        display: "grid",
-                        placeItems: "center",
-                        fontSize: "18px",
-                        fontWeight: 700,
-                        color: "var(--text-primary)",
-                        overflow: "hidden",
-                        border: "1.5px solid var(--separator)",
-                        flexShrink: 0,
-                      }}
-                    >
-                      {activePersona.avatarUrl ? (
-                        <img src={activePersona.avatarUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                      ) : (
-                        activePersona.monogram || activePersona.name.slice(0, 2)
-                      )}
-                    </div>
+                    <LazyAvatarImage
+                      src={activePersona.avatarUrl}
+                      name={activePersona.name}
+                      size={60}
+                    />
                     <div>
                       <h2 style={{ fontSize: "20px", fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>
                         {activePersona.name}
@@ -683,11 +764,11 @@ export const ScenariosScreen: React.FC = () => {
                         )}
                         {activePersona.syncStatus === "synced" && (
                           <Badge variant="green">
-                            Tavus PAL: {activePersona.tavusPalId || "Ready"}
+                            Avatar: {activePersona.tavusPalId || "Ready"}
                           </Badge>
                         )}
                         {activePersona.syncStatus === "syncing" && (
-                          <Badge variant="blue">Syncing to Tavus…</Badge>
+                          <Badge variant="blue">Syncing avatar…</Badge>
                         )}
                         {activePersona.syncStatus === "failed" && (
                           <div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
@@ -818,23 +899,25 @@ export const ScenariosScreen: React.FC = () => {
                                 {sc.title}
                               </div>
                               <div style={{ fontSize: "11.5px", color: "var(--text-secondary)" }}>
-                                {sc.interactionType} · ~{sc.durationMinutes}m
+                                {sc.interactionType}
                               </div>
                             </div>
                             <button
-                              onClick={() => openBriefing(sc)}
+                              onClick={() => activePersona.tavusFaceId && openBriefing(sc)}
+                              disabled={!activePersona.tavusFaceId}
                               className="mac-btn focus-ring"
                               style={{
                                 padding: "6px 12px",
                                 borderRadius: "var(--radius-sm)",
-                                backgroundColor: "var(--accent-blue)",
-                                color: "#ffffff",
+                                backgroundColor: activePersona.tavusFaceId ? "var(--accent-blue)" : "var(--bg-control)",
+                                color: activePersona.tavusFaceId ? "#ffffff" : "var(--text-tertiary)",
                                 fontSize: "12px",
                                 fontWeight: 600,
-                                cursor: "pointer",
+                                cursor: activePersona.tavusFaceId ? "pointer" : "not-allowed",
                               }}
+                              title={activePersona.tavusFaceId ? "Start practice" : "Practice is disabled until avatar face is bound"}
                             >
-                              Practice
+                              {activePersona.tavusFaceId ? "Practice" : "Avatar Pending"}
                             </button>
                           </div>
                         ))}
@@ -872,32 +955,36 @@ export const ScenariosScreen: React.FC = () => {
                     <Badge variant={activeScenario.difficulty === "Advanced" ? "red" : activeScenario.difficulty === "Intermediate" ? "orange" : "blue"}>
                       {activeScenario.difficulty}
                     </Badge>
-                    <span style={{ fontSize: "12px", color: "var(--text-tertiary)", display: "flex", alignItems: "center", gap: "4px" }}>
-                      <Clock size={12} />
-                      ~{activeScenario.durationMinutes} min
-                    </span>
                   </div>
 
-                  <button
-                    onClick={() => openBriefing(activeScenario)}
-                    className="mac-btn focus-ring"
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "6px",
-                      padding: "8px 18px",
-                      borderRadius: "var(--radius-sm)",
-                      backgroundColor: "var(--accent-blue)",
-                      color: "#ffffff",
-                      fontSize: "13px",
-                      fontWeight: 600,
-                      boxShadow: "0 1px 3px rgba(10, 132, 255, 0.4)",
-                      cursor: "pointer",
-                    }}
-                  >
-                    <span>Start Practice</span>
-                    <ArrowRight size={13} />
-                  </button>
+                  {(() => {
+                    const linkedPersona = personas.find((p) => p.id === activeScenario.personaId || p.name === activeScenario.personaName);
+                    const isFaceBound = !linkedPersona || Boolean(linkedPersona.tavusFaceId);
+                    return (
+                      <button
+                        onClick={() => isFaceBound && openBriefing(activeScenario)}
+                        disabled={!isFaceBound}
+                        className="mac-btn focus-ring"
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          padding: "8px 18px",
+                          borderRadius: "var(--radius-sm)",
+                          backgroundColor: isFaceBound ? "var(--accent-blue)" : "var(--bg-control)",
+                          color: isFaceBound ? "#ffffff" : "var(--text-tertiary)",
+                          fontSize: "13px",
+                          fontWeight: 600,
+                          boxShadow: isFaceBound ? "0 1px 3px rgba(10, 132, 255, 0.4)" : "none",
+                          cursor: isFaceBound ? "pointer" : "not-allowed",
+                        }}
+                        title={isFaceBound ? "Start Practice" : "Practice is disabled until avatar face is bound"}
+                      >
+                        <span>{isFaceBound ? "Start Practice" : "Avatar Pending"}</span>
+                        {isFaceBound && <ArrowRight size={13} />}
+                      </button>
+                    );
+                  })()}
                 </div>
 
                 <h1 style={{ fontSize: "22px", fontWeight: 700, color: "var(--text-primary)", margin: "0 0 8px 0" }}>
@@ -920,28 +1007,11 @@ export const ScenariosScreen: React.FC = () => {
                     marginBottom: "24px",
                   }}
                 >
-                  <div
-                    style={{
-                      width: "42px",
-                      height: "42px",
-                      borderRadius: "50%",
-                      backgroundColor: "var(--bg-control)",
-                      display: "grid",
-                      placeItems: "center",
-                      fontSize: "13px",
-                      fontWeight: 650,
-                      color: "var(--text-primary)",
-                      overflow: "hidden",
-                      border: "1px solid var(--separator)",
-                      flexShrink: 0,
-                    }}
-                  >
-                    {activeScenario.personaAvatarUrl ? (
-                      <img src={activeScenario.personaAvatarUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                    ) : (
-                      (activeScenario.personaName || activeScenario.guestName || "C").slice(0, 2)
-                    )}
-                  </div>
+                  <LazyAvatarImage
+                    src={activeScenario.personaAvatarUrl}
+                    name={activeScenario.personaName || activeScenario.guestName || "Counterpart"}
+                    size={42}
+                  />
                   <div>
                     <div style={{ fontSize: "13.5px", fontWeight: 650, color: "var(--text-primary)" }}>
                       {activeScenario.personaName || activeScenario.guestName || "Counterpart"}

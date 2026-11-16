@@ -40,6 +40,8 @@ const CommandPaletteModal: React.FC = () => {
       (s.personaName || s.guestName || "").toLowerCase().includes(query.toLowerCase()) ||
       s.interactionType.toLowerCase().includes(query.toLowerCase())
   );
+  // Cap at 20 items to prevent unbounded list rendering in palette
+  const visibleScenarios = filteredScenarios.slice(0, 20);
 
   const quickActions = [
     { label: "Go to Home (⌘1)", icon: <LayoutDashboard size={14} />, action: () => navigateTo("today") },
@@ -47,12 +49,12 @@ const CommandPaletteModal: React.FC = () => {
     { label: "View Recordings & Debriefs (⌘3)", icon: <Film size={14} />, action: () => navigateTo("recordings") },
     { label: "View Composure & Progress (⌘4)", icon: <ChartNoAxesColumn size={14} />, action: () => navigateTo("progress") },
     { label: "New Scenario (⌘N)", icon: <Plus size={14} />, action: () => openStudio("scenario") },
-    { label: "New Persona (⌘⇧N)", icon: <UserPlus size={14} />, action: () => openStudio("guest") },
+    { label: "New Persona (⌘⇧N)", icon: <UserPlus size={14} />, action: () => openStudio("persona") },
     { label: "Quick Practice (⌘⇧P)", icon: <Zap size={14} />, action: () => openQuickPractice() },
     { label: "Open Preferences… (⌘,)", icon: <Settings size={14} />, action: () => openSettings() }
   ];
 
-  const totalItems = filteredScenarios.length + (query.trim() === "" ? quickActions.length : 0);
+  const totalItems = visibleScenarios.length + (query.trim() === "" ? quickActions.length : 0);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "ArrowDown") {
@@ -63,11 +65,11 @@ const CommandPaletteModal: React.FC = () => {
       setSelectedIndex((prev) => (prev - 1 + totalItems) % Math.max(1, totalItems));
     } else if (e.key === "Enter") {
       e.preventDefault();
-      if (selectedIndex < filteredScenarios.length) {
+      if (selectedIndex < visibleScenarios.length) {
         closeSearch();
-        openBriefing(filteredScenarios[selectedIndex]);
+        openBriefing(visibleScenarios[selectedIndex]);
       } else {
-        const actionIdx = selectedIndex - filteredScenarios.length;
+        const actionIdx = selectedIndex - visibleScenarios.length;
         if (quickActions[actionIdx]) {
           closeSearch();
           quickActions[actionIdx].action();
@@ -178,9 +180,9 @@ const CommandPaletteModal: React.FC = () => {
                   padding: "4px 10px 6px 10px"
                 }}
               >
-                Scenarios ({filteredScenarios.length})
+                Scenarios ({filteredScenarios.length}{filteredScenarios.length > 20 ? " · showing 20" : ""})
               </div>
-              {filteredScenarios.map((scenario, index) => {
+              {visibleScenarios.map((scenario, index) => {
                 const isSelected = selectedIndex === index;
                 const persona = scenario.personaName || scenario.guestName;
                 const setting = scenario.setting || scenario.roomNumber;
@@ -219,7 +221,7 @@ const CommandPaletteModal: React.FC = () => {
                           {scenario.title}
                         </div>
                         <div style={{ fontSize: "11px", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
-                          {persona} ({formatContextSetting(setting || "")}) • ~{scenario.durationMinutes}m
+                          {persona} ({formatContextSetting(setting || "")})
                         </div>
                       </div>
                     </div>

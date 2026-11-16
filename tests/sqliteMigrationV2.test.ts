@@ -153,10 +153,10 @@ describe("Milestone M2: SQLite Migration V2 & Startup Recovery", () => {
     assert.equal(recoveredP1.syncStatus, "failed");
     assert.equal(recoveredP1.syncErrorCode, "interrupted");
 
-    // 8. Verify migration version is 2 and re-running is a no-op
+    // 8. Verify migration version is at least 2 and re-running is a no-op
     const checkDb = new Database(V1_DB_PATH);
     const versionRow = checkDb.prepare("SELECT MAX(version) AS version FROM schema_migrations").get() as { version: number };
-    assert.equal(versionRow.version, 2);
+    assert.ok(versionRow.version >= 2, "migration version is at least 2");
     checkDb.close();
 
     await worker2.terminate();

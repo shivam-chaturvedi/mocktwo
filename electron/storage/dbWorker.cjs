@@ -65,6 +65,88 @@ function initDatabase() {
   }
 }
 
+function makeSummary(context, maxLen = 140) {
+  if (!context || typeof context !== "string") return "";
+  const cleaned = context.trim().replace(/\s+/g, " ");
+  if (cleaned.length <= maxLen) return cleaned;
+  const cut = cleaned.slice(0, maxLen);
+  const lastSpace = cut.lastIndexOf(" ");
+  return (lastSpace > 0 ? cut.slice(0, lastSpace) : cut) + "...";
+}
+
+function rowToScenario(r) {
+  if (!r) return null;
+  return {
+    id: r.id,
+    title: r.title,
+    personaId: r.persona_id || undefined,
+    personaName: r.persona_name,
+    contextSetting: r.context_setting,
+    seniority: r.seniority,
+    interactionType: r.interaction_type,
+    difficulty: r.difficulty,
+    durationMinutes: r.duration_minutes !== undefined ? r.duration_minutes : 3,
+    summary: r.summary,
+    context: r.context,
+    personaMood: r.persona_mood || undefined,
+    learningObjectives: JSON.parse(r.learning_objectives || "[]"),
+    keyChallenges: JSON.parse(r.key_challenges || "[]"),
+    recommendedPhrases: JSON.parse(r.recommended_phrases || "[]"),
+    personaAvatarUrl: r.persona_avatar_url || undefined,
+    personaSummary: r.persona_summary || undefined,
+    openingLine: r.opening_line || undefined,
+    builtinKey: r.builtin_key || undefined,
+    seedVersion: r.seed_version || undefined,
+    userModified: Boolean(r.user_modified),
+    hidden: Boolean(r.hidden),
+    source: r.source,
+    submissionStatus: r.submission_status || undefined,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  };
+}
+
+function rowToPersona(r) {
+  if (!r) return null;
+  return {
+    id: r.id,
+    name: r.name,
+    avatarUrl: r.avatar_url || undefined,
+    monogram: r.monogram,
+    title: r.title,
+    contextSetting: r.context_setting,
+    seniority: r.seniority,
+    language: r.language,
+    temperamentTraits: JSON.parse(r.temperament_traits || "[]"),
+    voice: r.voice,
+    backstory: r.backstory,
+    communicationNotes: r.communication_notes,
+    scenariosCount: Number(r.scenarios_count || 0),
+    pressureLevel: r.pressure_level || "Moderate",
+    source: r.source,
+    tavusPalId: r.tavus_pal_id || undefined,
+    tavusFaceId: r.tavus_face_id || undefined,
+    tavusVoiceId: r.tavus_voice_id || undefined,
+    faceName: r.face_name || undefined,
+    faceImagePath: r.face_image_path || undefined,
+    greeting: r.greeting || "",
+    compiledSystemPrompt: r.compiled_system_prompt || "",
+    palSettings: r.pal_settings ? JSON.parse(r.pal_settings) : null,
+    syncStatus: r.sync_status || "draft",
+    syncErrorCode: r.sync_error_code || undefined,
+    syncError: r.sync_error || undefined,
+    syncHash: r.sync_hash || undefined,
+    syncAttemptAt: r.sync_attempt_at || undefined,
+    lastSyncedAt: r.last_synced_at || undefined,
+    builtinKey: r.builtin_key || undefined,
+    seedVersion: r.seed_version || undefined,
+    userModified: Boolean(r.user_modified),
+    hidden: Boolean(r.hidden),
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  };
+}
+
 function runMigrations() {
   db.exec(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -279,6 +361,188 @@ function runMigrations() {
     migrateV2();
     currentVersion = 2;
   }
+
+  if (currentVersion < 3) {
+    try {
+      const backupDir = path.join(path.dirname(dbPath), "backups");
+      if (!fs.existsSync(backupDir)) {
+        fs.mkdirSync(backupDir, { recursive: true });
+      }
+      const backupPath = path.join(backupDir, `mocktwo-v2-${Date.now()}.db`);
+      db.backup(backupPath);
+
+      const existingBackups = fs.readdirSync(backupDir)
+        .filter((f) => f.startsWith("mocktwo-v2-") && f.endsWith(".db"))
+        .sort()
+        .map((f) => path.join(backupDir, f));
+      while (existingBackups.length > 3) {
+        const oldest = existingBackups.shift();
+        try { fs.unlinkSync(oldest); } catch { /* ignore */ }
+      }
+    } catch (err) {
+      console.error("Failed to backup db before v3 migration:", err);
+    }
+
+    const migrateV3 = db.transaction(() => {
+      const hasScenarios = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='scenarios'").get();
+      if (!hasScenarios) {
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS scenarios (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            persona_id TEXT REFERENCES personas(id) ON DELETE SET NULL,
+            persona_name TEXT NOT NULL,
+            context_setting TEXT NOT NULL,
+            seniority TEXT NOT NULL,
+            interaction_type TEXT NOT NULL,
+            difficulty TEXT NOT NULL,
+            duration_minutes INTEGER NOT NULL,
+            summary TEXT NOT NULL,
+            context TEXT NOT NULL,
+            persona_mood TEXT,
+            learning_objectives TEXT NOT NULL,
+            key_challenges TEXT NOT NULL,
+            recommended_phrases TEXT NOT NULL,
+            persona_avatar_url TEXT,
+            persona_summary TEXT,
+            opening_line TEXT,
+            builtin_key TEXT,
+            hidden INTEGER NOT NULL DEFAULT 0,
+            source TEXT NOT NULL,
+            submission_status TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+          );
+        `);
+      } else {
+        const scenarioCols = db.prepare("PRAGMA table_info(scenarios)").all().map((c) => c.name);
+        if (!scenarioCols.includes("opening_line")) {
+          db.exec("ALTER TABLE scenarios ADD COLUMN opening_line TEXT;");
+        }
+        if (!scenarioCols.includes("builtin_key")) {
+          db.exec("ALTER TABLE scenarios ADD COLUMN builtin_key TEXT;");
+        }
+        if (!scenarioCols.includes("hidden")) {
+          db.exec("ALTER TABLE scenarios ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0;");
+        }
+      }
+
+      db.exec(`
+        DROP INDEX IF EXISTS idx_scenarios_builtin_key;
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_scenarios_builtin_key ON scenarios(builtin_key);
+        CREATE INDEX IF NOT EXISTS idx_scenarios_hidden ON scenarios(hidden);
+        CREATE INDEX IF NOT EXISTS idx_scenarios_hidden_created ON scenarios(hidden, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_personas_hidden_name ON personas(hidden, name ASC);
+
+        CREATE TRIGGER IF NOT EXISTS trg_personas_restrict_delete BEFORE DELETE ON personas
+        WHEN EXISTS (SELECT 1 FROM scenarios WHERE persona_id = OLD.id AND hidden = 0)
+        BEGIN SELECT RAISE(ABORT, 'RESTRICT_PERSONA_HAS_SCENARIOS'); END;
+      `);
+
+      db.prepare("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)").run(
+        3,
+        new Date().toISOString()
+      );
+    });
+
+    migrateV3();
+    currentVersion = 3;
+  }
+
+  if (currentVersion < 4) {
+    try {
+      const backupDir = path.join(path.dirname(dbPath), "backups");
+      if (!fs.existsSync(backupDir)) {
+        fs.mkdirSync(backupDir, { recursive: true });
+      }
+      const backupPath = path.join(backupDir, `mocktwo-v3-${Date.now()}.db`);
+      db.backup(backupPath);
+
+      const existingBackups = fs.readdirSync(backupDir)
+        .filter((f) => f.startsWith("mocktwo-v3-") && f.endsWith(".db"))
+        .sort()
+        .map((f) => path.join(backupDir, f));
+      while (existingBackups.length > 3) {
+        const oldest = existingBackups.shift();
+        try { fs.unlinkSync(oldest); } catch { /* ignore */ }
+      }
+    } catch (err) {
+      console.error("Failed to backup db before v4 migration:", err);
+    }
+
+    const migrateV4 = db.transaction(() => {
+      // 1. Create seed_state table
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS seed_state (
+          key TEXT PRIMARY KEY,
+          status TEXT NOT NULL,
+          seed_version INTEGER NOT NULL,
+          attempts INTEGER NOT NULL DEFAULT 0,
+          last_error TEXT,
+          updated_at TEXT NOT NULL
+        );
+      `);
+
+      // 2. Alter personas table
+      const personaCols = db.prepare("PRAGMA table_info(personas)").all().map((c) => c.name);
+      if (!personaCols.includes("builtin_key")) {
+        db.exec("ALTER TABLE personas ADD COLUMN builtin_key TEXT;");
+      }
+      if (!personaCols.includes("seed_version")) {
+        db.exec("ALTER TABLE personas ADD COLUMN seed_version INTEGER;");
+      }
+      if (!personaCols.includes("user_modified")) {
+        db.exec("ALTER TABLE personas ADD COLUMN user_modified INTEGER NOT NULL DEFAULT 0;");
+      }
+
+      // 3. Alter scenarios table
+      const scenarioCols = db.prepare("PRAGMA table_info(scenarios)").all().map((c) => c.name);
+      if (!scenarioCols.includes("seed_version")) {
+        db.exec("ALTER TABLE scenarios ADD COLUMN seed_version INTEGER;");
+      }
+      if (!scenarioCols.includes("user_modified")) {
+        db.exec("ALTER TABLE scenarios ADD COLUMN user_modified INTEGER NOT NULL DEFAULT 0;");
+      }
+
+      // 4. Create compound indexes
+      db.exec(`
+        DROP INDEX IF EXISTS idx_personas_builtin_key;
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_personas_builtin_key ON personas(builtin_key);
+        CREATE INDEX IF NOT EXISTS idx_personas_face_id ON personas(tavus_face_id);
+        CREATE INDEX IF NOT EXISTS idx_personas_hidden ON personas(hidden);
+        CREATE INDEX IF NOT EXISTS idx_personas_user_modified ON personas(user_modified);
+        CREATE INDEX IF NOT EXISTS idx_scenarios_user_modified ON scenarios(user_modified);
+      `);
+
+      db.prepare("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)").run(
+        4,
+        new Date().toISOString()
+      );
+    });
+
+    migrateV4();
+    currentVersion = 4;
+  }
+
+  // Ensure non-partial unique indexes exist on builtin_key for ON CONFLICT target compatibility
+  try {
+    const scenarioIdx = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'idx_scenarios_builtin_key'").get();
+    if (!scenarioIdx || (scenarioIdx.sql && scenarioIdx.sql.includes("WHERE"))) {
+      db.exec(`
+        DROP INDEX IF EXISTS idx_scenarios_builtin_key;
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_scenarios_builtin_key ON scenarios(builtin_key);
+      `);
+    }
+    const personaIdx = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'idx_personas_builtin_key'").get();
+    if (!personaIdx || (personaIdx.sql && personaIdx.sql.includes("WHERE"))) {
+      db.exec(`
+        DROP INDEX IF EXISTS idx_personas_builtin_key;
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_personas_builtin_key ON personas(builtin_key);
+      `);
+    }
+  } catch (err) {
+    console.warn("[dbWorker] Error reconciling builtin_key unique indexes:", err.message);
+  }
 }
 
 // -----------------------------------------------------------------------------
@@ -360,39 +624,13 @@ parentPort.on("message", ({ id, type, payload }) => {
 
       // Personas
       case "personas:list": {
-        const rows = db.prepare("SELECT * FROM personas WHERE hidden = 0 ORDER BY name ASC").all();
-        result = rows.map((r) => ({
-          id: r.id,
-          name: r.name,
-          avatarUrl: r.avatar_url || undefined,
-          monogram: r.monogram,
-          title: r.title,
-          contextSetting: r.context_setting,
-          seniority: r.seniority,
-          language: r.language,
-          temperamentTraits: JSON.parse(r.temperament_traits || "[]"),
-          voice: r.voice,
-          backstory: r.backstory,
-          communicationNotes: r.communication_notes,
-          scenariosCount: r.scenarios_count,
-          pressureLevel: r.pressure_level || "Moderate",
-          source: r.source,
-          tavusPalId: r.tavus_pal_id || undefined,
-          tavusFaceId: r.tavus_face_id || undefined,
-          tavusVoiceId: r.tavus_voice_id || undefined,
-          faceName: r.face_name || undefined,
-          faceImagePath: r.face_image_path || undefined,
-          greeting: r.greeting || "",
-          compiledSystemPrompt: r.compiled_system_prompt || "",
-          palSettings: r.pal_settings ? JSON.parse(r.pal_settings) : null,
-          syncStatus: r.sync_status || "draft",
-          syncErrorCode: r.sync_error_code || undefined,
-          syncError: r.sync_error || undefined,
-          syncHash: r.sync_hash || undefined,
-          syncAttemptAt: r.sync_attempt_at || undefined,
-          lastSyncedAt: r.last_synced_at || undefined,
-          hidden: Boolean(r.hidden),
-        }));
+        const rows = db.prepare(`
+          SELECT p.*, (SELECT COUNT(*) FROM scenarios s WHERE s.persona_id = p.id AND s.hidden = 0) as scenarios_count
+          FROM personas p
+          WHERE p.hidden = 0
+          ORDER BY p.name ASC
+        `).all();
+        result = rows.map(rowToPersona);
         break;
       }
 
@@ -402,43 +640,12 @@ parentPort.on("message", ({ id, type, payload }) => {
           result = null;
           break;
         }
-        const r = db.prepare("SELECT * FROM personas WHERE id = ?").get(targetId);
-        if (!r) {
-          result = null;
-          break;
-        }
-        result = {
-          id: r.id,
-          name: r.name,
-          avatarUrl: r.avatar_url || undefined,
-          monogram: r.monogram,
-          title: r.title,
-          contextSetting: r.context_setting,
-          seniority: r.seniority,
-          language: r.language,
-          temperamentTraits: JSON.parse(r.temperament_traits || "[]"),
-          voice: r.voice,
-          backstory: r.backstory,
-          communicationNotes: r.communication_notes,
-          scenariosCount: r.scenarios_count,
-          pressureLevel: r.pressure_level || "Moderate",
-          source: r.source,
-          tavusPalId: r.tavus_pal_id || undefined,
-          tavusFaceId: r.tavus_face_id || undefined,
-          tavusVoiceId: r.tavus_voice_id || undefined,
-          faceName: r.face_name || undefined,
-          faceImagePath: r.face_image_path || undefined,
-          greeting: r.greeting || "",
-          compiledSystemPrompt: r.compiled_system_prompt || "",
-          palSettings: r.pal_settings ? JSON.parse(r.pal_settings) : null,
-          syncStatus: r.sync_status || "draft",
-          syncErrorCode: r.sync_error_code || undefined,
-          syncError: r.sync_error || undefined,
-          syncHash: r.sync_hash || undefined,
-          syncAttemptAt: r.sync_attempt_at || undefined,
-          lastSyncedAt: r.last_synced_at || undefined,
-          hidden: Boolean(r.hidden),
-        };
+        const r = db.prepare(`
+          SELECT p.*, (SELECT COUNT(*) FROM scenarios s WHERE s.persona_id = p.id AND s.hidden = 0) as scenarios_count
+          FROM personas p
+          WHERE p.id = ?
+        `).get(targetId);
+        result = r ? rowToPersona(r) : null;
         break;
       }
 
@@ -545,6 +752,7 @@ parentPort.on("message", ({ id, type, payload }) => {
             sync_attempt_at = ?,
             last_synced_at = ?,
             hidden = ?,
+            user_modified = ?,
             updated_at = ?
           WHERE id = ?
         `).run(
@@ -577,9 +785,26 @@ parentPort.on("message", ({ id, type, payload }) => {
           p.syncAttemptAt !== undefined ? p.syncAttemptAt : existing.sync_attempt_at,
           p.lastSyncedAt !== undefined ? p.lastSyncedAt : existing.last_synced_at,
           p.hidden !== undefined ? (p.hidden ? 1 : 0) : existing.hidden,
+          (p.name !== undefined || p.title !== undefined || p.backstory !== undefined || p.communicationNotes !== undefined || p.userModified) ? 1 : (existing.user_modified || 0),
           now,
           targetId
         );
+
+        // Propagate updated persona copies to linked scenarios without bumping scenarios.updated_at
+        const pRow = db.prepare("SELECT * FROM personas WHERE id = ?").get(targetId);
+        if (pRow) {
+          const pSummary = `${pRow.title || "Specialist"}, ${pRow.context_setting || "General Rehearsal"}`;
+          db.prepare(`
+            UPDATE scenarios SET
+              persona_name = ?,
+              context_setting = ?,
+              seniority = ?,
+              persona_avatar_url = ?,
+              persona_summary = ?
+            WHERE persona_id = ?
+          `).run(pRow.name, pRow.context_setting, pRow.seniority, pRow.avatar_url || null, pSummary, targetId);
+        }
+
         result = { ...existing, ...p, id: targetId, monogram };
         break;
       }
@@ -661,40 +886,191 @@ parentPort.on("message", ({ id, type, payload }) => {
       }
 
       case "personas:delete": {
-        if (typeof payload !== "string" || !payload.trim()) {
+        const targetId = typeof payload === "string" ? payload.trim() : (payload && payload.id);
+        if (!targetId) {
           result = false;
           break;
         }
-        db.prepare("DELETE FROM personas WHERE id = ?").run(payload.trim());
-        result = true;
+        const assignedScenarios = db.prepare("SELECT title FROM scenarios WHERE persona_id = ? AND hidden = 0").all(targetId);
+        if (assignedScenarios.length > 0) {
+          result = {
+            ok: false,
+            code: "has_scenarios",
+            count: assignedScenarios.length,
+            titles: assignedScenarios.map((s) => s.title),
+          };
+          break;
+        }
+        db.prepare("DELETE FROM personas WHERE id = ?").run(targetId);
+        result = { ok: true };
         break;
       }
 
       // Scenarios
       case "scenarios:list": {
-        const rows = db.prepare("SELECT * FROM scenarios ORDER BY created_at DESC").all();
-        result = rows.map((r) => ({
-          id: r.id,
-          title: r.title,
-          personaId: r.persona_id || undefined,
-          personaName: r.persona_name,
-          contextSetting: r.context_setting,
-          seniority: r.seniority,
-          interactionType: r.interaction_type,
-          difficulty: r.difficulty,
-          durationMinutes: r.duration_minutes,
-          summary: r.summary,
-          context: r.context,
-          personaMood: r.persona_mood || undefined,
-          learningObjectives: JSON.parse(r.learning_objectives || "[]"),
-          keyChallenges: JSON.parse(r.key_challenges || "[]"),
-          recommendedPhrases: JSON.parse(r.recommended_phrases || "[]"),
-          personaAvatarUrl: r.persona_avatar_url || undefined,
-          personaSummary: r.persona_summary || undefined,
-          source: r.source,
-          submissionStatus: r.submission_status || undefined,
-          createdAt: r.created_at,
-        }));
+        const rows = db.prepare("SELECT * FROM scenarios WHERE hidden = 0 ORDER BY created_at DESC").all();
+        result = rows.map(rowToScenario);
+        break;
+      }
+
+      case "scenarios:save-studio": {
+        const sc = payload;
+        const personaId = sc && sc.personaId;
+        if (!personaId) {
+          result = { ok: false, code: "persona_not_found", error: "Persona ID is required." };
+          break;
+        }
+        const personaRow = db.prepare("SELECT * FROM personas WHERE id = ? AND hidden = 0").get(personaId);
+        if (!personaRow) {
+          result = { ok: false, code: "persona_not_found", error: "Assigned counterpart persona not found." };
+          break;
+        }
+        let personaMood = "Direct";
+        try {
+          const traits = JSON.parse(personaRow.temperament_traits || "[]");
+          personaMood = Array.isArray(traits) && traits.length > 0 ? traits.join(" & ") : "Direct";
+        } catch {
+          personaMood = personaRow.temperament_traits || "Direct";
+        }
+        const personaSummary = `${personaRow.title || "Specialist"}, ${personaRow.context_setting || "General Rehearsal"}`;
+        const now = new Date().toISOString();
+        const id = sc.id || `sc-mine-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const summary = makeSummary(sc.context || "", 140);
+
+        const saveStudioTx = db.transaction(() => {
+          db.prepare(`
+            INSERT INTO scenarios (
+              id, title, persona_id, persona_name, context_setting, seniority,
+              interaction_type, difficulty, duration_minutes, summary, context,
+              persona_mood, learning_objectives, key_challenges, recommended_phrases,
+              persona_avatar_url, persona_summary, opening_line, builtin_key, hidden,
+              source, submission_status, seed_version, user_modified, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 3, ?, ?, ?, ?, ?, '[]', ?, ?, ?, ?, 0, 'Mine', 'published', NULL, 0, ?, ?)
+          `).run(
+            id,
+            sc.title,
+            personaRow.id,
+            personaRow.name,
+            personaRow.context_setting || "General",
+            personaRow.seniority || "Peer",
+            sc.interactionType,
+            sc.difficulty,
+            summary,
+            sc.context,
+            personaMood,
+            JSON.stringify(sc.learningObjectives || []),
+            JSON.stringify(sc.keyChallenges || []),
+            personaRow.avatar_url || null,
+            personaSummary,
+            sc.openingLine ? sc.openingLine.trim() : null,
+            sc.builtinKey || null,
+            now,
+            now
+          );
+          const inserted = db.prepare("SELECT * FROM scenarios WHERE id = ?").get(id);
+          return { ok: true, scenario: rowToScenario(inserted) };
+        });
+
+        result = saveStudioTx();
+        break;
+      }
+
+      case "scenarios:update-studio": {
+        const sc = payload;
+        const targetId = sc && sc.id;
+        if (!targetId) {
+          result = { ok: false, code: "invalid_id", error: "Scenario ID is required for update." };
+          break;
+        }
+
+        const updateStudioTx = db.transaction(() => {
+          const existing = db.prepare("SELECT * FROM scenarios WHERE id = ?").get(targetId);
+          if (!existing) {
+            return { ok: false, code: "scenario_not_found", error: "Scenario not found." };
+          }
+
+          let personaId = existing.persona_id;
+          let personaName = existing.persona_name;
+          let contextSetting = existing.context_setting;
+          let seniority = existing.seniority;
+          let personaAvatarUrl = existing.persona_avatar_url;
+          let personaMood = existing.persona_mood;
+          let personaSummary = existing.persona_summary;
+
+          if (sc.personaId && sc.personaId !== existing.persona_id) {
+            const personaRow = db.prepare("SELECT * FROM personas WHERE id = ? AND hidden = 0").get(sc.personaId);
+            if (!personaRow) {
+              return { ok: false, code: "persona_not_found", error: "Assigned counterpart persona not found." };
+            }
+            personaId = personaRow.id;
+            personaName = personaRow.name;
+            contextSetting = personaRow.context_setting;
+            seniority = personaRow.seniority;
+            personaAvatarUrl = personaRow.avatar_url || null;
+            try {
+              const traits = JSON.parse(personaRow.temperament_traits || "[]");
+              personaMood = Array.isArray(traits) && traits.length > 0 ? traits.join(" & ") : "Direct";
+            } catch {
+              personaMood = personaRow.temperament_traits || "Direct";
+            }
+            personaSummary = `${personaRow.title || "Specialist"}, ${personaRow.context_setting || "General Rehearsal"}`;
+          }
+
+          const title = sc.title !== undefined ? sc.title : existing.title;
+          const interactionType = sc.interactionType !== undefined ? sc.interactionType : existing.interaction_type;
+          const difficulty = sc.difficulty !== undefined ? sc.difficulty : existing.difficulty;
+          const context = sc.context !== undefined ? sc.context : existing.context;
+          const summary = sc.context !== undefined ? makeSummary(context, 140) : existing.summary;
+          const learningObjectives = sc.learningObjectives !== undefined ? JSON.stringify(sc.learningObjectives) : existing.learning_objectives;
+          const keyChallenges = sc.keyChallenges !== undefined ? JSON.stringify(sc.keyChallenges) : existing.key_challenges;
+          const openingLine = sc.openingLine !== undefined ? (sc.openingLine ? sc.openingLine.trim() : null) : existing.opening_line;
+          const now = new Date().toISOString();
+
+          db.prepare(`
+            UPDATE scenarios SET
+              title = ?,
+              persona_id = ?,
+              persona_name = ?,
+              context_setting = ?,
+              seniority = ?,
+              interaction_type = ?,
+              difficulty = ?,
+              summary = ?,
+              context = ?,
+              persona_mood = ?,
+              learning_objectives = ?,
+              key_challenges = ?,
+              opening_line = ?,
+              persona_avatar_url = ?,
+              persona_summary = ?,
+              user_modified = 1,
+              updated_at = ?
+            WHERE id = ?
+          `).run(
+            title,
+            personaId,
+            personaName,
+            contextSetting,
+            seniority,
+            interactionType,
+            difficulty,
+            summary,
+            context,
+            personaMood,
+            learningObjectives,
+            keyChallenges,
+            openingLine,
+            personaAvatarUrl,
+            personaSummary,
+            now,
+            targetId
+          );
+
+          const updatedRow = db.prepare("SELECT * FROM scenarios WHERE id = ?").get(targetId);
+          return { ok: true, scenario: rowToScenario(updatedRow) };
+        });
+
+        result = updateStudioTx();
         break;
       }
 
@@ -707,8 +1083,28 @@ parentPort.on("message", ({ id, type, payload }) => {
             id, title, persona_id, persona_name, context_setting, seniority,
             interaction_type, difficulty, duration_minutes, summary, context,
             persona_mood, learning_objectives, key_challenges, recommended_phrases,
-            persona_avatar_url, persona_summary, source, submission_status, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            persona_avatar_url, persona_summary, opening_line, builtin_key, hidden,
+            source, submission_status, seed_version, user_modified, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            title = excluded.title,
+            persona_id = excluded.persona_id,
+            persona_name = excluded.persona_name,
+            context_setting = excluded.context_setting,
+            seniority = excluded.seniority,
+            interaction_type = excluded.interaction_type,
+            difficulty = excluded.difficulty,
+            summary = excluded.summary,
+            context = excluded.context,
+            persona_mood = excluded.persona_mood,
+            learning_objectives = excluded.learning_objectives,
+            key_challenges = excluded.key_challenges,
+            recommended_phrases = excluded.recommended_phrases,
+            persona_avatar_url = excluded.persona_avatar_url,
+            persona_summary = excluded.persona_summary,
+            opening_line = excluded.opening_line,
+            user_modified = 1,
+            updated_at = excluded.updated_at
         `).run(
           id,
           sc.title || "Practice Scenario",
@@ -727,8 +1123,13 @@ parentPort.on("message", ({ id, type, payload }) => {
           JSON.stringify(sc.recommendedPhrases || []),
           sc.personaAvatarUrl || null,
           sc.personaSummary || null,
+          sc.openingLine || null,
+          sc.builtinKey || null,
+          sc.hidden ? 1 : 0,
           sc.source || "Mine",
           sc.submissionStatus || null,
+          sc.seedVersion || null,
+          sc.userModified ? 1 : 0,
           sc.createdAt || now,
           now
         );
@@ -741,7 +1142,8 @@ parentPort.on("message", ({ id, type, payload }) => {
           result = false;
           break;
         }
-        db.prepare("DELETE FROM scenarios WHERE id = ?").run(payload.trim());
+        const now = new Date().toISOString();
+        db.prepare("UPDATE scenarios SET hidden = 1, updated_at = ? WHERE id = ?").run(now, payload.trim());
         result = true;
         break;
       }
@@ -1169,6 +1571,268 @@ parentPort.on("message", ({ id, type, payload }) => {
         }
 
         result = true;
+        break;
+      }
+
+      // Developer Full Database Reset + Complete Wipe
+      case "data:reset-database-dev": {
+        const resetAll = db.transaction(() => {
+          db.prepare("DELETE FROM recording_notes").run();
+          db.prepare("DELETE FROM vitals_samples").run();
+          db.prepare("DELETE FROM recordings").run();
+          db.prepare("DELETE FROM baselines").run();
+          db.prepare("DELETE FROM scenarios").run();
+          db.prepare("DELETE FROM personas").run();
+          db.prepare("DELETE FROM seed_state").run();
+          db.prepare("DELETE FROM settings").run();
+          db.prepare("DELETE FROM permissions").run();
+          db.prepare("DELETE FROM tavus_catalog_cache").run();
+        });
+        resetAll();
+        db.pragma("VACUUM");
+
+        if (fs.existsSync(recordingsDir)) {
+          try {
+            const files = fs.readdirSync(recordingsDir);
+            for (const file of files) {
+              const fullPath = path.join(recordingsDir, file);
+              try {
+                if (fs.statSync(fullPath).isFile()) {
+                  fs.unlinkSync(fullPath);
+                }
+              } catch { /* ignore */ }
+            }
+          } catch { /* ignore */ }
+        }
+
+        result = true;
+        break;
+      }
+
+      // Seeding Handlers
+      case "seed:get-state": {
+        const pState = db.prepare("SELECT * FROM seed_state WHERE key = 'personas'").get() || null;
+        const sState = db.prepare("SELECT * FROM seed_state WHERE key = 'scenarios'").get() || null;
+        const pCounts = db.prepare(`
+          SELECT 
+            COUNT(*) as total_seeded,
+            SUM(CASE WHEN tavus_face_id IS NOT NULL AND tavus_face_id != '' THEN 1 ELSE 0 END) as bound_faces,
+            SUM(CASE WHEN hidden = 1 THEN 1 ELSE 0 END) as hidden_count
+          FROM personas WHERE builtin_key IS NOT NULL
+        `).get();
+        const sCounts = db.prepare(`
+          SELECT 
+            COUNT(*) as total_seeded,
+            SUM(CASE WHEN hidden = 1 THEN 1 ELSE 0 END) as hidden_count
+          FROM scenarios WHERE builtin_key IS NOT NULL
+        `).get();
+
+        result = {
+          personas: pState ? {
+            status: pState.status,
+            seedVersion: pState.seed_version,
+            attempts: pState.attempts,
+            lastError: pState.last_error,
+            updatedAt: pState.updated_at,
+          } : null,
+          scenarios: sState ? {
+            status: sState.status,
+            seedVersion: sState.seed_version,
+            attempts: sState.attempts,
+            lastError: sState.last_error,
+            updatedAt: sState.updated_at,
+          } : null,
+          personasCounts: {
+            total: pCounts?.total_seeded || 0,
+            bound: pCounts?.bound_faces || 0,
+            hidden: pCounts?.hidden_count || 0,
+          },
+          scenariosCounts: {
+            total: sCounts?.total_seeded || 0,
+            hidden: sCounts?.hidden_count || 0,
+          },
+        };
+        break;
+      }
+
+      case "seed:set-state": {
+        const { key, status, seedVersion, attempts, lastError } = payload || {};
+        if (!key || !status) {
+          result = { ok: false, error: "key and status are required" };
+          break;
+        }
+        const now = new Date().toISOString();
+        db.prepare(`
+          INSERT INTO seed_state (key, status, seed_version, attempts, last_error, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?)
+          ON CONFLICT(key) DO UPDATE SET
+            status = excluded.status,
+            seed_version = excluded.seed_version,
+            attempts = excluded.attempts,
+            last_error = excluded.last_error,
+            updated_at = excluded.updated_at
+        `).run(key, status, seedVersion || 1, attempts || 0, lastError || null, now);
+        result = { ok: true };
+        break;
+      }
+
+      case "seed:upsert-personas": {
+        const { items, seedVersion } = payload || {};
+        if (!Array.isArray(items)) {
+          result = { count: 0 };
+          break;
+        }
+        const insertStmt = db.prepare(`
+          INSERT INTO personas (
+            id, name, avatar_url, monogram, title, context_setting, seniority,
+            language, temperament_traits, voice, backstory, communication_notes,
+            scenarios_count, pressure_level, source,
+            tavus_pal_id, tavus_face_id, tavus_voice_id, face_name, face_image_path,
+            greeting, compiled_system_prompt, pal_settings, sync_status,
+            sync_error_code, sync_error, sync_hash, sync_attempt_at, last_synced_at,
+            hidden, builtin_key, seed_version, user_modified, created_at, updated_at
+          ) VALUES (
+            ?, ?, ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?,
+            0, ?, 'Library',
+            NULL, NULL, NULL, NULL, NULL,
+            ?, '', NULL, 'draft',
+            NULL, NULL, NULL, NULL, NULL,
+            0, ?, ?, 0, ?, ?
+          )
+          ON CONFLICT(builtin_key) DO NOTHING
+        `);
+
+        const upsertTx = db.transaction((personaList) => {
+          let inserted = 0;
+          for (const item of personaList) {
+            const now = new Date().toISOString();
+            const id = `persona-seed-${item.builtinKey}`;
+            const monogram = item.monogram || (item.name ? item.name.slice(0, 2).toUpperCase() : "PA");
+            const traitsJson = JSON.stringify(item.temperamentTraits || []);
+            const res = insertStmt.run(
+              id, item.name, item.avatarUrl || null, monogram, item.title || "",
+              item.contextSetting || "", item.seniority || "Peer",
+              item.language || "en", traitsJson, item.voice || "Default",
+              item.backstory || "", item.communicationNotes || "",
+              item.pressureLevel || "Moderate", item.greeting || "",
+              item.builtinKey, seedVersion || 1, now, now
+            );
+            if (res.changes > 0) inserted++;
+          }
+          return inserted;
+        });
+
+        result = { count: upsertTx(items) };
+        break;
+      }
+
+      case "seed:bind-faces": {
+        const { bindings } = payload || {};
+        if (!Array.isArray(bindings)) {
+          result = { updated: 0 };
+          break;
+        }
+        const updateStmt = db.prepare(`
+          UPDATE personas SET
+            tavus_face_id = ?,
+            tavus_voice_id = ?,
+            face_name = ?,
+            face_image_path = ?,
+            avatar_url = COALESCE(?, avatar_url),
+            updated_at = ?
+          WHERE builtin_key = ? AND (user_modified = 0 OR tavus_face_id IS NULL)
+        `);
+        const bindTx = db.transaction((list) => {
+          let updatedCount = 0;
+          const now = new Date().toISOString();
+          for (const b of list) {
+            const res = updateStmt.run(
+              b.tavusFaceId,
+              b.tavusVoiceId || null,
+              b.faceName || null,
+              b.faceImagePath || null,
+              b.avatarUrl || null,
+              now,
+              b.builtinKey
+            );
+            if (res.changes > 0) updatedCount++;
+          }
+          return updatedCount;
+        });
+        result = { updated: bindTx(bindings) };
+        break;
+      }
+
+      case "seed:get-unbound-personas": {
+        const rows = db.prepare(`
+          SELECT p.*, (SELECT COUNT(*) FROM scenarios s WHERE s.persona_id = p.id AND s.hidden = 0) as scenarios_count
+          FROM personas p
+          WHERE p.builtin_key IS NOT NULL
+            AND (p.tavus_face_id IS NULL OR p.tavus_face_id = '')
+            AND p.hidden = 0
+          ORDER BY p.name ASC
+        `).all();
+        result = rows.map(rowToPersona);
+        break;
+      }
+
+      case "seed:upsert-scenarios": {
+        const { items, seedVersion } = payload || {};
+        if (!Array.isArray(items)) {
+          result = { count: 0 };
+          break;
+        }
+        const insertStmt = db.prepare(`
+          INSERT INTO scenarios (
+            id, title, persona_id, persona_name, context_setting, seniority,
+            interaction_type, difficulty, duration_minutes, summary, context,
+            persona_mood, learning_objectives, key_challenges, recommended_phrases,
+            persona_avatar_url, persona_summary, opening_line, builtin_key, hidden,
+            source, submission_status, seed_version, user_modified, created_at, updated_at
+          ) VALUES (
+            ?, ?, ?, ?, ?, ?,
+            ?, ?, 3, ?, ?,
+            ?, ?, ?, '[]',
+            ?, ?, ?, ?, 0,
+            'Library', 'published', ?, 0, ?, ?
+          )
+          ON CONFLICT(builtin_key) DO NOTHING
+        `);
+
+        const upsertTx = db.transaction((scenarioList) => {
+          let inserted = 0;
+          for (const item of scenarioList) {
+            const personaRow = db.prepare("SELECT * FROM personas WHERE builtin_key = ?").get(item.personaKey);
+            if (!personaRow) {
+              console.warn(`[dbWorker] Skipping scenario '${item.builtinKey}': personaKey '${item.personaKey}' not found.`);
+              continue;
+            }
+            let mood = "Direct";
+            try {
+              const traits = JSON.parse(personaRow.temperament_traits || "[]");
+              mood = Array.isArray(traits) && traits.length > 0 ? traits.join(" & ") : "Direct";
+            } catch {}
+            const pSummary = `${personaRow.title || "Specialist"}, ${personaRow.context_setting || "General"}`;
+            const now = new Date().toISOString();
+            const id = `scenario-seed-${item.builtinKey}`;
+            const summary = makeSummary(item.context, 140);
+            const res = insertStmt.run(
+              id, item.title, personaRow.id, personaRow.name,
+              personaRow.context_setting || "General", personaRow.seniority || "Peer",
+              item.interactionType, item.difficulty, summary, item.context,
+              mood, JSON.stringify(item.learningObjectives || []),
+              JSON.stringify(item.keyChallenges || []),
+              personaRow.avatar_url || null, pSummary,
+              item.openingLine || null, item.builtinKey,
+              seedVersion || 1, now, now
+            );
+            if (res.changes > 0) inserted++;
+          }
+          return inserted;
+        });
+
+        result = { count: upsertTx(items) };
         break;
       }
 

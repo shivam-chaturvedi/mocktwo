@@ -40,6 +40,7 @@ export const ScoreRing: React.FC<ScoreRingProps> = ({
     let start = 0;
     const duration = 750; // ms
     const startTime = performance.now();
+    let animId: number = 0;
 
     const frame = (now: number) => {
       const elapsed = now - startTime;
@@ -49,12 +50,14 @@ export const ScoreRing: React.FC<ScoreRingProps> = ({
       setAnimatedScore(Math.round(start + (score - start) * eased));
 
       if (progress < 1) {
-        requestAnimationFrame(frame);
+        animId = requestAnimationFrame(frame);
       }
     };
 
-    const animId = requestAnimationFrame(frame);
-    return () => cancelAnimationFrame(animId);
+    animId = requestAnimationFrame(frame);
+    return () => {
+      if (animId) cancelAnimationFrame(animId);
+    };
   }, [score, animate]);
 
   return (

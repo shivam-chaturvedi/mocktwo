@@ -33,6 +33,17 @@ contextBridge.exposeInMainWorld("electronAPI", {
     return ipcRenderer.invoke("reveal-logs");
   },
 
+  getClientConfig: () => ipcRenderer.invoke("config:get-client"),
+
+  seedGetStatus: () => ipcRenderer.invoke("seed:get-status"),
+  seedRetry: () => ipcRenderer.invoke("seed:retry"),
+  onSeedProgress: (callback) => {
+    if (typeof callback !== "function") return () => {};
+    const handler = (_event, progress) => callback(progress);
+    ipcRenderer.on("seed:progress", handler);
+    return () => ipcRenderer.removeListener("seed:progress", handler);
+  },
+
   tavusStatus: () => ipcRenderer.invoke("tavus:get-status"),
   personaRetrySync: (id) => ipcRenderer.invoke("tavus:sync-persona", id),
   personaPreviewPrompt: (draft) => ipcRenderer.invoke("tavus:preview-prompt", draft),
@@ -43,11 +54,15 @@ contextBridge.exposeInMainWorld("electronAPI", {
   storage: {
     getProfile: () => ipcRenderer.invoke("storage:get-profile"),
     saveProfile: (p) => ipcRenderer.invoke("storage:save-profile", p),
-    getPersonas: () => ipcRenderer.invoke("storage:get-personas"),
+    getPersonas: (options) => ipcRenderer.invoke("storage:get-personas", options),
+    getPersona: (id) => ipcRenderer.invoke("storage:get-persona", id),
     createPersona: (p) => ipcRenderer.invoke("storage:create-persona", p),
     updatePersona: (id, persona) => ipcRenderer.invoke("storage:update-persona", { id, persona }),
     deletePersona: (id, options) => ipcRenderer.invoke("storage:delete-persona", id, options),
-    getScenarios: () => ipcRenderer.invoke("storage:get-scenarios"),
+    getScenarios: (options) => ipcRenderer.invoke("storage:get-scenarios", options),
+    getScenario: (id) => ipcRenderer.invoke("storage:get-scenario", id),
+    saveScenario: (sc) => ipcRenderer.invoke("storage:save-scenario", sc),
+    updateScenario: (id, updates) => ipcRenderer.invoke("storage:update-scenario", id, updates),
     createScenario: (sc) => ipcRenderer.invoke("storage:create-scenario", sc),
     deleteScenario: (id) => ipcRenderer.invoke("storage:delete-scenario", id),
     getRecordings: (params) => ipcRenderer.invoke("storage:get-recordings", params),

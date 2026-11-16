@@ -117,6 +117,24 @@ async function downloadFaceAsset(userDataPath, faceId, remoteUrl, fetchImpl = gl
     const filePath = path.join(targetDir, fileName);
 
     fs.writeFileSync(filePath, Buffer.from(arrayBuffer));
+
+    // Cap local cached assets to max 50 to prevent unbounded disk growth
+    try {
+      const files = fs.readdirSync(targetDir).map((f) => {
+        const full = path.join(targetDir, f);
+        return { path: full, mtime: fs.statSync(full).mtimeMs };
+      });
+      if (files.length > 50) {
+        files.sort((a, b) => a.mtime - b.mtime);
+        const toDelete = files.slice(0, files.length - 50);
+        for (const item of toDelete) {
+          fs.unlinkSync(item.path);
+        }
+      }
+    } catch {
+      // ignore eviction errors
+    }
+
     return path.join("faces", fileName);
   } catch (err) {
     clearTimeout(timer);

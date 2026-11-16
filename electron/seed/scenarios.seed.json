@@ -1,0 +1,131 @@
+{
+  "seedVersion": 1,
+  "scenarios": [
+    {
+      "builtinKey": "starter_ops_review_escalation",
+      "personaKey": "starter_elena_vance",
+      "title": "The SLA Report That Does Not Match Reality",
+      "interactionType": "Difficult Conversations",
+      "difficulty": "Advanced",
+      "context": "You are the Director of Service Delivery at an enterprise support provider. Mid-market accounts have reported a 12% fall in SLA adherence over the past month. The executive dashboard still shows 96%, but its calculation excludes tickets that were automatically closed and later reopened. Three major customers are now questioning renewal, and one has threatened to withhold its next payment. A routing change contributed to the backlog, but contractor capacity and an internal escalation failure may also be involved; the full root cause is not yet confirmed. The lead investor has asked the CEO for a credible 30-day retention and recovery plan before the next funding review. Elena Vance, VP of Customer Operations, has called an emergency review. You must explain what is known, correct the misleading headline metric, identify immediate containment steps, and recommend what should be communicated to customers and the board. A proposed rollback could restore routing accuracy but may temporarily increase the unassigned queue.",
+      "learningObjectives": [
+        "Own the service impact and correct the metric discrepancy without defending the misleading dashboard.",
+        "Separate confirmed causes, unresolved questions, and customer-level exposure using defensible figures.",
+        "Present a 48-hour containment plan and 30-day recovery plan with owners, checkpoints, and rollback criteria.",
+        "Communicate investor and customer risks without inventing certainty or hiding material gaps."
+      ],
+      "keyChallenges": [
+        "Elena reveals that the dashboard excludes reopened tickets after you quote its headline SLA figure.",
+        "She asks whether the vendor or your team owns the failure; blaming either without evidence will damage credibility.",
+        "She requires a named owner and a 48-hour milestone, but the proposed rollback could create a new queue backlog.",
+        "She asks whether the investor and affected customers should be told before the root cause is fully confirmed."
+      ],
+      "openingLine": "Your dashboard says 96%, but three customers say we're missing commitments. Which number should I trust, and why?"
+    },
+    {
+      "builtinKey": "starter_front_desk_overbooking",
+      "personaKey": "starter_marcus_brooks",
+      "title": "The Guaranteed Accessible Suite We Cannot Provide",
+      "interactionType": "Front Desk",
+      "difficulty": "Advanced",
+      "context": "You are the front-office manager at a fully booked city hotel during a major convention. A reservation-system synchronization failure has assigned the same executive suite to two arriving guests. One guest has a written confirmation for a specific accessible suite, which the hotel reconfirmed twice; the room is now unavailable. The guest is expected in twenty minutes, is travelling with colleagues, and has an important event nearby. A partner hotel says it may have a room, but nobody has verified that its accessible features meet the confirmed requirements or that transport can be arranged in time. There is no comparable room currently available on-site. A front-desk agent has suggested a voucher and asked the guest to find their own transport. General Manager Marcus Brooks wants your recovery plan before the guest arrives. You must balance immediate accommodation, dignity, accurate information, compensation, staff accountability, and the risk of making a second promise the hotel cannot keep.",
+      "learningObjectives": [
+        "Verify the original reservation promise and the suitability of every relocation option before offering it.",
+        "Present immediate options that protect guest dignity, accessibility needs, and practical transport arrangements.",
+        "Treat compensation as part of a genuine service fix, not as a substitute for solving the accommodation failure.",
+        "Assign clear owners for guest communication, transport, room status, and follow-up."
+      ],
+      "keyChallenges": [
+        "The nearby partner property has a room, but nobody has verified its accessible features or transport arrangements.",
+        "The guest's confirmation explicitly promised the room type; 'system error' will not be accepted as a solution.",
+        "Peak occupancy means no comparable room is free; a voucher alone does not solve tonight's stay.",
+        "Marcus needs a decision before the guest reaches the desk and will challenge promises the hotel cannot deliver."
+      ],
+      "openingLine": "We guaranteed that suite, and now the guest is twenty minutes away. What are you proposing that actually works?"
+    },
+    {
+      "builtinKey": "starter_communication_assessment",
+      "personaKey": "starter_amara_bennett",
+      "title": "The Feedback You Think Is Unfair",
+      "interactionType": "Difficult Conversations",
+      "difficulty": "Intermediate",
+      "context": "You are a newly promoted hospitality supervisor completing a practical communication assessment. In a previous role-play, you faced an upset guest whose room was not ready. You apologised several times and quoted the hotel's check-in policy, but you never clarified what the guest needed next or who would resolve the problem. Dr. Amara Bennett, your instructor, has reviewed the recording and says your response sounded polite but avoided ownership. You believe the assessment overlooked the fact that the hotel was genuinely full and that you had no authority to offer a room upgrade. Amara is willing to hear your reasoning, but she will not simply give you a model script. She will ask you to examine the evidence, distinguish a valid policy constraint from an excuse, and retry the conversation when the guest rejects your first proposed solution.",
+      "learningObjectives": [
+        "Receive corrective feedback without defensiveness and ask for an observable example of the missed behavior.",
+        "Identify where empathy, ownership, and a concrete remedy diverged in your original response.",
+        "Reframe the response around the guest's need while staying within a genuine policy constraint.",
+        "Demonstrate the improved response naturally and explain what outcome would confirm success."
+      ],
+      "keyChallenges": [
+        "Amara will not provide a model script; she asks you to diagnose the missed behavior and try again in your own words.",
+        "She challenges the difference between saying 'I understand' and proving that you understood the guest's concern.",
+        "She introduces a policy constraint midway through the exercise, requiring an alternative rather than a blanket exception.",
+        "She asks how you would know whether the revised response worked, not merely whether it sounded polite."
+      ],
+      "openingLine": "You apologised four times in that simulation, but the guest still had no solution. What do you think you missed?"
+    },
+    {
+      "builtinKey": "starter_returning_guest_billing_confusion",
+      "personaKey": "starter_jordan_ellis",
+      "title": "The Friendly Guest With a Confusing Bill",
+      "interactionType": "Front Desk",
+      "difficulty": "Intermediate",
+      "context": "You are working at the front desk of a hotel where Jordan Ellis is a returning guest. He has enjoyed previous stays and is friendly with the staff. This morning, he noticed a second pending card authorization that looks like a duplicate of his prepaid booking. He also wants to request a one-hour-later checkout because a client meeting has moved. The hotel is busy, so late checkout is not guaranteed, and the payment display does not yet establish whether the second authorization is a settled charge or a temporary hold. Jordan is not looking for a confrontation; he wants a plain-language explanation and a practical answer before leaving for a meeting. He becomes confused when staff use internal payment terminology, speculate about bank processing, or promise a release date they cannot verify. Your task is to build rapport, clarify the two requests separately, and give only accurate commitments.",
+      "learningObjectives": [
+        "Build rapport and clarify the payment and checkout requests without rushing into an assumption.",
+        "Explain the difference between a pending authorization and a settled charge in plain language.",
+        "Offer only options that can actually be checked or authorized, with a clear follow-up commitment.",
+        "Keep the conversation warm, brief, and natural while confirming what the guest prefers."
+      ],
+      "keyChallenges": [
+        "Jordan mentions a second pending card authorization; do not call it a settled duplicate charge without confirming its status.",
+        "Late checkout is not guaranteed because occupancy is high; Jordan is open to alternatives but needs a clear answer.",
+        "He remains friendly, but becomes confused if the explanation uses internal hotel jargon or sounds dismissive.",
+        "Do not claim to access billing systems or promise a release date you cannot verify."
+      ],
+      "openingLine": "Hi again! Quick question: my card shows another hotel charge pending, and I was hoping to check out a little later tomorrow. Can you help?"
+    },
+    {
+      "builtinKey": "starter_strategic_supplier_escalation",
+      "personaKey": "starter_victor_hale",
+      "title": "The Buyer Has a Replacement Vendor Ready",
+      "interactionType": "Difficult Conversations",
+      "difficulty": "Advanced",
+      "context": "You are the account director for a technology supplier whose service outage disrupted a large enterprise customer's order-processing operation. The customer estimates significant commercial losses and has withheld the latest invoice. Chief Procurement Officer Victor Hale has a competing vendor proposal and a contract-renewal decision due this week. He is demanding a 30% service credit, an executive apology, and a guaranteed recovery date before he will discuss renewal. The incident timeline is uncomfortable for both sides: your team failed to escalate the outage quickly, but early evidence also shows that an unapproved integration change on the customer's side amplified the disruption. The impact assessment is incomplete, and you do not have authority to approve the requested credit. Victor believes the supplier is using technical complexity to avoid responsibility. You must acknowledge what your organisation owns, discuss the disputed evidence without blaming the customer, and negotiate a credible recovery and commercial review without making unauthorised promises.",
+      "learningObjectives": [
+        "Recognize business impact and accept substantiated supplier failures without making unsupported admissions.",
+        "Use the incident timeline to separate shared causes from obligations the supplier owns.",
+        "Negotiate a defensible recovery package and decision path without promising unauthorized credits.",
+        "Secure agreement on evidence, accountable owners, and a time-bound commercial review."
+      ],
+      "keyChallenges": [
+        "Victor has a competitor's proposal and treats the renewal deadline as leverage, not a reason to accept vague promises.",
+        "Incident evidence points to both supplier escalation failures and an unapproved customer integration change.",
+        "He demands a 30% service credit before the supplier has completed its impact assessment.",
+        "He challenges contradictions between your incident timeline, technical explanation, and commercial commitments."
+      ],
+      "openingLine": "Your team missed the recovery date, and now you're asking me to renew. Why should I believe anything you say?"
+    },
+    {
+      "builtinKey": "starter_client_delivery_deadline_crisis",
+      "personaKey": "starter_rachel_kim",
+      "title": "The Launch Date, the Defect, and the Third Missed Commitment",
+      "interactionType": "Difficult Conversations",
+      "difficulty": "Advanced",
+      "context": "You are the delivery director at a software services company responsible for a client platform launch. The client has announced the launch date internally and coordinated training, marketing, and operations around it. Your team has already missed two milestones. During user acceptance testing, a payment-reconciliation defect has appeared that could create incorrect financial records if the platform is released as-is. There is also a genuine scope complication: the client requested an additional integration late in the project, but your team accepted the change informally without estimating or escalating its impact. Client-side approvals were also slower than planned, but your project manager failed to raise the schedule risk early. Rachel Kim, the client's Director of Client Delivery, now believes this is the third broken commitment. She wants a Friday launch, but shipping the current build carries unacceptable risk. You must present realistic choices, own your team's failures, explain the scope and dependency facts without blame-shifting, and obtain an explicit decision on scope, quality, and timing.",
+      "learningObjectives": [
+        "Own missed commitments and distinguish supplier-controlled delays from late client-side scope changes without blame-shifting.",
+        "Explain the UAT defect and its launch risk in language the client can use with leadership.",
+        "Offer viable launch options with explicit scope, risk, timeline, and decision deadlines.",
+        "Rebuild confidence through a named owner, measurable checkpoints, and proactive reporting."
+      ],
+      "keyChallenges": [
+        "Rachel has two missed milestones documented and views the latest update as the third broken commitment.",
+        "A late scope change is real, but your team failed to estimate and escalate its effect before accepting it informally.",
+        "UAT has exposed a payment-reconciliation defect; shipping Friday may meet the date but risks financial errors.",
+        "She insists on one accountable owner, daily evidence, and a decision between a reduced launch and a credible delay."
+      ],
+      "openingLine": "We planned the launch around your Friday commitment. Now UAT has found a payment defect. Tell me what you're proposing."
+    }
+  ]
+}

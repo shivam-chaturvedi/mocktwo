@@ -91,7 +91,8 @@ export function computeStreak(completedDatesSet: Set<string>, now: Date = new Da
   let streak = 0;
   let checkDate = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
 
-  while (true) {
+  // Hard bounded loop: max 3660 iterations (10 years) to guarantee termination
+  while (streak < 3660) {
     const key = toLocalDateString(checkDate);
     if (completedDatesSet.has(key)) {
       streak++;

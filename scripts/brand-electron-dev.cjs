@@ -122,11 +122,19 @@ try {
     }
   }
 
-  // 6. Touch the bundle to notify macOS LaunchServices of metadata updates
+  // 6. Ad-hoc codesign Electron.app so macOS Apple Silicon doesn't SIGKILL it for invalid signature
+  try {
+    execFileSync('/usr/bin/codesign', ['--force', '--deep', '--sign', '-', appBundle]);
+    console.log('[brand-electron-dev] Re-signed Electron.app bundle with ad-hoc signature.');
+  } catch (e) {
+    console.warn('[brand-electron-dev] codesign warning:', e.message);
+  }
+
+  // 7. Touch the bundle to notify macOS LaunchServices of metadata updates
   execFileSync('/usr/bin/touch', [appBundle]);
   console.log('[brand-electron-dev] Touched Electron.app bundle to invalidate system icon cache.');
 
-  // 7. Restart macOS Dock process so hover tooltips and tile caches refresh immediately
+  // 8. Restart macOS Dock process so hover tooltips and tile caches refresh immediately
   try {
     execFileSync('/usr/bin/killall', ['Dock']);
     console.log('[brand-electron-dev] Refreshed macOS Dock cache.');

@@ -67,7 +67,23 @@ class StorageManager {
     }
     return new Promise((resolve, reject) => {
       const id = ++this.messageId;
-      this.pendingRequests.set(id, { resolve, reject });
+      const timeout = setTimeout(() => {
+        if (this.pendingRequests.has(id)) {
+          this.pendingRequests.delete(id);
+          reject(new Error(`Storage query '${type}' timed out after 30s`));
+        }
+      }, 30000);
+
+      this.pendingRequests.set(id, {
+        resolve: (val) => {
+          clearTimeout(timeout);
+          resolve(val);
+        },
+        reject: (err) => {
+          clearTimeout(timeout);
+          reject(err);
+        },
+      });
       this.worker.postMessage({ id, type, payload });
     });
   }

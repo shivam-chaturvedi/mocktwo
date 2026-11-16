@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useApp } from "../../context";
 import { formatContextSetting, getCompatiblePersonas, type Persona, type PracticeScenario } from "../../types";
+import { LazyAvatarImage } from "./LazyAvatarImage";
 import {
   ChevronDown,
   Check,
@@ -36,6 +37,7 @@ export const PersonaPicker: React.FC<PersonaPickerProps> = ({
 
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [visibleCount, setVisibleCount] = useState<number>(20);
   const [isShuffling, setIsShuffling] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(0);
 
@@ -115,7 +117,8 @@ export const PersonaPicker: React.FC<PersonaPickerProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      setTimeout(() => searchInputRef.current?.focus(), 40);
+      const timer = setTimeout(() => searchInputRef.current?.focus(), 40);
+      return () => clearTimeout(timer);
     }
   }, [isOpen]);
 
@@ -211,28 +214,11 @@ export const PersonaPicker: React.FC<PersonaPickerProps> = ({
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0, flex: 1 }}>
-          <div
-            style={{
-              width: "36px",
-              height: "36px",
-              borderRadius: "50%",
-              overflow: "hidden",
-              backgroundColor: "var(--bg-window)",
-              border: "1px solid var(--separator)",
-              flexShrink: 0,
-              display: "grid",
-              placeItems: "center",
-              fontSize: "12px",
-              fontWeight: 650,
-              color: "var(--text-primary)",
-            }}
-          >
-            {currentPersona?.avatarUrl ? (
-              <img src={currentPersona.avatarUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-            ) : (
-              currentPersona?.monogram || currentPersona?.name?.slice(0, 2) || "CP"
-            )}
-          </div>
+          <LazyAvatarImage
+            src={currentPersona?.avatarUrl}
+            name={currentPersona?.name || "Counterpart"}
+            size={36}
+          />
 
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
@@ -411,61 +397,69 @@ export const PersonaPicker: React.FC<PersonaPickerProps> = ({
                 No compatible personas found
               </div>
             ) : (
-              flatVisible.map((persona) => {
-                const isSelected = currentPersona ? persona.id === currentPersona.id : false;
-                return (
-                  <div
-                    key={persona.id}
-                    onClick={() => {
-                      handleSelect(persona);
-                      setIsOpen(false);
-                    }}
-                    className="hover-subtle"
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      padding: "6px 8px",
-                      borderRadius: "var(--radius-sm)",
-                      backgroundColor: isSelected ? "var(--selection)" : "transparent",
-                      cursor: "pointer",
-                    }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
-                      <div
-                        style={{
-                          width: "28px",
-                          height: "28px",
-                          borderRadius: "50%",
-                          overflow: "hidden",
-                          backgroundColor: "var(--bg-control)",
-                          flexShrink: 0,
-                          display: "grid",
-                          placeItems: "center",
-                          fontSize: "11px",
-                          fontWeight: 600,
-                        }}
-                      >
-                        {persona.avatarUrl ? (
-                          <img src={persona.avatarUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                        ) : (
-                          persona.monogram
-                        )}
-                      </div>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: "12.5px", fontWeight: 550, color: "var(--text-primary)" }}>
-                          {persona.name}
-                        </div>
-                        <div style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
-                          {persona.title}
+              <>
+                {flatVisible.slice(0, visibleCount).map((persona) => {
+                  const isSelected = currentPersona ? persona.id === currentPersona.id : false;
+                  return (
+                    <div
+                      key={persona.id}
+                      onClick={() => {
+                        handleSelect(persona);
+                        setIsOpen(false);
+                      }}
+                      className="hover-subtle"
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        padding: "6px 8px",
+                        borderRadius: "var(--radius-sm)",
+                        backgroundColor: isSelected ? "var(--selection)" : "transparent",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
+                        <LazyAvatarImage
+                          src={persona.avatarUrl}
+                          name={persona.name}
+                          size={28}
+                        />
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: "12.5px", fontWeight: 550, color: "var(--text-primary)" }}>
+                            {persona.name}
+                          </div>
+                          <div style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
+                            {persona.title}
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    {isSelected && <Check size={14} style={{ color: "var(--accent-blue)" }} />}
+                      {isSelected && <Check size={14} style={{ color: "var(--accent-blue)" }} />}
+                    </div>
+                  );
+                })}
+                {flatVisible.length > visibleCount && (
+                  <div style={{ padding: "4px 8px", textAlign: "center" }}>
+                    <button
+                      type="button"
+                      onClick={() => setVisibleCount((prev) => prev + 20)}
+                      style={{
+                        padding: "4px 10px",
+                        fontSize: "11px",
+                        fontWeight: 600,
+                        color: "var(--accent-blue)",
+                        backgroundColor: "var(--bg-control)",
+                        border: "1px solid var(--separator)",
+                        borderRadius: "var(--radius-xs)",
+                        cursor: "pointer",
+                        width: "100%",
+                      }}
+                    >
+                      Load more ({flatVisible.length - visibleCount} more)
+                    </button>
                   </div>
-                );
-              })
+                )}
+              </>
             )}
           </div>
 

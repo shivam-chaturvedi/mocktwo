@@ -2,6 +2,7 @@ import type {
   ProfileService,
   ScenarioService,
   CreateAdHocParams,
+  StudioScenarioInput,
   PersonaService,
   SessionService,
   SessionStreamChunk,
@@ -65,10 +66,10 @@ export class SqliteProfileService implements ProfileService {
 }
 
 export class SqlitePersonaService implements PersonaService {
-  async getPersonas(): Promise<Persona[]> {
+  async getPersonas(options?: { limit?: number; offset?: number }): Promise<Persona[]> {
     if (window.electronAPI?.storage) {
       try {
-        return await window.electronAPI.storage.getPersonas();
+        return await window.electronAPI.storage.getPersonas(options);
       } catch (err) {
         console.warn("[SqlitePersonaService] getPersonas failed:", err);
       }
@@ -77,6 +78,14 @@ export class SqlitePersonaService implements PersonaService {
   }
 
   async getPersona(id: string): Promise<Persona | null> {
+    if (window.electronAPI?.storage?.getPersona) {
+      try {
+        const p = await window.electronAPI.storage.getPersona(id);
+        if (p) return p;
+      } catch (err) {
+        console.warn("[SqlitePersonaService] getPersona failed:", err);
+      }
+    }
     const list = await this.getPersonas();
     return list.find((p) => p.id === id) || null;
   }
@@ -121,10 +130,10 @@ export class SqlitePersonaService implements PersonaService {
 }
 
 export class SqliteScenarioService implements ScenarioService {
-  async getScenarios(): Promise<PracticeScenario[]> {
+  async getScenarios(options?: { limit?: number; offset?: number }): Promise<PracticeScenario[]> {
     if (window.electronAPI?.storage) {
       try {
-        return await window.electronAPI.storage.getScenarios();
+        return await window.electronAPI.storage.getScenarios(options);
       } catch (err) {
         console.warn("[SqliteScenarioService] getScenarios failed:", err);
       }
@@ -133,6 +142,14 @@ export class SqliteScenarioService implements ScenarioService {
   }
 
   async getScenario(id: string): Promise<PracticeScenario | null> {
+    if (window.electronAPI?.storage?.getScenario) {
+      try {
+        const s = await window.electronAPI.storage.getScenario(id);
+        if (s) return s;
+      } catch (err) {
+        console.warn("[SqliteScenarioService] getScenario failed:", err);
+      }
+    }
     const list = await this.getScenarios();
     return list.find((s) => s.id === id) || null;
   }
@@ -150,6 +167,17 @@ export class SqliteScenarioService implements ScenarioService {
       id: `sc-${Date.now()}`,
     };
     return newScenario;
+  }
+
+  async saveStudioScenario(input: StudioScenarioInput): Promise<PracticeScenario> {
+    if (window.electronAPI?.storage?.saveScenario) {
+      const res = await window.electronAPI.storage.saveScenario(input);
+      if (res && res.ok && res.scenario) {
+        return res.scenario;
+      }
+      throw new Error(res?.error || "Failed to save scenario");
+    }
+    throw new Error("Electron storage service unavailable");
   }
 
   async createAdHoc(params: CreateAdHocParams): Promise<PracticeScenario> {
@@ -178,11 +206,17 @@ export class SqliteScenarioService implements ScenarioService {
   }
 
   async updateScenario(id: string, updates: Partial<PracticeScenario>): Promise<PracticeScenario> {
+    if (window.electronAPI?.storage?.updateScenario) {
+      const res = await window.electronAPI.storage.updateScenario(id, updates);
+      if (res && res.ok && res.scenario) {
+        return res.scenario;
+      }
+      if (res?.error) {
+        throw new Error(res.error);
+      }
+    }
     const existing = await this.getScenario(id);
     const merged = { ...(existing || ({} as PracticeScenario)), ...updates, id };
-    if (window.electronAPI?.storage) {
-      await window.electronAPI.storage.createScenario(merged);
-    }
     return merged;
   }
 
@@ -199,10 +233,10 @@ export class SqliteScenarioService implements ScenarioService {
 }
 
 export class SqliteRecordingService implements RecordingService {
-  async getRecordings(): Promise<Recording[]> {
+  async getRecordings(options?: { limit?: number; offset?: number }): Promise<Recording[]> {
     if (window.electronAPI?.storage) {
       try {
-        return await window.electronAPI.storage.getRecordings();
+        return await window.electronAPI.storage.getRecordings(options);
       } catch (err) {
         console.warn("[SqliteRecordingService] getRecordings failed:", err);
       }

@@ -161,6 +161,41 @@ class SyncService {
       return await this.storage.execute("personas:get", personaId);
     }
 
+    // 2b. Pre-flight health check on chosen face ID
+    try {
+      const faceCheck = await this.tavusClient.getFace(persona.tavusFaceId);
+      if (faceCheck && faceCheck.status && faceCheck.status !== "completed") {
+        throw new Error(`Face is in non-completed status: ${faceCheck.status}`);
+      }
+    } catch (faceErr) {
+      if (faceErr.status === 404 || (faceErr.message && faceErr.message.includes("status"))) {
+        console.warn(`[SyncService] Face ${persona.tavusFaceId} failed pre-flight health check: ${faceErr.message}. Rebinding...`);
+        try {
+          const freshFaces = await this.tavusClient.listFaces({ limit: 50 });
+          if (freshFaces && Array.isArray(freshFaces.data)) {
+            const usable = freshFaces.data.filter((f) => (!f.status || f.status === "completed") && f.default_voice_id && f.face_id !== persona.tavusFaceId);
+            if (usable.length > 0) {
+              const rep = usable[0];
+              await this.storage.execute("personas:update", {
+                id: persona.id,
+                persona: {
+                  tavusFaceId: rep.face_id,
+                  tavusVoiceId: rep.default_voice_id,
+                  faceName: rep.face_name,
+                  avatarUrl: rep.thumbnail_image_url || null,
+                },
+              });
+              persona.tavusFaceId = rep.face_id;
+              persona.tavusVoiceId = rep.default_voice_id;
+              persona.faceName = rep.face_name;
+            }
+          }
+        } catch (rebindErr) {
+          console.warn("[SyncService] Failed to rebind face:", rebindErr.message);
+        }
+      }
+    }
+
     // 3. Compile prompt
     const promptResult = buildSystemPrompt(persona);
     if (promptResult.error) {
@@ -289,15 +324,21 @@ class SyncService {
     const persona = await this.storage.execute("personas:get", personaId);
     if (!persona) return false;
 
+    // Attempt local database delete first (which performs the has_scenarios check)
+    const deleteResult = await this.storage.execute("personas:delete", personaId);
+    if (!deleteResult || deleteResult.ok === false) {
+      return deleteResult;
+    }
+
     if (options.deleteTavusPal && persona.tavusPalId) {
       try {
         await this.tavusClient.deletePal(persona.tavusPalId);
       } catch (err) {
-        console.warn(`[SyncService] Failed to delete remote PAL ${persona.tavusPalId}:`, err.message);
+        console.warn("[SyncService] Failed to delete remote PAL:", persona.tavusPalId, err.message);
       }
     }
 
-    return await this.storage.execute("personas:delete", personaId);
+    return deleteResult;
   }
 }
 

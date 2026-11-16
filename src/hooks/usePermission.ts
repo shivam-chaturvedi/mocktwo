@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 export type PermissionStatus =
   | "granted"
@@ -20,15 +20,16 @@ export interface UsePermissionReturn {
 
 export function usePermission(resource: "camera" | "microphone"): UsePermissionReturn {
   const [status, setStatus] = useState<PermissionStatus>("loading");
+  const isMountedRef = useRef(true);
 
   const queryStatus = useCallback(async (): Promise<PermissionStatus> => {
     if (typeof window !== "undefined" && window.electronAPI?.getMediaStatus) {
       try {
         const s = await window.electronAPI.getMediaStatus(resource);
-        setStatus(s);
+        if (isMountedRef.current) setStatus(s);
         return s;
       } catch {
-        setStatus("unknown");
+        if (isMountedRef.current) setStatus("unknown");
         return "unknown";
       }
     }
@@ -40,20 +41,21 @@ export function usePermission(resource: "camera" | "microphone"): UsePermissionR
         // Cast as PermissionDescriptor for non-standard camera/microphone names in some browsers
         const p = await navigator.permissions.query({ name: pName as PermissionName });
         const mapped = p.state === "granted" ? "granted" : p.state === "denied" ? "denied" : "not-determined";
-        setStatus(mapped);
+        if (isMountedRef.current) setStatus(mapped);
         return mapped;
       } catch {
         // Fallback: assume not-determined
-        setStatus("not-determined");
+        if (isMountedRef.current) setStatus("not-determined");
         return "not-determined";
       }
     }
 
-    setStatus("unknown");
+    if (isMountedRef.current) setStatus("unknown");
     return "unknown";
   }, [resource]);
 
   useEffect(() => {
+    isMountedRef.current = true;
     const timer = setTimeout(() => {
       queryStatus();
     }, 0);
@@ -61,6 +63,7 @@ export function usePermission(resource: "camera" | "microphone"): UsePermissionR
     let cleanup: (() => void) | undefined;
     if (typeof window !== "undefined" && window.electronAPI?.onPermissionsUpdated) {
       cleanup = window.electronAPI.onPermissionsUpdated((payload) => {
+        if (!isMountedRef.current) return;
         if (resource === "camera" && payload.camera) {
           setStatus(payload.camera as PermissionStatus);
         } else if (resource === "microphone" && payload.microphone) {
@@ -70,6 +73,7 @@ export function usePermission(resource: "camera" | "microphone"): UsePermissionR
     }
 
     return () => {
+      isMountedRef.current = false;
       clearTimeout(timer);
       if (cleanup) cleanup();
     };

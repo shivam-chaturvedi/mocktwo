@@ -5,6 +5,20 @@ export interface ElectronAPI {
   openSystemSettings: (pane: "camera" | "microphone") => Promise<boolean>;
   logError: (payload: Record<string, unknown>) => void;
   revealLogs: () => Promise<string>;
+  getClientConfig?: () => Promise<{ seedEnabled: boolean; uiListPageSize: number; seedBatchSize: number; error: string | null }>;
+  seedGetStatus?: () => Promise<{
+    isSeeding: boolean;
+    personasStatus: string;
+    scenariosStatus: string;
+    unboundPersonasCount: number;
+    totalPersonasCount: number;
+    totalScenariosCount: number;
+    attempts: number;
+    lastError: string | null;
+    errorCode?: string | null;
+  }>;
+  seedRetry?: () => Promise<boolean>;
+  onSeedProgress?: (callback: (progress: any) => void) => () => void;
   tavusStatus: () => Promise<{ configured: boolean }>;
   personaRetrySync: (id: string) => Promise<any>;
   personaPreviewPrompt: (draft: any) => Promise<{ prompt: string; wordCount: number; warnings: string[]; error: string | null }>;
@@ -13,11 +27,15 @@ export interface ElectronAPI {
   storage: {
     getProfile: () => Promise<any>;
     saveProfile: (p: any) => Promise<any>;
-    getPersonas: () => Promise<any[]>;
+    getPersonas: (options?: { limit?: number; offset?: number }) => Promise<any[]>;
+    getPersona: (id: string) => Promise<any>;
     createPersona: (p: any) => Promise<any>;
     updatePersona: (id: string, p: any) => Promise<any>;
     deletePersona: (id: string, options?: { deleteTavusPal?: boolean }) => Promise<boolean>;
-    getScenarios: () => Promise<any[]>;
+    getScenarios: (options?: { limit?: number; offset?: number }) => Promise<any[]>;
+    getScenario: (id: string) => Promise<any>;
+    saveScenario: (s: any) => Promise<{ ok: boolean; scenario?: any; error?: string; code?: string }>;
+    updateScenario: (id: string, updates: any) => Promise<{ ok: boolean; scenario?: any; error?: string; code?: string }>;
     createScenario: (s: any) => Promise<any>;
     deleteScenario: (id: string) => Promise<boolean>;
     getRecordings: (params?: any) => Promise<any[]>;
