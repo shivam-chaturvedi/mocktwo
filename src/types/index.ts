@@ -8,23 +8,28 @@ export type Screen =
   | "simulation"
   | "processing";
 
-export type InteractionType =
-  | "Interviews"
-  | "Sales & Pitches"
-  | "Presentations"
-  | "Negotiation"
-  | "Difficult Conversations"
-  | "Customer Service"
-  | "Hospitality"
+export const CATEGORIES = [
+  "Interviews",
+  "Sales & Pitches",
+  "Presentations",
+  "Negotiation",
+  "Difficult Conversations",
+  "Customer Service",
+  "Hospitality",
   // Legacy aliases for backward compatibility with persisted data
-  | "Front Desk"
-  | "Concierge"
-  | "Executive Lounge"
-  | "Guest Services"
-  | "Escalation Management"
-  | "Reservations";
+  "Front Desk",
+  "Concierge",
+  "Executive Lounge",
+  "Guest Services",
+  "Escalation Management",
+  "Reservations",
+] as const;
 
-export type DifficultyLevel = "Foundational" | "Intermediate" | "Advanced";
+export type InteractionType = (typeof CATEGORIES)[number];
+
+export const DIFFICULTIES = ["Foundational", "Intermediate", "Advanced"] as const;
+
+export type DifficultyLevel = (typeof DIFFICULTIES)[number];
 
 export type ScenarioSource = "Library" | "Mine" | "Hotel Library" | "Assigned";
 
@@ -334,6 +339,9 @@ export interface PracticeScenario {
   personaSummary: string;
   source: ScenarioSource;
   submissionStatus?: SubmissionStatus;
+  openingLine?: string;
+  builtinKey?: string;
+  hidden?: boolean;
   referenceMaterialName?: string;
   sopDocumentName?: string; // backward compatibility
   successCriteria?: string[];
@@ -489,7 +497,8 @@ export function formatContextSetting(setting: string): string {
   if (!setting) return "";
   let cleaned = setting.trim();
 
-  while (/^(room|suite|setting|call|meeting|office|panel)\s+/i.test(cleaned)) {
+  let iterations = 0;
+  while (iterations++ < 10 && /^(room|suite|setting|call|meeting|office|panel)\s+/i.test(cleaned)) {
     const match = cleaned.match(/^(room|suite|setting|call|meeting|office|panel)\s+/i);
     if (match) {
       const word = match[1].toLowerCase();

@@ -345,10 +345,10 @@ export const TitleBar: React.FC = () => {
             transition: "all 0.12s ease",
           }}
         >
-          {!user.name || user.name.trim() === "" || user.name === "Learner" ? (
+          {!user?.name || user.name.trim() === "" || user.name === "Learner" ? (
             <User size={13} strokeWidth={2} style={{ color: "var(--text-secondary)" }} />
           ) : (
-            user.name
+            (user.name || "")
               .split(" ")
               .map((n) => n[0])
               .join("")
@@ -389,7 +389,7 @@ export const TitleBar: React.FC = () => {
                   lineHeight: 1.3,
                 }}
               >
-                {user.name}
+                {user?.name || "Learner"}
               </div>
               <div
                 style={{

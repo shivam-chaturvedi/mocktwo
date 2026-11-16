@@ -19,9 +19,17 @@ export const SignInScreen: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [codeDigits, setCodeDigits] = useState<string[]>(["", "", "", "", "", ""]);
   const [resendTimer, setResendTimer] = useState(45);
-  const [isReturningUser, setIsReturningUser] = useState(Boolean(user?.email && user.name));
+  const [isReturningUser, setIsReturningUser] = useState(Boolean(user?.email && user?.name));
 
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const actionTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  useEffect(() => {
+    return () => {
+      actionTimersRef.current.forEach((t) => clearTimeout(t));
+      actionTimersRef.current = [];
+    };
+  }, []);
 
   // Timer countdown for resending one-time code
   useEffect(() => {
@@ -41,10 +49,11 @@ export const SignInScreen: React.FC = () => {
     setError("");
     setIsLoading(true);
 
-    setTimeout(() => {
+    const timer = setTimeout(() => {
       setIsLoading(false);
       setAuthStep("sso-or-code");
     }, 400);
+    actionTimersRef.current.push(timer);
   };
 
   const handleSSOLogin = async () => {
@@ -67,11 +76,13 @@ export const SignInScreen: React.FC = () => {
     setIsLoading(true);
     setError("");
     setResendTimer(45);
-    setTimeout(() => {
+    const timer = setTimeout(() => {
       setIsLoading(false);
       setAuthStep("enter-code");
-      setTimeout(() => inputRefs.current[0]?.focus(), 100);
+      const focusTimer = setTimeout(() => inputRefs.current[0]?.focus(), 100);
+      actionTimersRef.current.push(focusTimer);
     }, 400);
+    actionTimersRef.current.push(timer);
   };
 
   const handleTouchIDUnlock = async () => {
@@ -269,7 +280,7 @@ export const SignInScreen: React.FC = () => {
                 boxShadow: "var(--shadow-card)"
               }}
             >
-              {user.name ? user.name.slice(0, 2).toUpperCase() : "U"}
+              {user?.name ? user.name.slice(0, 2).toUpperCase() : "U"}
             </div>
 
             <h3
@@ -280,10 +291,10 @@ export const SignInScreen: React.FC = () => {
                 margin: "0 0 4px 0"
               }}
             >
-              {user.name}
+              {user?.name || "Learner"}
             </h3>
             <div style={{ fontSize: "12.5px", color: "var(--text-secondary)", marginBottom: "22px" }}>
-              {user.role} • {user.team}
+              {user?.role || "Learner"} • {user?.team || "Workspace"}
             </div>
 
             <Button

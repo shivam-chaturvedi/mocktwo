@@ -9,6 +9,7 @@ import type {
   AppSettings,
   UserBaseline,
 } from "../types";
+import type { StudioScenarioInput } from "../services/api/types";
 import { serviceRegistry } from "../services/api";
 import { runDataMigration } from "../services/migration";
 
@@ -90,7 +91,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // Modals & Sheets
   const [isBriefingOpen, setIsBriefingOpen] = useState(false);
   const [isStudioOpen, setIsStudioOpen] = useState(false);
-  const [studioInitialTab, setStudioInitialTab] = useState<"scenario" | "guest" | "persona">("scenario");
+  const [studioInitialTab, setStudioInitialTab] = useState<"scenario" | "persona">("scenario");
   const [isQuickPracticeOpen, setIsQuickPracticeOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -102,52 +103,75 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // Toast
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [toastAction, setToastAction] = useState<{ label: string; onClick: () => void } | null>(null);
+  const toastTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showToast = useCallback((message: string, action?: { label: string; onClick: () => void }) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     setToastMessage(message);
     setToastAction(action || null);
-    setTimeout(() => {
+    toastTimerRef.current = setTimeout(() => {
       setToastMessage(null);
       setToastAction(null);
+      toastTimerRef.current = null;
     }, 4500);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    };
   }, []);
 
   // Run data migration and bootstrap state from services on startup
   useEffect(() => {
     runDataMigration();
 
-    serviceRegistry.scenarios
-      .getScenarios()
-      .then((list) => {
-        setScenarios(list);
-        if (list.length > 0) {
-          setSelectedScenario(list[0]);
-        }
-      })
-      .catch((err) => {
-        console.warn("[AppContext] Failed to load scenarios:", err);
-      });
+    const reloadData = async () => {
+      const cfg = await window.electronAPI?.getClientConfig?.().catch(() => null);
+      const limit = cfg?.uiListPageSize || 20;
 
-    serviceRegistry.personas
-      .getPersonas()
-      .then((list) => {
-        setPersonas(list);
-      })
-      .catch((err) => {
-        console.warn("[AppContext] Failed to load personas:", err);
-      });
+      serviceRegistry.scenarios
+        .getScenarios({ limit, offset: 0 })
+        .then((list) => {
+          setScenarios(list);
+          if (list.length > 0) {
+            setSelectedScenario((prev) => prev || list[0]);
+          }
+        })
+        .catch((err) => {
+          console.warn("[AppContext] Failed to load scenarios:", err);
+        });
 
-    serviceRegistry.recordings
-      .getRecordings()
-      .then((list) => {
-        setRecordings(list);
-        if (list.length > 0) {
-          setSelectedRecordingId(list[0].id);
-        }
-      })
-      .catch((err) => {
-        console.warn("[AppContext] Failed to load recordings:", err);
-      });
+      serviceRegistry.personas
+        .getPersonas({ limit, offset: 0 })
+        .then((list) => {
+          setPersonas(list);
+        })
+        .catch((err) => {
+          console.warn("[AppContext] Failed to load personas:", err);
+        });
+
+      serviceRegistry.recordings
+        .getRecordings({ limit, offset: 0 })
+        .then((list) => {
+          setRecordings(list);
+          if (list.length > 0) {
+            setSelectedRecordingId((prev) => prev || list[0].id);
+          }
+        })
+        .catch((err) => {
+          console.warn("[AppContext] Failed to load recordings:", err);
+        });
+    };
+
+    reloadData();
+
+    // Live update when seeding completes or progresses
+    const cleanupSeedListener = window.electronAPI?.onSeedProgress?.((progress) => {
+      if (progress && (progress.step === "completed" || progress.step === "seeding_scenarios" || progress.step === "assigning_faces")) {
+        reloadData();
+      }
+    });
 
     serviceRegistry.profile
       .getProfile()
@@ -179,6 +203,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       .catch((err) => {
         console.warn("[AppContext] Failed to load baseline:", err);
       });
+
+    return () => {
+      if (typeof cleanupSeedListener === "function") cleanupSeedListener();
+    };
   }, []);
 
   // Test fixture helper for automated test suites
@@ -460,7 +488,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, []);
 
   // Studio
-  const openStudio = useCallback((tab: "scenario" | "guest" | "persona" = "scenario") => {
+  const openStudio = useCallback((tab: "scenario" | "persona" = "scenario") => {
     setStudioInitialTab(tab);
     setIsStudioOpen(true);
   }, []);
@@ -468,6 +496,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const closeStudio = useCallback(() => {
     setIsStudioOpen(false);
   }, []);
+
+  const saveStudioScenario = useCallback(
+    async (data: StudioScenarioInput): Promise<PracticeScenario> => {
+      const created = await serviceRegistry.scenarios.saveStudioScenario(data);
+      setScenarios((prev) => [created, ...prev]);
+      serviceRegistry.personas.getPersonas().then((fresh) => setPersonas(fresh)).catch(() => {});
+      showToast(`Scenario "${created.title}" saved`, {
+        label: "Practice Now",
+        onClick: () => {
+          setSelectedScenario(created);
+          setIsBriefingOpen(true);
+        },
+      });
+      return created;
+    },
+    [showToast]
+  );
 
   // Quick Practice
   const openQuickPractice = useCallback(() => {
@@ -748,6 +793,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         studioInitialTab,
         openStudio,
         closeStudio,
+        saveStudioScenario,
         isQuickPracticeOpen,
         openQuickPractice,
         closeQuickPractice,

@@ -14,11 +14,17 @@ interface State {
 }
 
 export class ErrorBoundary extends Component<Props, State> {
+  private copyTimeout: ReturnType<typeof setTimeout> | null = null;
+
   public state: State = {
     hasError: false,
     error: null,
     copied: false,
   };
+
+  public componentWillUnmount() {
+    if (this.copyTimeout) clearTimeout(this.copyTimeout);
+  }
 
   public static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error, copied: false };
@@ -57,7 +63,8 @@ export class ErrorBoundary extends Component<Props, State> {
     if (typeof navigator !== "undefined" && navigator.clipboard) {
       navigator.clipboard.writeText(errorText).then(() => {
         this.setState({ copied: true });
-        setTimeout(() => this.setState({ copied: false }), 2000);
+        if (this.copyTimeout) clearTimeout(this.copyTimeout);
+        this.copyTimeout = setTimeout(() => this.setState({ copied: false }), 2000);
       }).catch(() => {
         // Fallback if clipboard permission fails
         this.setState({ copied: false });

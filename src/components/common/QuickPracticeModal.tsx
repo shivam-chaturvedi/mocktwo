@@ -90,6 +90,7 @@ export const QuickPracticeModal: React.FC = () => {
   // Scenarios mode state
   const [searchQuery, setSearchQuery] = useState("");
   const [highlightedScenarioIndex, setHighlightedScenarioIndex] = useState(0);
+  const [visibleScenarioCount, setVisibleScenarioCount] = useState<number>(20);
 
   // Refs for focus management and focus trap
   const modalRef = useRef<HTMLDivElement>(null);
@@ -805,78 +806,101 @@ export const QuickPracticeModal: React.FC = () => {
                     style={{ height: "100%" }}
                   />
                 ) : (
-                  filteredScenarios.map((sc, idx) => {
-                    const isHighlighted = idx === highlightedScenarioIndex;
-                    return (
-                      <div
-                        key={sc.id}
-                        onClick={() => handleSelectScenario(sc)}
-                        onMouseEnter={() => setHighlightedScenarioIndex(idx)}
-                        className="mac-list-row"
-                        style={{
-                          height: "52px",
-                          minHeight: "52px",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          padding: "0 12px",
-                          borderRadius: "var(--radius-md)",
-                          backgroundColor: isHighlighted ? "var(--bg-hover)" : "transparent",
-                          cursor: "pointer",
-                          marginBottom: "2px",
-                          boxSizing: "border-box",
-                          borderLeft: isHighlighted ? "3px solid var(--accent-blue)" : "3px solid transparent",
-                        }}
-                      >
-                        {/* Left: Category Icon + Title + Counterpart */}
-                        <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0, flex: 1 }}>
-                          <CategoryIcon category={sc.interactionType} size={16} />
-                          <div style={{ minWidth: 0, flex: 1 }}>
-                            <div
-                              style={{
-                                fontSize: "13px",
-                                fontWeight: 600,
-                                color: "var(--text-primary)",
-                                textOverflow: "ellipsis",
-                                overflow: "hidden",
-                                whiteSpace: "nowrap",
-                              }}
-                            >
-                              {sc.title}
-                            </div>
-                            <div
-                              style={{
-                                fontSize: "11px",
-                                color: "var(--text-secondary)",
-                                marginTop: "1px",
-                                textOverflow: "ellipsis",
-                                overflow: "hidden",
-                                whiteSpace: "nowrap",
-                              }}
-                            >
-                              With {sc.personaName || sc.guestName || "Counterpart"} · {sc.interactionType}
+                  <>
+                    {filteredScenarios.slice(0, visibleScenarioCount).map((sc, idx) => {
+                      const isHighlighted = idx === highlightedScenarioIndex;
+                      return (
+                        <div
+                          key={sc.id}
+                          onClick={() => handleSelectScenario(sc)}
+                          onMouseEnter={() => setHighlightedScenarioIndex(idx)}
+                          className="mac-list-row"
+                          style={{
+                            height: "52px",
+                            minHeight: "52px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            padding: "0 12px",
+                            borderRadius: "var(--radius-md)",
+                            backgroundColor: isHighlighted ? "var(--bg-hover)" : "transparent",
+                            cursor: "pointer",
+                            marginBottom: "2px",
+                            boxSizing: "border-box",
+                            borderLeft: isHighlighted ? "3px solid var(--accent-blue)" : "3px solid transparent",
+                          }}
+                        >
+                          {/* Left: Category Icon + Title + Counterpart */}
+                          <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0, flex: 1 }}>
+                            <CategoryIcon category={sc.interactionType} size={16} />
+                            <div style={{ minWidth: 0, flex: 1 }}>
+                              <div
+                                style={{
+                                  fontSize: "13px",
+                                  fontWeight: 600,
+                                  color: "var(--text-primary)",
+                                  textOverflow: "ellipsis",
+                                  overflow: "hidden",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {sc.title}
+                              </div>
+                              <div
+                                style={{
+                                  fontSize: "11px",
+                                  color: "var(--text-secondary)",
+                                  marginTop: "1px",
+                                  textOverflow: "ellipsis",
+                                  overflow: "hidden",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                With {sc.personaName || sc.guestName || "Counterpart"} · {sc.interactionType}
+                              </div>
                             </div>
                           </div>
-                        </div>
 
-                        {/* Right: Difficulty badge + Duration */}
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0, marginLeft: "12px" }}>
-                          <Badge variant="neutral" size="sm">
-                            {sc.difficulty}
-                          </Badge>
-                          <span
-                            style={{
-                              fontSize: "11px",
-                              color: "var(--text-tertiary)",
-                              fontFamily: "var(--font-mono)",
-                            }}
-                          >
-                            ~{sc.durationMinutes}m
-                          </span>
+                          {/* Right: Difficulty badge + Duration */}
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0, marginLeft: "12px" }}>
+                            <Badge variant="neutral" size="sm">
+                              {sc.difficulty}
+                            </Badge>
+                            <span
+                              style={{
+                                fontSize: "11px",
+                                color: "var(--text-tertiary)",
+                                fontFamily: "var(--font-mono)",
+                              }}
+                            >
+                              ~{sc.durationMinutes}m
+                            </span>
+                          </div>
                         </div>
+                      );
+                    })}
+                    {filteredScenarios.length > visibleScenarioCount && (
+                      <div style={{ padding: "8px 12px", textAlign: "center" }}>
+                        <button
+                          type="button"
+                          onClick={() => setVisibleScenarioCount((prev) => prev + 20)}
+                          style={{
+                            padding: "6px 14px",
+                            fontSize: "11.5px",
+                            fontWeight: 600,
+                            color: "var(--accent-blue)",
+                            backgroundColor: "var(--bg-control)",
+                            border: "1px solid var(--separator)",
+                            borderRadius: "var(--radius-sm)",
+                            cursor: "pointer",
+                            width: "100%",
+                          }}
+                        >
+                          Load more scenarios ({filteredScenarios.length - visibleScenarioCount} remaining)
+                        </button>
                       </div>
-                    );
-                  })
+                    )}
+                  </>
                 )}
               </div>
             </div>

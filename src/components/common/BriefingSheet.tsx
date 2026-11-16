@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useApp } from "../../context";
 import { Button } from "./Button";
 import { CategoryIcon } from "./CategoryIcon";
 import { Badge } from "./Badge";
 import { AudioVisualizer } from "./AudioVisualizer";
 import { PersonaPicker } from "./PersonaPicker";
+import { LazyAvatarImage } from "./LazyAvatarImage";
 import { formatContextSetting, renderScenarioText, type Persona, VALIDATION_HINTS } from "../../types";
 import { WELLNESS_DISCLAIMER } from "../../services/biometrics";
 import { serviceRegistry } from "../../services/api";
@@ -45,6 +46,13 @@ export const BriefingSheet: React.FC = () => {
   const [isMeasuringBaseline, setIsMeasuringBaseline] = useState(false);
   const [miniBaselineProgress, setMiniBaselineProgress] = useState<number | null>(null);
   const [baselinePulseResult, setBaselinePulseResult] = useState<number | null>(null);
+  const crossfadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (crossfadeTimerRef.current) clearTimeout(crossfadeTimerRef.current);
+    };
+  }, []);
 
   // Active persona for this session (falls back to scenario default)
   const currentPersona: Persona | undefined = useMemo(() => {
@@ -85,7 +93,8 @@ export const BriefingSheet: React.FC = () => {
       return;
     }
     setIsCrossfading(true);
-    setTimeout(() => {
+    if (crossfadeTimerRef.current) clearTimeout(crossfadeTimerRef.current);
+    crossfadeTimerRef.current = setTimeout(() => {
       setSessionPersona(newPersona);
       setIsCrossfading(false);
     }, 75);
@@ -304,41 +313,11 @@ export const BriefingSheet: React.FC = () => {
                 transition: settings.reducedMotion ? "none" : "opacity 150ms ease, transform 150ms ease",
               }}
             >
-              <div
-                style={{
-                  width: "56px",
-                  height: "56px",
-                  borderRadius: "50%",
-                  overflow: "hidden",
-                  border: "1px solid var(--separator)",
-                  boxShadow: "var(--shadow-card)",
-                  flexShrink: 0,
-                  backgroundColor: "var(--bg-window)",
-                }}
-              >
-                {effectivePersona.avatarUrl ? (
-                  <img
-                    src={effectivePersona.avatarUrl}
-                    alt={effectivePersona.name}
-                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                  />
-                ) : (
-                  <div
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                      backgroundColor: "var(--bg-control)",
-                      display: "grid",
-                      placeItems: "center",
-                      fontSize: "18px",
-                      fontWeight: 650,
-                      color: "var(--text-primary)",
-                    }}
-                  >
-                    {effectivePersona.monogram || effectivePersona.name.slice(0, 2).toUpperCase()}
-                  </div>
-                )}
-              </div>
+              <LazyAvatarImage
+                src={effectivePersona.avatarUrl}
+                name={effectivePersona.name}
+                size={56}
+              />
               <div>
                 <h3
                   style={{
@@ -421,7 +400,7 @@ export const BriefingSheet: React.FC = () => {
               </p>
             </div>
 
-            {/* Key Objectives */}
+            {/* Learning Objectives */}
             <div>
               <h4
                 style={{
@@ -433,7 +412,7 @@ export const BriefingSheet: React.FC = () => {
                   fontWeight: 600,
                 }}
               >
-                Key Objectives
+                Learning Objectives
               </h4>
               <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                 {selectedScenario.learningObjectives.map((obj, i) => (
@@ -805,7 +784,7 @@ export const BriefingSheet: React.FC = () => {
           }}
         >
           <span style={{ fontSize: "12.5px", color: "var(--text-tertiary)" }}>
-            Session length: ~{selectedScenario.durationMinutes} minutes
+            Session length: {selectedScenario.durationMinutes || 3} minutes
           </span>
 
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>

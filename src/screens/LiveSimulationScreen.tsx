@@ -410,7 +410,7 @@ export const LiveSimulationScreen: React.FC = () => {
           </div>
         </div>
 
-        {/* Collapsible Key Objectives Glass Panel (Right edge) */}
+        {/* Collapsible Session Objectives Glass Panel (Right edge) */}
         {showObjectivesPanel && (
           <div
             className="glass-surface animate-sheet-in"

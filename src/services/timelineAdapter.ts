@@ -58,7 +58,8 @@ export function buildTimelineSeries(
   durationSeconds: number,
   baselinePulse: number = 68
 ): TimelineData {
-  const totalDuration = Math.max(0, Math.round(durationSeconds || 0));
+  // Defensive upper bound: cap at 3600 seconds (1 hour) to prevent runaway memory allocation
+  const totalDuration = Math.min(3600, Math.max(0, Math.round(durationSeconds || 0)));
   const isTooShort = totalDuration < 12;
 
   if (!biometrics || isTooShort || !biometrics.pulse || biometrics.pulse.state === "unavailable") {

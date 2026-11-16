@@ -3,6 +3,7 @@ import type {
   ProfileService,
   ScenarioService,
   CreateAdHocParams,
+  StudioScenarioInput,
   PersonaService,
   SessionService,
   SessionStreamChunk,
@@ -76,8 +77,14 @@ export class EmptyProfileService implements ProfileService {
 export class EmptyScenarioService implements ScenarioService {
   private items: PracticeScenario[] = [];
 
-  async getScenarios(): Promise<PracticeScenario[]> {
-    return [...this.items];
+  async getScenarios(options?: { limit?: number; offset?: number }): Promise<PracticeScenario[]> {
+    const list = [...this.items];
+    if (options?.offset || options?.limit) {
+      const offset = options.offset || 0;
+      const limit = options.limit || list.length;
+      return list.slice(offset, offset + limit);
+    }
+    return list;
   }
 
   async getScenario(id: string): Promise<PracticeScenario | null> {
@@ -88,6 +95,33 @@ export class EmptyScenarioService implements ScenarioService {
     const created: PracticeScenario = {
       ...scenario,
       id: `sc-${Date.now()}-${Math.floor(Date.now() % 1000)}`,
+    };
+    this.items.push(created);
+    return created;
+  }
+
+  async saveStudioScenario(input: StudioScenarioInput): Promise<PracticeScenario> {
+    const created: PracticeScenario = {
+      id: input.id || `sc-mine-${Date.now()}`,
+      title: input.title,
+      personaName: "Counterpart",
+      personaId: input.personaId,
+      contextSetting: "General Rehearsal",
+      seniority: "Professional",
+      interactionType: input.interactionType,
+      difficulty: input.difficulty,
+      durationMinutes: 3,
+      summary: input.context.slice(0, 140),
+      context: input.context,
+      personaMood: "Direct",
+      learningObjectives: input.learningObjectives,
+      keyChallenges: input.keyChallenges || [],
+      recommendedPhrases: [],
+      personaAvatarUrl: "",
+      personaSummary: "Studio counterpart",
+      openingLine: input.openingLine || undefined,
+      source: "Mine",
+      createdAt: new Date().toISOString().split("T")[0],
     };
     this.items.push(created);
     return created;
@@ -147,8 +181,14 @@ export class EmptyScenarioService implements ScenarioService {
 export class EmptyPersonaService implements PersonaService {
   private items: Persona[] = [];
 
-  async getPersonas(): Promise<Persona[]> {
-    return [...this.items];
+  async getPersonas(options?: { limit?: number; offset?: number }): Promise<Persona[]> {
+    const list = [...this.items];
+    if (options?.offset || options?.limit) {
+      const offset = options.offset || 0;
+      const limit = options.limit || list.length;
+      return list.slice(offset, offset + limit);
+    }
+    return list;
   }
 
   async getPersona(id: string): Promise<Persona | null> {
@@ -203,8 +243,14 @@ export class EmptySessionService implements SessionService {
 export class EmptyRecordingService implements RecordingService {
   private items: Recording[] = [];
 
-  async getRecordings(): Promise<Recording[]> {
-    return [...this.items];
+  async getRecordings(options?: { limit?: number; offset?: number }): Promise<Recording[]> {
+    const list = [...this.items];
+    if (options?.offset || options?.limit) {
+      const offset = options.offset || 0;
+      const limit = options.limit || list.length;
+      return list.slice(offset, offset + limit);
+    }
+    return list;
   }
 
   async getRecording(id: string): Promise<Recording | null> {

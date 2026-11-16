@@ -3,6 +3,7 @@ import { useApp } from "../context";
 import { ScoreRing } from "../components/common/ScoreRing";
 import { PressureTimelineChart } from "../components/common/PressureTimelineChart";
 import { EmptyState } from "../components/common/EmptyState";
+import { LazyAvatarImage } from "../components/common/LazyAvatarImage";
 import {
   Play,
   Pause,
@@ -43,6 +44,7 @@ export const RecordingsScreen: React.FC = () => {
 
   // Search State
   const [searchQuery, setSearchQuery] = useState("");
+  const [visibleRecordingsCount, setVisibleRecordingsCount] = useState<number>(20);
 
   // Player & Detail State
   const [isPlaying, setIsPlaying] = useState(false);
@@ -79,14 +81,15 @@ export const RecordingsScreen: React.FC = () => {
   };
 
   // Media Player Simulation Timer
+  const activeRecordingDuration = activeRecording?.durationSeconds || 0;
+  const activeRecordingId = activeRecording?.id;
   useEffect(() => {
-    if (isPlaying) {
+    if (isPlaying && activeRecordingId) {
       playTimerRef.current = setInterval(() => {
         setPlaybackTime((prev) => {
-          if (!activeRecording) return 0;
-          if (prev >= activeRecording.durationSeconds) {
+          if (prev >= activeRecordingDuration) {
             setIsPlaying(false);
-            return activeRecording.durationSeconds;
+            return activeRecordingDuration;
           }
           return prev + 1;
         });
@@ -97,7 +100,7 @@ export const RecordingsScreen: React.FC = () => {
     return () => {
       if (playTimerRef.current) clearInterval(playTimerRef.current);
     };
-  }, [isPlaying, playbackSpeed, activeRecording]);
+  }, [isPlaying, playbackSpeed, activeRecordingId, activeRecordingDuration]);
 
   // Keyboard Shortcuts for Media Player
   useEffect(() => {
@@ -525,23 +528,12 @@ export const RecordingsScreen: React.FC = () => {
                 }}
               >
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-                  <div
-                    style={{
-                      width: "68px",
-                      height: "68px",
-                      borderRadius: "50%",
-                      overflow: "hidden",
-                      border: "2px solid var(--accent-blue)",
-                      marginBottom: "10px",
-                    }}
-                  >
-                    <img
-                      src={activeRecording.personaAvatarUrl}
-                      alt={personaName}
-                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                    />
-                  </div>
-                  <div style={{ fontSize: "14px", fontWeight: 650, color: "var(--text-primary)" }}>
+                  <LazyAvatarImage
+                    src={activeRecording.personaAvatarUrl}
+                    name={personaName}
+                    size={68}
+                  />
+                  <div style={{ fontSize: "14px", fontWeight: 650, color: "var(--text-primary)", marginTop: "10px" }}>
                     {personaName}
                   </div>
                   <div style={{ fontSize: "11px", color: "var(--text-secondary)", marginTop: "2px" }}>
@@ -1262,7 +1254,7 @@ export const RecordingsScreen: React.FC = () => {
             gap: "8px",
           }}
         >
-          {filteredRecordings.map((rec) => {
+          {filteredRecordings.slice(0, visibleRecordingsCount).map((rec) => {
             const isTooShort = rec.status === "Too short" || rec.durationSeconds < 12;
             const score = rec.composureScore;
             const tier = score ? getComposureTier(score) : null;
@@ -1287,28 +1279,11 @@ export const RecordingsScreen: React.FC = () => {
                 }}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: "14px", minWidth: 0, flex: 1 }}>
-                  <div
-                    style={{
-                      width: "40px",
-                      height: "40px",
-                      borderRadius: "50%",
-                      backgroundColor: "var(--bg-control)",
-                      display: "grid",
-                      placeItems: "center",
-                      fontSize: "13px",
-                      fontWeight: 650,
-                      color: "var(--text-secondary)",
-                      overflow: "hidden",
-                      border: "1px solid var(--separator)",
-                      flexShrink: 0,
-                    }}
-                  >
-                    {rec.personaAvatarUrl ? (
-                      <img src={rec.personaAvatarUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                    ) : (
-                      rec.personaName?.slice(0, 2) || "P"
-                    )}
-                  </div>
+                  <LazyAvatarImage
+                    src={rec.personaAvatarUrl}
+                    name={rec.personaName}
+                    size={40}
+                  />
 
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ fontSize: "14px", fontWeight: 650, color: "var(--text-primary)", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
@@ -1365,6 +1340,27 @@ export const RecordingsScreen: React.FC = () => {
               </div>
             );
           })}
+
+          {filteredRecordings.length > visibleRecordingsCount && (
+            <div style={{ padding: "12px", textAlign: "center" }}>
+              <button
+                type="button"
+                onClick={() => setVisibleRecordingsCount((prev) => prev + 20)}
+                style={{
+                  padding: "8px 16px",
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  color: "var(--accent-blue)",
+                  backgroundColor: "var(--bg-elevated)",
+                  border: "1px solid var(--separator)",
+                  borderRadius: "var(--radius-sm)",
+                  cursor: "pointer",
+                }}
+              >
+                Load more recordings ({filteredRecordings.length - visibleRecordingsCount} remaining)
+              </button>
+            </div>
+          )}
 
           {recordings.length === 0 ? (
             <EmptyState

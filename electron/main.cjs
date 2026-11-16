@@ -4,10 +4,25 @@ const fs = require("fs");
 const { fileURLToPath } = require("url");
 const { StorageManager } = require("./storage/storageManager.cjs");
 const { PermissionsService } = require("./permissions/permissionsService.cjs");
+const { initConfig, getConfig, getClientConfig } = require("./config/seedConfig.cjs");
+
+// Enforce single instance lock to prevent concurrent app instances or duplicate seed runs
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  app.quit();
+  process.exit(0);
+}
+
+
+// Reliable packaging check: on macOS dev, branding changes CFBundleExecutable which makes
+// app.isPackaged true even in dev. In true production builds, files reside in app.asar.
+function isPackagedApp() {
+  return Boolean(app && app.isPackaged && __dirname.includes("app.asar"));
+}
 
 // Load environment variables with dotenv in dev mode only
 function loadEnvironment() {
-  if (app && app.isPackaged) {
+  if (isPackagedApp()) {
     return;
   }
   try {
@@ -56,6 +71,16 @@ if (process.platform === "win32") {
   app.setAppUserModelId(APP_ID);
 }
 
+// Initialize and freeze seeding/tunables configuration
+initConfig(app);
+
+app.on("second-instance", () => {
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+  }
+});
+
 const DEV_HOST = "127.0.0.1";
 const DEV_PORT = 5173;
 const DEV_SERVER_URL = `http://${DEV_HOST}:${DEV_PORT}`;
@@ -66,6 +91,7 @@ let storageManager = null;
 let permissionsService = null;
 let syncService = null;
 let tavusClient = null;
+let seedOrchestrator = null;
 const boundsFilePath = path.join(app.getPath("userData"), "window-bounds.json");
 const logsDir = path.join(app.getPath("userData"), "logs");
 const primaryLogPath = path.join(logsDir, "mocktwo.log");
@@ -393,6 +419,67 @@ function buildMenu() {
           : [{ role: "close" }]),
       ],
     },
+    ...(!isPackagedApp()
+      ? [
+          {
+            label: "Developer",
+            submenu: [
+              {
+                label: "Reset Database & Re-seed Everything…",
+                click: async () => {
+                  if (!mainWindow || mainWindow.isDestroyed()) return;
+                  const choice = await dialog.showMessageBox(mainWindow, {
+                    type: "warning",
+                    buttons: ["Reset & Re-seed", "Cancel"],
+                    defaultId: 1,
+                    cancelId: 1,
+                    title: "Reset Database (Developer)",
+                    message: "Completely wipe SQLite database and re-seed?",
+                    detail:
+                      "This deletes all personas, scenarios, recordings, baselines, and seed state, then runs initial seeding fresh.",
+                  });
+                  if (choice.response === 0) {
+                    await storageManager.execute("data:reset-database-dev");
+                    if (seedOrchestrator) {
+                      await seedOrchestrator.runSeeding();
+                    }
+                    mainWindow.reload();
+                  }
+                },
+              },
+              {
+                label: "Clear User Data (Settings Wipe)…",
+                click: async () => {
+                  if (!mainWindow || mainWindow.isDestroyed()) return;
+                  const choice = await dialog.showMessageBox(mainWindow, {
+                    type: "warning",
+                    buttons: ["Clear User Data", "Cancel"],
+                    defaultId: 1,
+                    cancelId: 1,
+                    title: "Clear User Data",
+                    message: "Clear recordings, baselines, and custom scenarios?",
+                    detail: "Preserves built-in personas and scenarios.",
+                  });
+                  if (choice.response === 0) {
+                    await storageManager.execute("data:clear-all");
+                    mainWindow.webContents.executeJavaScript("localStorage.clear(); window.location.reload();");
+                  }
+                },
+              },
+              {
+                label: "Re-run Avatar Seeding",
+                click: async () => {
+                  if (seedOrchestrator) {
+                    await seedOrchestrator.runSeeding();
+                  }
+                },
+              },
+              { type: "separator" },
+              { role: "toggleDevTools" },
+            ],
+          },
+        ]
+      : []),
     {
       role: "help",
       submenu: [
@@ -428,7 +515,7 @@ function isAllowedAppOrigin(url) {
   if (!url || typeof url !== "string") return false;
   try {
     const parsed = new URL(url);
-    if (app.isPackaged) {
+    if (isPackagedApp()) {
       if (parsed.protocol !== "file:") return false;
       const appPath = path.resolve(app.getAppPath());
       const filePath = fileURLToPath(url);
@@ -466,7 +553,9 @@ function configureSessionSecurity() {
 
   // Strict CSP via webRequest headers
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-    const isDev = !app.isPackaged;
+    const isDev = !isPackagedApp();
+    // Dev-only CSP allows local Vite HMR WebSocket on 127.0.0.1; production CSP enforces secure defaults
+    // nosemgrep: javascript.lang.security.detect-insecure-websocket.detect-insecure-websocket
     const csp = isDev
       ? `default-src 'self' ${DEV_SERVER_URL}; script-src 'self' 'unsafe-inline' 'unsafe-eval' ${DEV_SERVER_URL}; style-src 'self' 'unsafe-inline' ${DEV_SERVER_URL}; font-src 'self' data: ${DEV_SERVER_URL}; img-src 'self' data: blob: https: mocktwo-asset: ${DEV_SERVER_URL}; media-src 'self' blob: https: mocktwo-asset:; worker-src 'self' blob:; connect-src 'self' ws://${DEV_HOST}:${DEV_PORT} ${DEV_SERVER_URL} https://tavusapi.com; object-src 'none'; base-uri 'none'; frame-ancestors 'none';`
       : `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https: mocktwo-asset:; media-src 'self' blob: https: mocktwo-asset:; worker-src 'self' blob:; connect-src 'self' https://tavusapi.com; object-src 'none'; base-uri 'none'; frame-ancestors 'none';`;
@@ -591,7 +680,7 @@ function createWindow() {
   mainWindow.webContents.on("did-fail-load", (event, errorCode, errorDescription, validatedURL, isMainFrame) => {
     if (isMainFrame) {
       writeLogEntry("error", "renderer:did-fail-load", `Failed to load ${validatedURL}: ${errorDescription} (${errorCode})`);
-      if (!app.isPackaged) {
+      if (!isPackagedApp()) {
         // In dev mode, retry connection if server was just booting
         setTimeout(() => {
           if (mainWindow && !mainWindow.isDestroyed()) {
@@ -604,6 +693,14 @@ function createWindow() {
 
   mainWindow.once("ready-to-show", () => {
     mainWindow.show();
+    if (seedOrchestrator) {
+      const conf = getConfig();
+      setTimeout(() => {
+        seedOrchestrator.runSeeding().catch((err) => {
+          console.warn("[main] Background seeding non-blocking error:", err.message);
+        });
+      }, conf.SEED_STARTUP_DELAY_MS || 1000);
+    }
   });
 
   mainWindow.webContents.on("did-finish-load", () => {
@@ -631,7 +728,7 @@ function createWindow() {
 
   buildMenu();
 
-  if (app.isPackaged) {
+  if (isPackagedApp()) {
     mainWindow.loadFile(path.join(__dirname, "../dist/index.html")).catch((err) => {
       console.error("[main] Failed to load production index.html:", err);
     });
@@ -667,7 +764,9 @@ app.whenReady().then(() => {
     protocol.handle("mocktwo-asset", async (request) => {
       try {
         const url = new URL(request.url);
-        const relative = path.join(url.host || "", url.pathname || "");
+        const cleanHost = String(url.host || "").replace(/[^a-zA-Z0-9_-]/g, "");
+        const cleanPathname = String(url.pathname || "").replace(/[^a-zA-Z0-9_\-\.\/]/g, "");
+        const relative = path.join(cleanHost, cleanPathname);
         const { resolveAssetPath } = require("./tavus/assetStore.cjs");
         const safePath = resolveAssetPath(app.getPath("userData"), relative);
         if (!safePath || !fs.existsSync(safePath)) {
@@ -683,6 +782,15 @@ app.whenReady().then(() => {
 
   storageManager = new StorageManager(app.getPath("userData"));
   permissionsService = new PermissionsService(storageManager, () => mainWindow);
+
+  const { SeedOrchestrator } = require("./seed/seedOrchestrator.cjs");
+  seedOrchestrator = new SeedOrchestrator(storageManager, {
+    onProgress: (progress) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("seed:progress", progress);
+      }
+    },
+  });
 
   try {
     const { TavusClient } = require("./tavus/tavusClient.cjs");
@@ -794,13 +902,23 @@ ipcMain.handle("storage:save-profile", async (event, profile) => {
   }
 });
 
-ipcMain.handle("storage:get-personas", async (event) => {
+ipcMain.handle("storage:get-personas", async (event, options) => {
   try {
     if (!isValidSender(event) || !storageManager) return [];
-    return await storageManager.execute("personas:list");
+    return await storageManager.execute("personas:list", options);
   } catch (err) {
     writeLogEntry("warn", "ipc:storage:get-personas", err.message);
     return [];
+  }
+});
+
+ipcMain.handle("storage:get-persona", async (event, id) => {
+  try {
+    if (!isValidSender(event) || !storageManager) return null;
+    return await storageManager.execute("personas:get", id);
+  } catch (err) {
+    writeLogEntry("warn", "ipc:storage:get-persona", err.message);
+    return null;
   }
 });
 
@@ -861,20 +979,70 @@ ipcMain.handle("storage:delete-persona", async (event, id, options = {}) => {
   }
 });
 
-ipcMain.handle("storage:get-scenarios", async (event) => {
+ipcMain.handle("storage:get-scenarios", async (event, options) => {
   try {
     if (!isValidSender(event) || !storageManager) return [];
-    return await storageManager.execute("scenarios:list");
+    return await storageManager.execute("scenarios:list", options);
   } catch (err) {
     writeLogEntry("warn", "ipc:storage:get-scenarios", err.message);
     return [];
   }
 });
 
+ipcMain.handle("storage:get-scenario", async (event, id) => {
+  try {
+    if (!isValidSender(event) || !storageManager) return null;
+    return await storageManager.execute("scenarios:get", id);
+  } catch (err) {
+    writeLogEntry("warn", "ipc:storage:get-scenario", err.message);
+    return null;
+  }
+});
+
+ipcMain.handle("storage:save-scenario", async (event, scenario) => {
+  try {
+    if (!isValidSender(event) || !storageManager) {
+      return { ok: false, code: "forbidden", error: "Unauthorized IPC request" };
+    }
+    const { ScenarioStudioSchema } = require("./validators/scenarioSchemas.cjs");
+    const parsed = ScenarioStudioSchema.safeParse(scenario);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      return { ok: false, code: "validation_error", error: `${issue.path.join(".")}: ${issue.message}` };
+    }
+    return await storageManager.execute("scenarios:save-studio", parsed.data);
+  } catch (err) {
+    writeLogEntry("warn", "ipc:storage:save-scenario", err.message);
+    return { ok: false, code: "server_error", error: err.message };
+  }
+});
+
+ipcMain.handle("storage:update-scenario", async (event, id, updates) => {
+  try {
+    if (!isValidSender(event) || !storageManager) {
+      return { ok: false, code: "forbidden", error: "Unauthorized IPC request" };
+    }
+    const { ScenarioStudioUpdateSchema } = require("./validators/scenarioSchemas.cjs");
+    const payload = { ...(updates || {}), id: typeof id === "string" ? id.trim() : (updates && updates.id) };
+    const parsed = ScenarioStudioUpdateSchema.safeParse(payload);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      return { ok: false, code: "validation_error", error: `${issue.path.join(".")}: ${issue.message}` };
+    }
+    return await storageManager.execute("scenarios:update-studio", parsed.data);
+  } catch (err) {
+    writeLogEntry("warn", "ipc:storage:update-scenario", err.message);
+    return { ok: false, code: "server_error", error: err.message };
+  }
+});
+
 ipcMain.handle("storage:create-scenario", async (event, scenario) => {
   try {
     if (!isValidSender(event) || !storageManager) return null;
-    return await storageManager.execute("scenarios:create", scenario);
+    const { ScenarioLegacyCreateSchema } = require("./validators/scenarioSchemas.cjs");
+    const parsed = ScenarioLegacyCreateSchema.safeParse(scenario);
+    const data = parsed.success ? parsed.data : scenario;
+    return await storageManager.execute("scenarios:create", data);
   } catch (err) {
     writeLogEntry("warn", "ipc:storage:create-scenario", err.message);
     return null;
@@ -1117,10 +1285,31 @@ ipcMain.handle("tavus:preview-prompt", async (event, draft) => {
   }
 });
 
+ipcMain.handle("config:get-client", async (event) => {
+  if (!isValidSender(event)) return null;
+  return getClientConfig(app);
+});
+
+ipcMain.handle("seed:get-status", async (event) => {
+  if (!isValidSender(event) || !seedOrchestrator) {
+    return { isSeeding: false, personasStatus: "pending", scenariosStatus: "pending" };
+  }
+  return seedOrchestrator.getStatus();
+});
+
+ipcMain.handle("seed:retry", async (event) => {
+  if (!isValidSender(event) || !seedOrchestrator) return false;
+  seedOrchestrator.runSeeding().catch((err) => {
+    console.warn("[main] Manual seed retry error:", err.message);
+  });
+  return true;
+});
+
 ipcMain.handle("tavus:list-faces", async (event, options = {}) => {
   try {
     if (!isValidSender(event) || !storageManager) return { data: [], total_count: 0 };
-    const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+    const conf = getConfig();
+    const CACHE_TTL_MS = conf.TAVUS_CATALOG_CACHE_TTL_MS;
     const force = Boolean(options && options.forceRefresh);
 
     if (!force) {
@@ -1138,7 +1327,11 @@ ipcMain.handle("tavus:list-faces", async (event, options = {}) => {
       tavusClient = new TavusClient();
     }
 
-    const result = await tavusClient.listFaces();
+    const defaultLimit = conf.TAVUS_FACES_PAGE_SIZE;
+    const result = await tavusClient.listFaces({
+      page: options && options.page ? options.page : 1,
+      limit: Math.min(Number(options && options.limit) || defaultLimit, 100),
+    });
     if (result && Array.isArray(result.data)) {
       await storageManager.execute("tavus:cache:set", { kind: "faces", payload: result });
     }
@@ -1158,7 +1351,8 @@ ipcMain.handle("tavus:list-faces", async (event, options = {}) => {
 ipcMain.handle("tavus:list-voices", async (event, options = {}) => {
   try {
     if (!isValidSender(event) || !storageManager) return { data: [], total_count: 0 };
-    const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+    const conf = getConfig();
+    const CACHE_TTL_MS = conf.TAVUS_CATALOG_CACHE_TTL_MS;
     const force = Boolean(options && options.forceRefresh);
 
     if (!force) {
@@ -1176,7 +1370,11 @@ ipcMain.handle("tavus:list-voices", async (event, options = {}) => {
       tavusClient = new TavusClient();
     }
 
-    const result = await tavusClient.listVoices();
+    const defaultLimit = conf.SEED_BATCH_SIZE;
+    const result = await tavusClient.listVoices({
+      page: options && options.page ? options.page : 1,
+      limit: Math.min(Number(options && options.limit) || defaultLimit, 100),
+    });
     if (result && Array.isArray(result.data)) {
       await storageManager.execute("tavus:cache:set", { kind: "voices", payload: result });
     }

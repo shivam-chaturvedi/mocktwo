@@ -1,38 +1,45 @@
-import React, { useEffect } from "react";
+import React, { useEffect, Suspense } from "react";
 import { AppProvider, useApp } from "./context";
 import { AppLayout } from "./components/layout/AppLayout";
-import { SignInScreen } from "./screens/SignInScreen";
-import { TodayScreen } from "./screens/TodayScreen";
-import { ScenariosScreen } from "./screens/ScenariosScreen";
-import { RecordingsScreen } from "./screens/RecordingsScreen";
-import { ProgressScreen } from "./screens/ProgressScreen";
-import { LiveSimulationScreen } from "./screens/LiveSimulationScreen";
-import { ProcessingScreen } from "./screens/ProcessingScreen";
 import { ErrorBoundary } from "./components/common/ErrorBoundary";
+
+const SignInScreen = React.lazy(() => import("./screens/SignInScreen").then((m) => ({ default: m.SignInScreen })));
+const TodayScreen = React.lazy(() => import("./screens/TodayScreen").then((m) => ({ default: m.TodayScreen })));
+const ScenariosScreen = React.lazy(() => import("./screens/ScenariosScreen").then((m) => ({ default: m.ScenariosScreen })));
+const RecordingsScreen = React.lazy(() => import("./screens/RecordingsScreen").then((m) => ({ default: m.RecordingsScreen })));
+const ProgressScreen = React.lazy(() => import("./screens/ProgressScreen").then((m) => ({ default: m.ProgressScreen })));
+const LiveSimulationScreen = React.lazy(() => import("./screens/LiveSimulationScreen").then((m) => ({ default: m.LiveSimulationScreen })));
+const ProcessingScreen = React.lazy(() => import("./screens/ProcessingScreen").then((m) => ({ default: m.ProcessingScreen })));
 
 const MainContent: React.FC = () => {
   const { currentScreen, isAuthenticated } = useApp();
 
-  if (!isAuthenticated || currentScreen === "sign-in") {
-    return <SignInScreen />;
-  }
-
-  switch (currentScreen) {
-    case "today":
-      return <TodayScreen />;
-    case "scenarios":
-      return <ScenariosScreen />;
-    case "recordings":
-      return <RecordingsScreen />;
-    case "progress":
-      return <ProgressScreen />;
-    case "simulation":
-      return <LiveSimulationScreen />;
-    case "processing":
-      return <ProcessingScreen />;
-    default:
-      return <TodayScreen />;
-  }
+  return (
+    <Suspense fallback={<div className="flex-1 bg-surface-base animate-pulse" />}>
+      {!isAuthenticated || currentScreen === "sign-in" ? (
+        <SignInScreen />
+      ) : (
+        (() => {
+          switch (currentScreen) {
+            case "today":
+              return <TodayScreen />;
+            case "scenarios":
+              return <ScenariosScreen />;
+            case "recordings":
+              return <RecordingsScreen />;
+            case "progress":
+              return <ProgressScreen />;
+            case "simulation":
+              return <LiveSimulationScreen />;
+            case "processing":
+              return <ProcessingScreen />;
+            default:
+              return <TodayScreen />;
+          }
+        })()
+      )}
+    </Suspense>
+  );
 };
 
 export function App() {

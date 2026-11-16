@@ -5,10 +5,10 @@ import { formatContextSetting, getComposureTier, type Recording } from "../types
 import { ScoreRing } from "../components/common/ScoreRing";
 import { MiniTrendSparkline, type SessionTrendItem } from "../components/common/MiniTrendSparkline";
 import { EmptyState } from "../components/common/EmptyState";
+import { LazyAvatarImage } from "../components/common/LazyAvatarImage";
 import { computeWeekStats } from "../services/weekStats";
 import { serviceRegistry } from "../services/api";
 import {
-  Clock,
   Flame,
   ArrowRight,
   TrendingUp,
@@ -69,7 +69,7 @@ export const TodayScreen: React.FC = () => {
     return { greeting: greet, formattedDate: dateStr };
   });
 
-  const firstName = user.name.split(" ")[0];
+  const firstName = (user?.name || "Learner").split(" ")[0];
   const sessionCount = recordings.length;
   const isFirstRun = sessionCount === 0;
 
@@ -505,32 +505,12 @@ export const TodayScreen: React.FC = () => {
               >
                 <div style={{ display: "flex", gap: "16px", alignItems: "flex-start" }}>
                   {/* 56px Persona Avatar */}
-                  <div
-                    style={{
-                      width: "56px",
-                      height: "56px",
-                      borderRadius: "var(--radius-md)",
-                      backgroundColor: "var(--bg-control)",
-                      border: "1px solid var(--separator)",
-                      overflow: "hidden",
-                      flexShrink: 0,
-                      display: "grid",
-                      placeItems: "center",
-                      fontWeight: 650,
-                      fontSize: "18px",
-                      color: "var(--text-secondary)",
-                    }}
-                  >
-                    {suggestedScenario.personaAvatarUrl ? (
-                      <img
-                        src={suggestedScenario.personaAvatarUrl}
-                        alt={suggestedScenario.personaName}
-                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                      />
-                    ) : (
-                      suggestedScenario.personaName.slice(0, 2)
-                    )}
-                  </div>
+                  <LazyAvatarImage
+                    src={suggestedScenario.personaAvatarUrl}
+                    name={suggestedScenario.personaName}
+                    size={56}
+                    borderRadius="var(--radius-md)"
+                  />
 
                   {/* Main Details */}
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -563,19 +543,6 @@ export const TodayScreen: React.FC = () => {
                       </span>
                       <span style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>
                         · {suggestedScenario.difficulty}
-                      </span>
-                      <span
-                        style={{
-                          fontSize: "11px",
-                          color: "var(--text-tertiary)",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "3px",
-                          marginLeft: "auto",
-                        }}
-                      >
-                        <Clock size={11} />
-                        <span>~{suggestedScenario.durationMinutes}m</span>
                       </span>
                     </div>
 
@@ -797,32 +764,11 @@ export const TodayScreen: React.FC = () => {
                       }}
                     >
                       {/* 36px Avatar */}
-                      <div
-                        style={{
-                          width: "36px",
-                          height: "36px",
-                          borderRadius: "50%",
-                          backgroundColor: "var(--bg-control)",
-                          border: "1px solid var(--separator)",
-                          display: "grid",
-                          placeItems: "center",
-                          fontSize: "11px",
-                          fontWeight: 650,
-                          color: "var(--text-secondary)",
-                          overflow: "hidden",
-                          flexShrink: 0,
-                        }}
-                      >
-                        {rec.personaAvatarUrl ? (
-                          <img
-                            src={rec.personaAvatarUrl}
-                            alt=""
-                            style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                          />
-                        ) : (
-                          rec.personaName?.slice(0, 2) || "P"
-                        )}
-                      </div>
+                      <LazyAvatarImage
+                        src={rec.personaAvatarUrl}
+                        name={rec.personaName || "Counterpart"}
+                        size={36}
+                      />
 
                       {/* Title & Meta (1fr) */}
                       <div style={{ flex: 1, minWidth: 0 }}>

@@ -5,6 +5,8 @@ import type {
   UserProfile,
   AppSettings,
   UserBaseline,
+  InteractionType,
+  DifficultyLevel,
 } from "../../types";
 
 export type ServiceStatus = "loading" | "ready" | "empty" | "error";
@@ -48,10 +50,23 @@ export interface CreateAdHocParams {
   lengthMin?: number;
 }
 
+export interface StudioScenarioInput {
+  id?: string;
+  title: string;
+  personaId: string;
+  interactionType: InteractionType;
+  difficulty: DifficultyLevel;
+  context: string;
+  keyChallenges?: string[];
+  learningObjectives: string[];
+  openingLine?: string | null;
+}
+
 export interface ScenarioService {
-  getScenarios(): Promise<PracticeScenario[]>;
+  getScenarios(options?: { limit?: number; offset?: number }): Promise<PracticeScenario[]>;
   getScenario(id: string): Promise<PracticeScenario | null>;
   createScenario(scenario: Omit<PracticeScenario, "id">): Promise<PracticeScenario>;
+  saveStudioScenario(input: StudioScenarioInput): Promise<PracticeScenario>;
   createAdHoc(params: CreateAdHocParams): Promise<PracticeScenario>;
   updateScenario(id: string, updates: Partial<PracticeScenario>): Promise<PracticeScenario>;
   deleteScenario(id: string): Promise<boolean>;
@@ -59,7 +74,7 @@ export interface ScenarioService {
 }
 
 export interface PersonaService {
-  getPersonas(): Promise<Persona[]>;
+  getPersonas(options?: { limit?: number; offset?: number }): Promise<Persona[]>;
   getPersona(id: string): Promise<Persona | null>;
   createPersona(persona: Omit<Persona, "id">): Promise<Persona>;
   updatePersona(id: string, updates: Partial<Persona>): Promise<Persona>;
@@ -81,7 +96,7 @@ export interface SessionService {
 }
 
 export interface RecordingService {
-  getRecordings(): Promise<Recording[]>;
+  getRecordings(options?: { limit?: number; offset?: number }): Promise<Recording[]>;
   getRecording(id: string): Promise<Recording | null>;
   saveRecording(recording: Recording): Promise<Recording>;
   addNote(recordingId: string, timestampSeconds: number, text: string): Promise<void>;

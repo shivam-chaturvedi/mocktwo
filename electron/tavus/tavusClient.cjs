@@ -6,7 +6,7 @@
  */
 
 const DEFAULT_BASE_URL = "https://tavusapi.com";
-const TIMEOUT_MS = 15000;
+const { getConfig } = require("../config/seedConfig.cjs");
 
 function redactSecrets(str) {
   if (typeof str !== "string") {
@@ -49,7 +49,7 @@ class TavusClient {
     };
   }
 
-  async request(method, path, body = null, isIdempotent = false) {
+  async request(method, path, body = null, isIdempotent = false, options = {}) {
     const url = `${this.baseUrl}${path.startsWith("/") ? path : `/${path}`}`;
     let headers;
     try {
@@ -58,14 +58,17 @@ class TavusClient {
       throw err;
     }
 
-    const maxAttempts = isIdempotent ? 3 : 1;
+    const conf = getConfig();
+    const timeoutMs = options.timeoutMs || conf.TAVUS_REQUEST_TIMEOUT_MS;
+    const maxRetries = options.maxRetries !== undefined ? options.maxRetries : conf.TAVUS_REQUEST_MAX_RETRIES;
+    const maxAttempts = isIdempotent ? Math.max(1, maxRetries + 1) : 1;
     let attempt = 0;
     let lastError = null;
 
     while (attempt < maxAttempts) {
       attempt++;
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
 
       try {
         const fetchOptions = {
@@ -142,7 +145,7 @@ class TavusClient {
         const isTimeout = err.name === "AbortError";
         const code = isTimeout ? "timeout" : "offline";
         const message = isTimeout
-          ? `Request to Tavus timed out after ${TIMEOUT_MS / 1000}s.`
+          ? `Request to Tavus timed out after ${timeoutMs / 1000}s.`
           : `Network request failed: ${err.message}`;
 
         lastError = new TavusApiError(code, message, 0);
@@ -159,40 +162,61 @@ class TavusClient {
   }
 
   /**
-   * List system stock faces.
+   * Get single face (pre-flight health check).
+   */
+  async getFace(faceId) {
+    if (!faceId) throw new TavusApiError("validation", "faceId is required");
+    return this.request("GET", `/v2/faces/${encodeURIComponent(faceId)}`, null, true);
+  }
+
+  /**
+   * List system stock faces (page size governed by config).
    */
   async listFaces(params = {}) {
-    const q = new URLSearchParams({
+    const conf = getConfig();
+    const defaultPageSize = conf.TAVUS_FACES_PAGE_SIZE;
+    const cleanLimit = Math.max(1, Math.min(Number(params.limit) || defaultPageSize, 100));
+    const queryObj = {
       face_type: "system",
       verbose: "true",
       page: String(params.page || 1),
-      limit: String(params.limit || 50),
-    });
+      limit: String(cleanLimit),
+    };
+    if (params.model_name || conf.TAVUS_FACE_MODEL_NAME) {
+      queryObj.model_name = params.model_name || conf.TAVUS_FACE_MODEL_NAME;
+    }
+    const q = new URLSearchParams(queryObj);
     return this.request("GET", `/v2/faces?${q.toString()}`, null, true);
   }
 
   /**
-   * List system stock voices.
+   * List system stock voices (page size governed by config).
    */
   async listVoices(params = {}) {
+    const conf = getConfig();
+    const defaultPageSize = conf.SEED_BATCH_SIZE;
+    const cleanLimit = Math.max(1, Math.min(Number(params.limit) || defaultPageSize, 100));
     const q = new URLSearchParams({
       source: "system",
       page: String(params.page || 1),
-      limit: String(params.limit || 100),
+      limit: String(cleanLimit),
       sort: "asc",
     });
     return this.request("GET", `/v2/voices?${q.toString()}`, null, true);
   }
 
   /**
-   * List PALs.
+   * List PALs (page size governed by config).
    */
   async listPals(params = {}) {
+    const conf = getConfig();
+    const defaultPageSize = conf.SEED_BATCH_SIZE;
+    const cleanLimit = Math.max(1, Math.min(Number(params.limit) || defaultPageSize, 100));
     const q = new URLSearchParams();
-    if (params.page) q.set("page", String(params.page));
-    if (params.limit) q.set("limit", String(params.limit));
+    q.set("page", String(params.page || 1));
+    q.set("limit", String(cleanLimit));
     const qs = q.toString();
-    return this.request("GET", `/v2/pals${qs ? `?${qs}` : ""}`, null, true);
+    return this.request("GET", `/v2/pals?${qs}`, null, true);
   }
 
   /**
