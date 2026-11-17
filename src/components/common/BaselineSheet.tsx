@@ -118,10 +118,13 @@ export const BaselineSheetModal: React.FC = () => {
     return () => {
       isMountedRef.current = false;
       stopCamera();
-      if (captureRafRef.current) cancelAnimationFrame(captureRafRef.current);
-      if (getReadyTimerRef.current) clearTimeout(getReadyTimerRef.current);
-      if (previousActiveElementRef.current && typeof previousActiveElementRef.current.focus === "function") {
-        previousActiveElementRef.current.focus();
+      const raf = captureRafRef.current;
+      if (raf) cancelAnimationFrame(raf);
+      const timer = getReadyTimerRef.current;
+      if (timer) clearTimeout(timer);
+      const prevEl = previousActiveElementRef.current;
+      if (prevEl && typeof prevEl.focus === "function") {
+        prevEl.focus();
       }
     };
   }, [stopCamera]);
@@ -212,7 +215,7 @@ export const BaselineSheetModal: React.FC = () => {
     if (step === "capturing") {
       capture.startCapture();
     }
-  }, [step]);
+  }, [step, capture]);
 
   // Sync elapsed seconds and announcements from capture hook
   useEffect(() => {

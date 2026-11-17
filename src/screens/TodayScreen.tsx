@@ -8,6 +8,7 @@ import { EmptyState } from "../components/common/EmptyState";
 import { LazyAvatarImage } from "../components/common/LazyAvatarImage";
 import { computeWeekStats } from "../services/weekStats";
 import { serviceRegistry } from "../services/api";
+import { type QuickStartCategory, pickScenario } from "../utils/quickStart";
 import {
   Flame,
   ArrowRight,
@@ -31,14 +32,14 @@ import {
 type QuickStartVariant = "A" | "B" | "C" | "D";
 
 // Standard 7 category chips
-const BASE_CATEGORY_ITEMS: { label: string; icon: React.ReactNode; filter: string }[] = [
-  { label: "Interviews", icon: <Briefcase size={12.5} />, filter: "Job Interviews" },
-  { label: "Sales & Pitches", icon: <TrendingUp size={12.5} />, filter: "Sales Pitches & Client Calls" },
-  { label: "Presentations", icon: <Presentation size={12.5} />, filter: "Presentations & Demos" },
+const BASE_CATEGORY_ITEMS: { label: string; icon: React.ReactNode; filter: QuickStartCategory }[] = [
+  { label: "Interviews", icon: <Briefcase size={12.5} />, filter: "Interviews" },
+  { label: "Sales & Pitches", icon: <TrendingUp size={12.5} />, filter: "Sales & Pitches" },
+  { label: "Presentations", icon: <Presentation size={12.5} />, filter: "Presentations" },
   { label: "Difficult Talks", icon: <MessageCircleWarning size={12.5} />, filter: "Difficult Conversations" },
-  { label: "Negotiation", icon: <Handshake size={12.5} />, filter: "High-Stakes Negotiation" },
-  { label: "Customer Service", icon: <Headphones size={12.5} />, filter: "Customer Service & Escalations" },
-  { label: "Hospitality", icon: <HospitalityIcon size={12.5} />, filter: "Hospitality & Service" },
+  { label: "Negotiation", icon: <Handshake size={12.5} />, filter: "Negotiation" },
+  { label: "Customer Service", icon: <Headphones size={12.5} />, filter: "Customer Service" },
+  { label: "Hospitality", icon: <HospitalityIcon size={12.5} />, filter: "Hospitality" },
 ];
 
 export const TodayScreen: React.FC = () => {
@@ -85,7 +86,7 @@ export const TodayScreen: React.FC = () => {
   // Scored completed recordings for trend chart (last 7, oldest to newest)
   const scoredSessions: SessionTrendItem[] = useMemo(() => {
     return recordings
-      .filter((r) => r.status === "Completed" && typeof r.composureScore === "number")
+      .filter((r) => r.status?.toLowerCase() === "completed" && typeof r.composureScore === "number")
       .slice(0, 7)
       .reverse()
       .map((r) => ({
@@ -98,7 +99,7 @@ export const TodayScreen: React.FC = () => {
 
   // Latest completed recording
   const latestCompleted = useMemo(() => {
-    return recordings.find((r) => r.status === "Completed" && typeof r.composureScore === "number") || null;
+    return recordings.find((r) => r.status?.toLowerCase() === "completed" && typeof r.composureScore === "number") || null;
   }, [recordings]);
 
   const latestScore = latestCompleted?.composureScore ?? (sessionCount > 0 ? 86 : 0);
@@ -125,15 +126,18 @@ export const TodayScreen: React.FC = () => {
   const [maxDItems, setMaxDItems] = useState(5);
   const [isMorePopoverOpen, setIsMorePopoverOpen] = useState(false);
   const morePopoverRef = useRef<HTMLDivElement>(null);
+  const seenByCategory = useRef(new Map<QuickStartCategory, string[]>());
 
   const handleCategoryClick = useCallback(
-    (categoryName: string) => {
-      const sc = scenarios.find((s) => s.interactionType === categoryName) || scenarios[0];
-      if (sc) {
-        openBriefing(sc);
-      } else {
-        openQuickPractice();
+    (category: QuickStartCategory) => {
+      const currentSeen = seenByCategory.current.get(category) || [];
+      const picked = pickScenario(scenarios, category, currentSeen);
+      if (!picked) {
+        openQuickPractice(category);
+        return;
       }
+      seenByCategory.current.set(category, picked.nextSeen);
+      openBriefing(picked.scenario);
     },
     [scenarios, openBriefing, openQuickPractice]
   );
@@ -169,18 +173,33 @@ export const TodayScreen: React.FC = () => {
 
   // Compile all quick start chips based on whether sessions exist
   const allQuickChips = useMemo(() => {
-    const chips: { key: string; label: string; icon: React.ReactNode; onClick: () => void }[] = BASE_CATEGORY_ITEMS.map((c) => ({
+    const isReady = scenarios.length > 0;
+    const chips: {
+      key: string;
+      label: string;
+      icon: React.ReactNode;
+      onClick: () => void;
+      disabled?: boolean;
+    }[] = BASE_CATEGORY_ITEMS.map((c) => ({
       key: c.label,
       label: c.label,
       icon: c.icon,
-      onClick: () => handleCategoryClick(c.filter),
+      disabled: !isReady,
+      onClick: () => {
+        if (!isReady) return;
+        handleCategoryClick(c.filter);
+      },
     }));
 
     chips.push({
       key: "random",
       label: "Random",
       icon: <Shuffle size={12.5} style={{ color: "var(--accent-purple)" }} />,
-      onClick: handleRandomScenario,
+      disabled: !isReady,
+      onClick: () => {
+        if (!isReady) return;
+        handleRandomScenario();
+      },
     });
 
     if (sessionCount > 0) {
@@ -188,12 +207,16 @@ export const TodayScreen: React.FC = () => {
         key: "last-used",
         label: "Last used",
         icon: <History size={12.5} style={{ color: "var(--accent-green)" }} />,
-        onClick: handleLastUsedScenario,
+        disabled: !isReady,
+        onClick: () => {
+          if (!isReady) return;
+          handleLastUsedScenario();
+        },
       });
     }
 
     return chips;
-  }, [sessionCount, handleCategoryClick, handleRandomScenario, handleLastUsedScenario]);
+  }, [scenarios.length, sessionCount, handleCategoryClick, handleRandomScenario, handleLastUsedScenario]);
 
   useEffect(() => {
     const card = quickStartCardRef.current;
@@ -370,7 +393,7 @@ export const TodayScreen: React.FC = () => {
                 marginBottom: 0,
               }}
             >
-              {!baseline?.isCalibrated
+              {!baseline?.isCalibrated || baseline?.status === "legacy"
                 ? "Calibrate your camera baseline to begin rehearsal."
                 : sessionCount < 3
                 ? "Ready for your next practice · Building stable composure habits."
@@ -468,7 +491,7 @@ export const TodayScreen: React.FC = () => {
                   >
                     Browse scenarios
                   </button>
-                  {!baseline?.isCalibrated && (
+                  {(!baseline?.isCalibrated || baseline?.status === "legacy") && (
                     <button
                       onClick={openBaselineSheet}
                       className="mac-btn focus-ring"
@@ -984,7 +1007,7 @@ export const TodayScreen: React.FC = () => {
             >
               {isFirstRun ? (
                 /* 0 Sessions: Guided Calm Baseline Prompt */
-                baseline?.isCalibrated ? (
+                (baseline?.isCalibrated && baseline?.status !== "legacy") ? (
                   <div style={{ display: "flex", flexDirection: "column", gap: "10px", padding: "2px 0" }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -1053,7 +1076,7 @@ export const TodayScreen: React.FC = () => {
                           Pulse
                         </div>
                         <div style={{ fontSize: "12px", fontWeight: 650, color: "var(--text-primary)", marginTop: "1px" }}>
-                          {baseline.restingPulse ? `${baseline.restingPulse} bpm` : "Not measured"}
+                          {(baseline.pulseMean ?? baseline.restingPulse) ? `${baseline.pulseMean ?? baseline.restingPulse} bpm` : "Not measured"}
                         </div>
                       </div>
                       <div>
@@ -1061,7 +1084,7 @@ export const TodayScreen: React.FC = () => {
                           Breathing
                         </div>
                         <div style={{ fontSize: "12px", fontWeight: 650, color: "var(--text-primary)", marginTop: "1px" }}>
-                          {baseline.restingBreathingRate ? `${baseline.restingBreathingRate} br/m` : "Not measured"}
+                          {(baseline.breathingMean ?? baseline.restingBreathingRate) ? `${baseline.breathingMean ?? baseline.restingBreathingRate} br/m` : "Not measured"}
                         </div>
                       </div>
                       <div>
@@ -1069,7 +1092,7 @@ export const TodayScreen: React.FC = () => {
                           HRV
                         </div>
                         <div style={{ fontSize: "12px", fontWeight: 650, color: "var(--text-primary)", marginTop: "1px" }}>
-                          {baseline.restingHrvRmssd ? `${baseline.restingHrvRmssd} ms` : "Not measured"}
+                          {(baseline.hrvRmssd ?? baseline.restingHrvRmssd) ? `${baseline.hrvRmssd ?? baseline.restingHrvRmssd} ms` : "Not measured"}
                         </div>
                       </div>
                     </div>
@@ -1501,6 +1524,7 @@ export const TodayScreen: React.FC = () => {
                       <button
                         key={chip.key}
                         onClick={chip.onClick}
+                        disabled={chip.disabled}
                         className="mac-btn focus-ring"
                         style={{
                           height: "36px",
@@ -1514,7 +1538,8 @@ export const TodayScreen: React.FC = () => {
                           display: "flex",
                           alignItems: "center",
                           gap: "6px",
-                          cursor: "pointer",
+                          cursor: chip.disabled ? "not-allowed" : "pointer",
+                          opacity: chip.disabled ? 0.5 : 1,
                           textAlign: "left",
                           boxSizing: "border-box",
                           gridColumn: isOddLast ? "1 / -1" : undefined,
@@ -1547,6 +1572,7 @@ export const TodayScreen: React.FC = () => {
                       <button
                         key={chip.key}
                         onClick={chip.onClick}
+                        disabled={chip.disabled}
                         className="mac-btn focus-ring"
                         style={{
                           height: "30px",
@@ -1560,7 +1586,8 @@ export const TodayScreen: React.FC = () => {
                           display: "flex",
                           alignItems: "center",
                           gap: "5px",
-                          cursor: "pointer",
+                          cursor: chip.disabled ? "not-allowed" : "pointer",
+                          opacity: chip.disabled ? 0.5 : 1,
                           textAlign: "left",
                           boxSizing: "border-box",
                           gridColumn: isOddLast ? "1 / -1" : undefined,
@@ -1591,6 +1618,7 @@ export const TodayScreen: React.FC = () => {
                     <button
                       key={chip.key}
                       onClick={chip.onClick}
+                      disabled={chip.disabled}
                       className="mac-btn focus-ring"
                       style={{
                         height: "40px",
@@ -1603,7 +1631,8 @@ export const TodayScreen: React.FC = () => {
                         alignItems: "center",
                         justifyContent: "center",
                         gap: "2px",
-                        cursor: "pointer",
+                        cursor: chip.disabled ? "not-allowed" : "pointer",
+                        opacity: chip.disabled ? 0.5 : 1,
                         textAlign: "center",
                         boxSizing: "border-box",
                       }}
@@ -1642,6 +1671,7 @@ export const TodayScreen: React.FC = () => {
                     <button
                       key={chip.key}
                       onClick={chip.onClick}
+                      disabled={chip.disabled}
                       className="mac-btn focus-ring"
                       style={{
                         height: "30px",
@@ -1655,7 +1685,8 @@ export const TodayScreen: React.FC = () => {
                         display: "flex",
                         alignItems: "center",
                         gap: "5px",
-                        cursor: "pointer",
+                        cursor: chip.disabled ? "not-allowed" : "pointer",
+                        opacity: chip.disabled ? 0.5 : 1,
                         textAlign: "left",
                         boxSizing: "border-box",
                       }}

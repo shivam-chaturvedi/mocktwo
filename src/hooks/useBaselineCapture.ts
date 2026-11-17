@@ -58,7 +58,9 @@ export function useBaselineCapture(options: UseBaselineCaptureOptions) {
   const samplesRef = useRef<VitalsSamplePoint[]>([]);
   const validationEventsRef = useRef<ValidationEvent[]>([]);
   const stateRef = useRef<BaselineState>("idle");
-  stateRef.current = state;
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   const continuousOkTimerRef = useRef<NodeJS.Timeout | null>(null);
   const clockIntervalRef = useRef<NodeJS.Timeout | null>(null);
