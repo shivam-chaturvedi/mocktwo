@@ -148,6 +148,11 @@ function rowToPersona(r) {
 }
 
 function runMigrations() {
+  const tableExists = (tbl) => {
+    const row = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name = ?").get(tbl);
+    return Boolean(row);
+  };
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
       version INTEGER PRIMARY KEY,
@@ -522,6 +527,330 @@ function runMigrations() {
 
     migrateV4();
     currentVersion = 4;
+  }
+
+  if (currentVersion < 5) {
+    try {
+      const backupDir = path.join(path.dirname(dbPath), "backups");
+      if (!fs.existsSync(backupDir)) {
+        fs.mkdirSync(backupDir, { recursive: true });
+      }
+      const backupPath = path.join(backupDir, `mocktwo-v4-${Date.now()}.db`);
+      db.backup(backupPath);
+    } catch (err) {
+      console.error("Failed to backup db before v5 migration:", err);
+    }
+
+    const migrateV5 = db.transaction(() => {
+      // 1. Upgrade recordings via table rebuild (clean schema, strict foreign keys, normalized status)
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS recordings_new (
+          id TEXT PRIMARY KEY,
+          scenario_id TEXT REFERENCES scenarios(id) ON DELETE SET NULL,
+          scenario_title TEXT NOT NULL,
+          persona_id TEXT REFERENCES personas(id) ON DELETE SET NULL,
+          persona_name TEXT NOT NULL,
+          persona_avatar_url TEXT,
+          baseline_id TEXT REFERENCES baselines(id) ON DELETE SET NULL,
+          interaction_type TEXT NOT NULL DEFAULT 'Difficult Conversations',
+          started_at TEXT NOT NULL,
+          ended_at TEXT,
+          local_date TEXT NOT NULL,
+          timezone TEXT NOT NULL DEFAULT 'UTC',
+          planned_duration_seconds INTEGER NOT NULL DEFAULT 180,
+          duration_seconds INTEGER NOT NULL DEFAULT 0,
+          duration_minutes REAL,
+          status TEXT NOT NULL DEFAULT 'completed',
+          end_reason TEXT,
+          video_path TEXT,
+          audio_path TEXT,
+          file_size_bytes INTEGER,
+          mime_type TEXT,
+          composure_score REAL,
+          avg_pulse REAL,
+          peak_pulse REAL,
+          avg_hrv_rmssd REAL,
+          recovery_seconds INTEGER,
+          user_notes TEXT NOT NULL DEFAULT '[]',
+          self_reflection_notes TEXT,
+          created_at TEXT NOT NULL
+        );
+      `);
+
+      const tableExists = (tbl) => {
+          const row = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name = ?").get(tbl);
+          return Boolean(row);
+        };
+
+        if (tableExists("recordings")) {
+          db.exec(`
+            INSERT INTO recordings_new (
+              id, scenario_id, scenario_title, persona_id, persona_name, persona_avatar_url,
+              started_at, ended_at, local_date, duration_seconds, duration_minutes,
+              status, end_reason, video_path, audio_path, composure_score,
+              user_notes, self_reflection_notes, created_at
+            )
+            SELECT 
+              id, scenario_id, scenario_title, persona_id, persona_name, persona_avatar_url,
+              COALESCE(date, created_at),
+              COALESCE(date, created_at),
+              substr(COALESCE(date, created_at), 1, 10),
+              duration_seconds, duration_minutes,
+              CASE 
+                WHEN LOWER(status) IN ('completed') THEN 'completed'
+                WHEN LOWER(status) IN ('too short', 'abandoned') THEN 'abandoned'
+                WHEN LOWER(status) IN ('interrupted') THEN 'interrupted'
+                ELSE 'failed'
+              END,
+              'completed',
+              NULL,
+              audio_path,
+              composure_score,
+              user_notes, self_reflection_notes, created_at
+            FROM recordings;
+
+            DROP TABLE recordings;
+          `);
+        }
+
+        db.exec(`ALTER TABLE recordings_new RENAME TO recordings;`);
+
+        db.exec(`
+          CREATE INDEX IF NOT EXISTS idx_recordings_streak ON recordings(status, duration_seconds, local_date DESC);
+          CREATE INDEX IF NOT EXISTS idx_recordings_scenario ON recordings(scenario_id);
+          CREATE INDEX IF NOT EXISTS idx_recordings_category ON recordings(interaction_type);
+        `);
+
+        // 2. Upgrade baselines table
+        if (!tableExists("baselines")) {
+          db.exec(`
+            CREATE TABLE IF NOT EXISTS baselines (
+              id TEXT PRIMARY KEY,
+              measured_at TEXT NOT NULL,
+              started_at TEXT,
+              resting_pulse REAL,
+              hrv_rmssd REAL,
+              breathing_rate REAL,
+              clean_frames_pct REAL,
+              quality_score INTEGER,
+              quality_rating TEXT,
+              is_active INTEGER NOT NULL DEFAULT 0,
+              invalid_reason TEXT,
+              video_path TEXT,
+              created_at TEXT NOT NULL
+            );
+          `);
+        } else {
+          const cols = db.prepare("PRAGMA table_info(baselines)").all().map((c) => c.name);
+          if (!cols.includes("started_at")) db.exec("ALTER TABLE baselines ADD COLUMN started_at TEXT;");
+          if (!cols.includes("quality_score")) db.exec("ALTER TABLE baselines ADD COLUMN quality_score INTEGER;");
+          if (!cols.includes("quality_rating")) db.exec("ALTER TABLE baselines ADD COLUMN quality_rating TEXT;");
+          if (!cols.includes("is_active")) db.exec("ALTER TABLE baselines ADD COLUMN is_active INTEGER NOT NULL DEFAULT 0;");
+          if (!cols.includes("invalid_reason")) db.exec("ALTER TABLE baselines ADD COLUMN invalid_reason TEXT;");
+          if (!cols.includes("video_path")) db.exec("ALTER TABLE baselines ADD COLUMN video_path TEXT;");
+
+          db.exec(`
+            UPDATE baselines SET started_at = measured_at WHERE started_at IS NULL;
+            UPDATE baselines SET is_active = 0;
+            UPDATE baselines 
+            SET is_active = 1 
+            WHERE id = (
+              SELECT id FROM baselines 
+              WHERE is_calibrated = 1 
+              ORDER BY measured_at DESC LIMIT 1
+            );
+          `);
+        }
+
+        db.exec(`
+          CREATE UNIQUE INDEX IF NOT EXISTS idx_baselines_single_active ON baselines(is_active) WHERE is_active = 1;
+
+          -- 3. Create transcript_segments
+          CREATE TABLE IF NOT EXISTS transcript_segments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            recording_id TEXT NOT NULL REFERENCES recordings(id) ON DELETE CASCADE,
+            seq INTEGER NOT NULL,
+            speaker TEXT NOT NULL,
+            text TEXT NOT NULL,
+            start_ms INTEGER NOT NULL,
+            end_ms INTEGER NOT NULL
+          );
+          CREATE INDEX IF NOT EXISTS idx_transcript_recording ON transcript_segments(recording_id, seq ASC);
+        `);
+
+        if (tableExists("vitals_samples")) {
+          const vCols = db.prepare("PRAGMA table_info(vitals_samples)").all().map((c) => c.name);
+          if (!vCols.includes("hrv_rmssd")) db.exec("ALTER TABLE vitals_samples ADD COLUMN hrv_rmssd REAL;");
+          if (!vCols.includes("breathing_rate")) db.exec("ALTER TABLE vitals_samples ADD COLUMN breathing_rate REAL;");
+        }
+
+        db.prepare("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)").run(5, new Date().toISOString());
+      });
+
+    migrateV5();
+    currentVersion = 5;
+  }
+
+  if (currentVersion < 6) {
+    try {
+      const backupDir = path.join(path.dirname(dbPath), "backups");
+      if (!fs.existsSync(backupDir)) {
+        fs.mkdirSync(backupDir, { recursive: true });
+      }
+      const backupPath = path.join(backupDir, `mocktwo-v5-${Date.now()}.db`);
+      db.backup(backupPath);
+    } catch (err) {
+      console.error("Failed to backup db before v6 migration:", err);
+    }
+
+    const migrateV6 = db.transaction(() => {
+      // 1. Upgrade baselines table
+      if (!tableExists("baselines")) {
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS baselines (
+            id TEXT PRIMARY KEY,
+            status TEXT NOT NULL DEFAULT 'valid',
+            invalid_reason TEXT,
+            is_active INTEGER NOT NULL DEFAULT 0,
+            quality_score REAL,
+            pulse_mean REAL,
+            pulse_median REAL,
+            pulse_min REAL,
+            pulse_max REAL,
+            pulse_sd REAL,
+            pulse_confidence REAL,
+            pulse_sample_count INTEGER,
+            hrv_rmssd REAL,
+            hrv_sdnn REAL,
+            hrv_mean_nn REAL,
+            hrv_baevsky REAL,
+            hrv_confidence REAL,
+            hrv_sample_count INTEGER,
+            breathing_mean REAL,
+            breathing_sd REAL,
+            breathing_confidence REAL,
+            breathing_sample_count INTEGER,
+            blink_count INTEGER,
+            blink_rate_per_min REAL,
+            expression_map TEXT,
+            dominant_expression TEXT,
+            eda_mean REAL,
+            eda_sd REAL,
+            eda_slope REAL,
+            face_present_ratio REAL,
+            talking_ratio REAL,
+            motion_ratio REAL,
+            validation_histogram TEXT,
+            camera_label TEXT,
+            camera_resolution TEXT,
+            camera_fps REAL,
+            local_date TEXT,
+            timezone TEXT,
+            started_at TEXT,
+            ended_at TEXT,
+            duration_seconds INTEGER,
+            measured_at TEXT NOT NULL,
+            sdk_version TEXT,
+            requested_metrics TEXT,
+            video_path TEXT,
+            created_at TEXT NOT NULL
+          );
+        `);
+      } else {
+        const cols = db.prepare("PRAGMA table_info(baselines)").all().map((c) => c.name);
+        const addCol = (col, type) => {
+          if (!cols.includes(col)) {
+            db.exec(`ALTER TABLE baselines ADD COLUMN ${col} ${type};`);
+          }
+        };
+
+        addCol("status", "TEXT NOT NULL DEFAULT 'valid'");
+        addCol("invalid_reason", "TEXT");
+        addCol("is_active", "INTEGER NOT NULL DEFAULT 0");
+        addCol("quality_score", "REAL");
+        addCol("pulse_mean", "REAL");
+        addCol("pulse_median", "REAL");
+        addCol("pulse_min", "REAL");
+        addCol("pulse_max", "REAL");
+        addCol("pulse_sd", "REAL");
+        addCol("pulse_confidence", "REAL");
+        addCol("pulse_sample_count", "INTEGER");
+        addCol("hrv_rmssd", "REAL");
+        addCol("hrv_sdnn", "REAL");
+        addCol("hrv_mean_nn", "REAL");
+        addCol("hrv_baevsky", "REAL");
+        addCol("hrv_confidence", "REAL");
+        addCol("hrv_sample_count", "INTEGER");
+        addCol("breathing_mean", "REAL");
+        addCol("breathing_sd", "REAL");
+        addCol("breathing_confidence", "REAL");
+        addCol("breathing_sample_count", "INTEGER");
+        addCol("blink_count", "INTEGER");
+        addCol("blink_rate_per_min", "REAL");
+        addCol("expression_map", "TEXT");
+        addCol("dominant_expression", "TEXT");
+        addCol("eda_mean", "REAL");
+        addCol("eda_sd", "REAL");
+        addCol("eda_slope", "REAL");
+        addCol("face_present_ratio", "REAL");
+        addCol("talking_ratio", "REAL");
+        addCol("motion_ratio", "REAL");
+        addCol("validation_histogram", "TEXT");
+        addCol("camera_label", "TEXT");
+        addCol("camera_resolution", "TEXT");
+        addCol("camera_fps", "REAL");
+        addCol("local_date", "TEXT");
+        addCol("timezone", "TEXT");
+        addCol("started_at", "TEXT");
+        addCol("ended_at", "TEXT");
+        addCol("duration_seconds", "INTEGER");
+        addCol("sdk_version", "TEXT");
+        addCol("requested_metrics", "TEXT");
+
+        // Existing rows created from old/fake flow must be marked legacy
+        // so they are never treated as a real active baseline.
+        db.exec(`
+          UPDATE baselines 
+          SET status = 'legacy', is_active = 0 
+          WHERE status IS NULL OR status = '' OR status = 'legacy' OR sdk_version IS NULL;
+        `);
+      }
+
+      // Ensure partial unique index exists so at most ONE baseline can be active
+      db.exec(`
+        DROP INDEX IF EXISTS idx_baselines_single_active;
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_baselines_single_active ON baselines(is_active) WHERE is_active = 1;
+      `);
+
+      // 2. Create baseline_samples table for downsampled time-series telemetry
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS baseline_samples (
+          id TEXT PRIMARY KEY,
+          baseline_id TEXT NOT NULL REFERENCES baselines(id) ON DELETE CASCADE,
+          t_ms INTEGER NOT NULL,
+          pulse REAL,
+          pulse_conf REAL,
+          pulse_stable INTEGER,
+          breathing REAL,
+          breathing_conf REAL,
+          breathing_stable INTEGER,
+          hrv_rmssd REAL,
+          hrv_sdnn REAL,
+          hrv_conf REAL,
+          hrv_stable INTEGER,
+          eda REAL,
+          blink INTEGER,
+          validation_code TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_baseline_samples ON baseline_samples(baseline_id, t_ms ASC);
+      `);
+
+      db.prepare("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)").run(6, new Date().toISOString());
+    });
+
+    migrateV6();
+    currentVersion = 6;
   }
 
   // Ensure non-partial unique indexes exist on builtin_key for ON CONFLICT target compatibility
@@ -1148,17 +1477,174 @@ parentPort.on("message", ({ id, type, payload }) => {
         break;
       }
 
-      // Recordings (Paginated list view without bulky vitals blobs)
+      // -----------------------------------------------------------------------
+      // Recordings (Practice Sessions)
+      // -----------------------------------------------------------------------
+      case "recordings:start": {
+        const p = payload || {};
+        const id = p.id;
+        const now = new Date().toISOString();
+        const startedAt = p.startedAt || now;
+        const localDate = p.localDate || startedAt.slice(0, 10);
+        const timezone = p.timezone || "UTC";
+        const scenarioTitle = p.scenarioTitle || "Practice Session";
+        const personaName = p.personaName || "Practice Partner";
+        const plannedDuration = Number(p.plannedDurationSeconds) || 180;
+        const interactionType = p.interactionType || "Difficult Conversations";
+
+        db.prepare(`
+          INSERT INTO recordings (
+            id, scenario_id, scenario_title, persona_id, persona_name, persona_avatar_url,
+            baseline_id, interaction_type, started_at, local_date, timezone,
+            planned_duration_seconds, duration_seconds, status, video_path, user_notes, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          id,
+          p.scenarioId || null,
+          scenarioTitle,
+          p.personaId || null,
+          personaName,
+          p.personaAvatarUrl || null,
+          p.baselineId || null,
+          interactionType,
+          startedAt,
+          localDate,
+          timezone,
+          plannedDuration,
+          0,
+          "recording",
+          p.videoPath || null,
+          "[]",
+          now
+        );
+        result = { id };
+        break;
+      }
+
+      case "recordings:append-transcript": {
+        const { recordingId, segments } = payload || {};
+        if (recordingId && Array.isArray(segments) && segments.length > 0) {
+          const stmt = db.prepare(`
+            INSERT INTO transcript_segments (recording_id, seq, speaker, text, start_ms, end_ms)
+            VALUES (?, ?, ?, ?, ?, ?)
+          `);
+          db.transaction(() => {
+            for (const s of segments) {
+              stmt.run(recordingId, s.seq || 0, s.speaker || "user", s.text || "", s.startMs || 0, s.endMs || 0);
+            }
+          })();
+        }
+        result = true;
+        break;
+      }
+
+      case "recordings:append-vitals": {
+        const { recordingId, samples } = payload || {};
+        if (recordingId && Array.isArray(samples) && samples.length > 0) {
+          const stmt = db.prepare(`
+            INSERT INTO vitals_samples (recording_id, timestamp_offset_ms, pulse_bpm, hrv_rmssd, breathing_rate, confidence, is_clean)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+          `);
+          db.transaction(() => {
+            for (const s of samples) {
+              stmt.run(
+                recordingId,
+                s.timestampOffsetMs || 0,
+                s.pulseBpm ?? null,
+                s.hrvRmssd ?? null,
+                s.breathingRate ?? null,
+                s.confidence ?? null,
+                s.isClean ? 1 : 0
+              );
+            }
+          })();
+        }
+        result = true;
+        break;
+      }
+
+      case "recordings:finalize": {
+        const p = payload || {};
+        const id = p.id;
+        const now = new Date().toISOString();
+        const durationSeconds = Math.max(0, Number(p.durationSeconds) || 0);
+        const status = p.status || (durationSeconds >= 30 ? "completed" : "abandoned");
+        const endReason = p.endReason || (status === "completed" ? "completed" : "user_quit");
+
+        db.prepare(`
+          UPDATE recordings SET
+            ended_at = ?,
+            duration_seconds = ?,
+            duration_minutes = ?,
+            status = ?,
+            end_reason = ?,
+            video_path = COALESCE(?, video_path),
+            file_size_bytes = COALESCE(?, file_size_bytes),
+            mime_type = COALESCE(?, mime_type),
+            composure_score = ?,
+            avg_pulse = ?,
+            peak_pulse = ?,
+            avg_hrv_rmssd = ?,
+            recovery_seconds = ?,
+            self_reflection_notes = COALESCE(?, self_reflection_notes)
+          WHERE id = ?
+        `).run(
+          p.endedAt || now,
+          durationSeconds,
+          Math.round((durationSeconds / 60) * 10) / 10,
+          status,
+          endReason,
+          p.videoPath || null,
+          p.fileSizeBytes || null,
+          p.mimeType || null,
+          p.composureScore ?? null,
+          p.avgPulse ?? null,
+          p.peakPulse ?? null,
+          p.avgHrvRmssd ?? null,
+          p.recoverySeconds ?? null,
+          p.selfReflectionNotes || null,
+          id
+        );
+        result = { id, status };
+        break;
+      }
+
+      case "recordings:reconcile-in-flight": {
+        const now = new Date().toISOString();
+        const rows = db.prepare("SELECT id, video_path FROM recordings WHERE status = 'recording'").all();
+        db.prepare(`
+          UPDATE recordings SET
+            status = 'interrupted',
+            end_reason = 'app_closed',
+            ended_at = ?
+          WHERE status = 'recording'
+        `).run(now);
+        result = rows;
+        break;
+      }
+
+      case "recordings:get-streak-dates": {
+        const rows = db.prepare(`
+          SELECT DISTINCT local_date
+          FROM recordings
+          WHERE status = 'completed' AND duration_seconds >= 30
+          ORDER BY local_date DESC
+        `).all();
+        result = rows.map((r) => r.local_date);
+        break;
+      }
+
       case "recordings:list": {
         const cleanLimit = Math.max(1, Math.min(Number(payload?.limit) || 100, 1000));
         const cleanOffset = Math.max(0, Number(payload?.offset) || 0);
         const rows = db.prepare(`
           SELECT id, scenario_id, scenario_title, persona_id, persona_name, persona_avatar_url,
-                 date, relative_date, date_group, duration_seconds, duration_minutes,
-                 composure_score, score, composure_tier, nervousness_level, readiness_status,
-                 status, audio_path, waveform_path, user_notes, created_at
+                 baseline_id, interaction_type, started_at, ended_at, local_date, timezone,
+                 duration_seconds, duration_minutes, status, end_reason, video_path, audio_path,
+                 file_size_bytes, mime_type, composure_score, avg_pulse, peak_pulse, avg_hrv_rmssd,
+                 recovery_seconds, user_notes, self_reflection_notes, created_at
           FROM recordings
-          ORDER BY date DESC
+          ORDER BY started_at DESC
           LIMIT ? OFFSET ?
         `).all(cleanLimit, cleanOffset);
 
@@ -1169,20 +1655,29 @@ parentPort.on("message", ({ id, type, payload }) => {
           personaId: r.persona_id || undefined,
           personaName: r.persona_name,
           personaAvatarUrl: r.persona_avatar_url || undefined,
-          date: r.date,
-          relativeDate: r.relative_date,
-          dateGroup: r.date_group,
+          baselineId: r.baseline_id || undefined,
+          interactionType: r.interaction_type,
+          startedAt: r.started_at,
+          endedAt: r.ended_at || undefined,
+          localDate: r.local_date,
+          date: r.started_at,
           durationSeconds: r.duration_seconds,
           durationMinutes: r.duration_minutes || undefined,
-          composureScore: r.composure_score ?? undefined,
-          score: r.score ?? undefined,
-          composureTier: r.composure_tier || undefined,
-          nervousnessLevel: r.nervousness_level || undefined,
-          readinessStatus: r.readiness_status || undefined,
           status: r.status,
-          audioUrl: r.audio_path || undefined,
+          endReason: r.end_reason || undefined,
+          videoPath: r.video_path || undefined,
+          audioUrl: r.video_path || r.audio_path || undefined,
+          fileSizeBytes: r.file_size_bytes || undefined,
+          mimeType: r.mime_type || undefined,
+          composureScore: r.composure_score ?? undefined,
+          avgPulse: r.avg_pulse ?? undefined,
+          peakPulse: r.peak_pulse ?? undefined,
+          avgHrvRmssd: r.avg_hrv_rmssd ?? undefined,
+          recoverySeconds: r.recovery_seconds ?? undefined,
           transcript: [],
           userNotes: JSON.parse(r.user_notes || "[]"),
+          selfReflectionNotes: r.self_reflection_notes || undefined,
+          createdAt: r.created_at,
         }));
         break;
       }
@@ -1198,7 +1693,13 @@ parentPort.on("message", ({ id, type, payload }) => {
           result = null;
         } else {
           const notes = JSON.parse(r.user_notes || "[]");
-          const vitalsSamples = db.prepare("SELECT * FROM vitals_samples WHERE recording_id = ? ORDER BY timestamp_offset_ms ASC").all(idToGet);
+          const vitalsSamples = db.prepare(
+            "SELECT * FROM vitals_samples WHERE recording_id = ? ORDER BY timestamp_offset_ms ASC"
+          ).all(idToGet);
+          const transcriptSegments = db.prepare(
+            "SELECT seq, speaker, text, start_ms AS startMs, end_ms AS endMs FROM transcript_segments WHERE recording_id = ? ORDER BY seq ASC"
+          ).all(idToGet);
+
           result = {
             id: r.id,
             scenarioId: r.scenario_id,
@@ -1206,25 +1707,32 @@ parentPort.on("message", ({ id, type, payload }) => {
             personaId: r.persona_id || undefined,
             personaName: r.persona_name,
             personaAvatarUrl: r.persona_avatar_url || undefined,
-            date: r.date,
-            relativeDate: r.relative_date,
-            dateGroup: r.date_group,
+            baselineId: r.baseline_id || undefined,
+            interactionType: r.interaction_type,
+            startedAt: r.started_at,
+            endedAt: r.ended_at || undefined,
+            localDate: r.local_date,
+            date: r.started_at,
             durationSeconds: r.duration_seconds,
             durationMinutes: r.duration_minutes || undefined,
-            composureScore: r.composure_score ?? undefined,
-            score: r.score ?? undefined,
-            composureTier: r.composure_tier || undefined,
-            nervousnessLevel: r.nervousness_level || undefined,
-            readinessStatus: r.readiness_status || undefined,
             status: r.status,
-            audioUrl: r.audio_path || undefined,
-            transcript: JSON.parse(r.transcript || "[]"),
-            sessionBiometrics: r.session_biometrics ? JSON.parse(r.session_biometrics) : undefined,
-            pressureCoaching: r.pressure_coaching ? JSON.parse(r.pressure_coaching) : undefined,
+            endReason: r.end_reason || undefined,
+            videoPath: r.video_path || undefined,
+            audioUrl: r.video_path || r.audio_path || undefined,
+            fileSizeBytes: r.file_size_bytes || undefined,
+            mimeType: r.mime_type || undefined,
+            composureScore: r.composure_score ?? undefined,
+            avgPulse: r.avg_pulse ?? undefined,
+            peakPulse: r.peak_pulse ?? undefined,
+            avgHrvRmssd: r.avg_hrv_rmssd ?? undefined,
+            recoverySeconds: r.recovery_seconds ?? undefined,
+            transcript: transcriptSegments,
+            transcriptSegments,
             userNotes: notes,
             notes,
             vitalsSamples,
             selfReflectionNotes: r.self_reflection_notes || undefined,
+            createdAt: r.created_at,
           };
         }
         break;
@@ -1234,122 +1742,90 @@ parentPort.on("message", ({ id, type, payload }) => {
         const rec = payload;
         const now = new Date().toISOString();
         const id = rec.id || `rec-${Date.now()}`;
-        const date = rec.date || rec.createdAt || now;
-        const relativeDate = rec.relativeDate || "Just now";
-        const scenarioTitle = rec.scenarioTitle || "Rehearsal Session";
-        const personaName = rec.personaName || "Practice Partner";
-        const durationSeconds = rec.durationSeconds ?? 60;
+        const startedAt = rec.startedAt || rec.date || now;
+        const localDate = rec.localDate || startedAt.slice(0, 10);
+        const durationSeconds = rec.durationSeconds ?? 0;
 
-        let safeAudioPath = null;
-        const candidateAudio = rec.audioUrl || rec.audioPath;
-        if (candidateAudio && typeof candidateAudio === "string" && candidateAudio.trim()) {
-          const base = path.resolve(recordingsDir);
-          const fileName = path.basename(candidateAudio);
-          const expected = path.join(base, fileName);
-          if (candidateAudio === expected || candidateAudio === fileName) {
-            safeAudioPath = expected;
+        db.prepare(`
+          INSERT INTO recordings (
+            id, scenario_id, scenario_title, persona_id, persona_name, persona_avatar_url,
+            started_at, ended_at, local_date, timezone, planned_duration_seconds,
+            duration_seconds, status, video_path, composure_score, avg_pulse, peak_pulse,
+            avg_hrv_rmssd, recovery_seconds, user_notes, self_reflection_notes, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            scenario_title = excluded.scenario_title,
+            user_notes = excluded.user_notes,
+            composure_score = excluded.composure_score,
+            self_reflection_notes = excluded.self_reflection_notes
+        `).run(
+          id,
+          rec.scenarioId || null,
+          rec.scenarioTitle || "Rehearsal Session",
+          rec.personaId || null,
+          rec.personaName || "Practice Partner",
+          rec.personaAvatarUrl || null,
+          startedAt,
+          rec.endedAt || now,
+          localDate,
+          rec.timezone || "UTC",
+          rec.plannedDurationSeconds || 180,
+          durationSeconds,
+          rec.status || (durationSeconds >= 30 ? "completed" : "abandoned"),
+          rec.videoPath || rec.audioUrl || null,
+          rec.composureScore ?? null,
+          rec.avgPulse ?? null,
+          rec.peakPulse ?? null,
+          rec.avgHrvRmssd ?? null,
+          rec.recoverySeconds ?? null,
+          JSON.stringify(rec.notes || rec.userNotes || []),
+          rec.selfReflectionNotes || null,
+          rec.createdAt || now
+        );
+
+        // Insert vitals samples if provided (delete+reinsert for idempotency)
+        if (Array.isArray(rec.vitalsSamples) && rec.vitalsSamples.length > 0) {
+          db.prepare("DELETE FROM vitals_samples WHERE recording_id = ?").run(id);
+          const insertVital = db.prepare(`
+            INSERT INTO vitals_samples (recording_id, timestamp_offset_ms, pulse_bpm, hrv_rmssd, breathing_rate, confidence, is_clean)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+          `);
+          for (const v of rec.vitalsSamples) {
+            insertVital.run(
+              id,
+              v.timestampMs ?? v.timestamp_offset_ms ?? 0,
+              v.pulseRateBpm ?? v.pulse_bpm ?? null,
+              v.hrv_rmssd ?? v.hrvRmssd ?? null,
+              v.breathingRate ?? v.breathing_rate ?? null,
+              v.pulseConfidence ?? v.confidence ?? null,
+              v.pulseStable ? 1 : 0
+            );
           }
         }
 
-        const insertRecording = db.transaction(() => {
-          db.prepare(`
-            INSERT INTO recordings (
-              id, scenario_id, scenario_title, persona_id, persona_name, persona_avatar_url,
-              date, relative_date, date_group, duration_seconds, duration_minutes,
-              composure_score, score, composure_tier, nervousness_level, readiness_status,
-              status, audio_path, waveform_path, transcript, session_biometrics, pressure_coaching,
-              user_notes, self_reflection_notes, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET
-              scenario_title = excluded.scenario_title,
-              user_notes = excluded.user_notes,
-              transcript = excluded.transcript,
-              self_reflection_notes = excluded.self_reflection_notes
-          `).run(
-            id,
-            rec.scenarioId || null,
-            scenarioTitle,
-            rec.personaId || null,
-            personaName,
-            rec.personaAvatarUrl || null,
-            date,
-            relativeDate,
-            rec.dateGroup || "Today",
-            durationSeconds,
-            rec.durationMinutes || null,
-            rec.composureScore ?? null,
-            rec.score ?? null,
-            rec.composureTier || null,
-            rec.nervousnessLevel || null,
-            rec.readinessStatus || null,
-            rec.status || "Completed",
-            safeAudioPath,
-            null,
-            JSON.stringify(rec.transcript || []),
-            rec.sessionBiometrics ? JSON.stringify(rec.sessionBiometrics) : null,
-            rec.pressureCoaching ? JSON.stringify(rec.pressureCoaching) : null,
-            JSON.stringify(rec.notes || rec.userNotes || []),
-            rec.selfReflectionNotes || null,
-            rec.createdAt || now
-          );
-
-          // Clean up existing child samples and notes on re-save to prevent row duplication
-          if (Array.isArray(rec.vitalsSamples) || (rec.sessionBiometrics && rec.sessionBiometrics.pulse)) {
-            db.prepare("DELETE FROM vitals_samples WHERE recording_id = ?").run(id);
-          }
-          if (Array.isArray(rec.notes || rec.userNotes)) {
-            db.prepare("DELETE FROM recording_notes WHERE recording_id = ?").run(id);
-          }
-
-          const insertSampleStmt = db.prepare(`
-            INSERT INTO vitals_samples (recording_id, timestamp_offset_ms, pulse_bpm, confidence, is_clean)
-            VALUES (?, ?, ?, ?, ?)
-          `);
-
-          // Insert from rec.vitalsSamples if provided
-          if (Array.isArray(rec.vitalsSamples)) {
-            for (const s of rec.vitalsSamples) {
-              insertSampleStmt.run(
-                id,
-                s.timestampMs || s.timestampOffsetMs || 0,
-                s.pulseRateBpm || s.pulseBpm || 70,
-                s.pulseConfidence ?? s.confidence ?? 100,
-                s.motionWarning ? 0 : 1
-              );
-            }
-          } else if (rec.sessionBiometrics && rec.sessionBiometrics.pulse && Array.isArray(rec.sessionBiometrics.pulse.rate)) {
-            for (const s of rec.sessionBiometrics.pulse.rate) {
-              insertSampleStmt.run(
-                id,
-                Math.round((s.timestampSeconds || 0) * 1000),
-                s.pulseBpm || 70,
-                s.confidence || 0,
-                s.outOfRange ? 0 : 1
-              );
-            }
-          }
-
-          // Also insert into recording_notes if notes array provided
-          const notesArr = rec.notes || rec.userNotes;
-          if (Array.isArray(notesArr)) {
-            const insertNoteStmt = db.prepare(`
-              INSERT INTO recording_notes (id, recording_id, timestamp_seconds, note_text, author, created_at)
+        // Sync initial notes into recording_notes table (on INSERT only, skip on UPDATE)
+        const initialNotes = rec.notes || rec.userNotes || [];
+        if (Array.isArray(initialNotes) && initialNotes.length > 0) {
+          const existingNoteCount = db.prepare("SELECT count(*) as c FROM recording_notes WHERE recording_id = ?").get(id);
+          if (existingNoteCount && existingNoteCount.c === 0) {
+            const insertNote = db.prepare(`
+              INSERT OR IGNORE INTO recording_notes (id, recording_id, timestamp_seconds, note_text, author, created_at)
               VALUES (?, ?, ?, ?, ?, ?)
             `);
-            for (const n of notesArr) {
-              insertNoteStmt.run(
-                n.id || `n-${Date.now()}-${crypto.randomUUID()}`,
+            const nowNote = new Date().toISOString();
+            for (const n of initialNotes) {
+              insertNote.run(
+                n.id || `n-${Date.now()}-${Math.random().toString(36).slice(2)}`,
                 id,
                 n.timestampSeconds || 0,
                 n.text || n.noteText || "",
                 n.author || "User",
-                n.createdAt || now
+                n.createdAt || nowNote
               );
             }
           }
-        });
+        }
 
-        insertRecording();
         result = { ...rec, id };
         break;
       }
@@ -1360,22 +1836,21 @@ parentPort.on("message", ({ id, type, payload }) => {
           result = false;
           break;
         }
-        const row = db.prepare("SELECT audio_path, waveform_path FROM recordings WHERE id = ?").get(idToDelete.trim());
-        db.prepare("DELETE FROM recordings WHERE id = ?").run(idToDelete.trim());
-        if (row) {
-          const isSafeFile = (filePath) => {
-            if (!filePath || typeof filePath !== "string" || !filePath.trim()) return false;
-            const base = path.resolve(recordingsDir);
-            const fileName = path.basename(filePath);
-            const expected = path.join(base, fileName);
-            return filePath === expected;
-          };
-          if (row.audio_path && isSafeFile(row.audio_path) && fs.existsSync(row.audio_path)) {
-            try { fs.unlinkSync(row.audio_path); } catch { /* ignore */ }
+        const cleanId = idToDelete.trim();
+        const row = db.prepare("SELECT video_path, audio_path FROM recordings WHERE id = ?").get(cleanId);
+        db.prepare("DELETE FROM recordings WHERE id = ?").run(cleanId);
+
+        // Delete associated recording directory if exists
+        try {
+          const sessionDir = path.join(recordingsDir, "sessions", cleanId);
+          if (fs.existsSync(sessionDir)) {
+            fs.rmSync(sessionDir, { recursive: true, force: true });
           }
-          if (row.waveform_path && isSafeFile(row.waveform_path) && fs.existsSync(row.waveform_path)) {
-            try { fs.unlinkSync(row.waveform_path); } catch { /* ignore */ }
+          if (row?.audio_path && fs.existsSync(row.audio_path)) {
+            fs.unlinkSync(row.audio_path);
           }
+        } catch (err) {
+          console.warn("[dbWorker] Error cleaning up recording files:", err.message);
         }
         result = true;
         break;
@@ -1421,52 +1896,249 @@ parentPort.on("message", ({ id, type, payload }) => {
         break;
       }
 
-      // Baselines
-      case "baseline:get": {
-        const b = db.prepare("SELECT * FROM baselines ORDER BY created_at DESC LIMIT 1").get();
+      // -----------------------------------------------------------------------
+      // Baselines (Calm Baseline Calibration)
+      // -----------------------------------------------------------------------
+      case "baseline:get":
+      case "baseline:get-active":
+      case "baselines:get-active": {
+        // Query single active valid baseline (legacy rows are excluded)
+        const b = db.prepare("SELECT * FROM baselines WHERE is_active = 1 AND status = 'valid' ORDER BY measured_at DESC LIMIT 1").get();
         if (!b) {
           result = null;
         } else {
           result = {
-            restingPulse: b.resting_pulse,
-            restingHrvRmssd: b.resting_hrv_rmssd || 54,
-            restingBaevsky: b.resting_baevsky || 82,
-            restingBreathingRate: b.resting_breathing_rate || 14,
-            restingEdaArousal: b.resting_eda_arousal || 0.22,
-            restingExpressions: b.resting_expressions ? JSON.parse(b.resting_expressions) : undefined,
-            measuredAt: b.measured_at,
-            isCalibrated: Boolean(b.is_calibrated),
+            id: b.id,
+            status: b.status,
+            invalidReason: b.invalid_reason || null,
+            isActive: Boolean(b.is_active),
+            qualityScore: b.quality_score ?? null,
+            // Pulse
+            pulseMean: b.pulse_mean ?? b.resting_pulse ?? null,
+            pulseMedian: b.pulse_median ?? null,
+            pulseMin: b.pulse_min ?? null,
+            pulseMax: b.pulse_max ?? null,
+            pulseSd: b.pulse_sd ?? null,
+            pulseConfidence: b.pulse_confidence ?? null,
+            pulseSampleCount: b.pulse_sample_count ?? 0,
+            // HRV
+            hrvRmssd: b.hrv_rmssd ?? b.resting_hrv_rmssd ?? null,
+            hrvSdnn: b.hrv_sdnn ?? null,
+            hrvMeanNn: b.hrv_mean_nn ?? null,
+            hrvBaevsky: b.hrv_baevsky ?? b.resting_baevsky ?? null,
+            hrvConfidence: b.hrv_confidence ?? null,
+            hrvSampleCount: b.hrv_sample_count ?? 0,
+            // Breathing
+            breathingMean: b.breathing_mean ?? b.resting_breathing_rate ?? null,
+            breathingSd: b.breathing_sd ?? null,
+            breathingConfidence: b.breathing_confidence ?? null,
+            breathingSampleCount: b.breathing_sample_count ?? 0,
+            // Blinking & Expressions
+            blinkCount: b.blink_count ?? 0,
+            blinkRatePerMin: b.blink_rate_per_min ?? 0,
+            expressionMap: b.expression_map ? JSON.parse(b.expression_map) : {},
+            dominantExpression: b.dominant_expression || null,
+            // EDA
+            edaMean: b.eda_mean ?? null,
+            edaSd: b.eda_sd ?? null,
+            edaSlope: b.eda_slope ?? null,
+            // Quality & Provenance
+            facePresentRatio: b.face_present_ratio ?? 0,
+            talkingRatio: b.talking_ratio ?? 0,
+            motionRatio: b.motion_ratio ?? 0,
+            validationHistogram: b.validation_histogram ? JSON.parse(b.validation_histogram) : {},
+            cameraLabel: b.camera_label || null,
+            cameraResolution: b.camera_resolution || null,
+            cameraFps: b.camera_fps ?? null,
+            localDate: b.local_date || null,
+            timezone: b.timezone || null,
+            startedAt: b.started_at || b.measured_at,
+            endedAt: b.ended_at || null,
             durationSeconds: b.duration_seconds || 60,
-            restingHR: b.resting_pulse,
-            restingHRV: b.resting_hrv_rmssd || 54,
+            measuredAt: b.measured_at,
+            sdkVersion: b.sdk_version || null,
+            requestedMetrics: b.requested_metrics ? JSON.parse(b.requested_metrics) : null,
+            // Backward-compatibility aliases
+            restingPulse: b.pulse_mean ?? b.resting_pulse ?? null,
+            restingHrvRmssd: b.hrv_rmssd ?? b.resting_hrv_rmssd ?? null,
+            restingBreathingRate: b.breathing_mean ?? b.resting_breathing_rate ?? null,
+            restingBaevsky: b.hrv_baevsky ?? b.resting_baevsky ?? null,
+            isCalibrated: Boolean(b.is_active && b.status === "valid"),
           };
         }
         break;
       }
 
+      case "baselines:finalize":
       case "baseline:save": {
-        const b = payload;
+        const payloadObj = payload || {};
+        const summary = payloadObj.summary || payloadObj;
+        const samples = payloadObj.samples || [];
+        const provenance = payloadObj.provenance || {};
         const now = new Date().toISOString();
-        const baseId = `baseline-${Date.now()}`;
-        db.prepare(`
-          INSERT INTO baselines (
-            id, resting_pulse, resting_hrv_rmssd, resting_baevsky, resting_breathing_rate,
-            resting_eda_arousal, resting_expressions, measured_at, is_calibrated, duration_seconds, created_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(
-          baseId,
-          b.restingPulse || b.restingHR || 68,
-          b.restingHrvRmssd || b.restingHRV || 54,
-          b.restingBaevsky || 82,
-          b.restingBreathingRate || 14,
-          b.restingEdaArousal || 0.22,
-          b.restingExpressions ? JSON.stringify(b.restingExpressions) : null,
-          b.measuredAt || now,
-          b.isCalibrated ? 1 : 0,
-          b.durationSeconds || 60,
-          now
-        );
-        result = b;
+        const baseId = payloadObj.id || `baseline-${Date.now()}-${crypto.randomUUID()}`;
+
+        const isValid = summary.isValid !== undefined ? Boolean(summary.isValid) : Boolean(payloadObj.isCalibrated ?? true);
+        const status = isValid ? "valid" : "invalid";
+        const invalidReason = summary.invalidReason || payloadObj.invalidReason || null;
+
+        let shouldBeActive = 0;
+
+        db.transaction(() => {
+          if (isValid) {
+            const activeRow = db.prepare("SELECT id FROM baselines WHERE is_active = 1 AND status = 'valid'").get();
+            const hasActive = Boolean(activeRow);
+            if (!hasActive || payloadObj.makeActive === true) {
+              shouldBeActive = 1;
+              db.prepare("UPDATE baselines SET is_active = 0 WHERE is_active = 1").run();
+            } else {
+              shouldBeActive = 0;
+            }
+          } else {
+            shouldBeActive = 0;
+          }
+
+          const pulseVal = summary.pulseMean ?? payloadObj.restingPulse ?? null;
+          const hrvVal = summary.hrvRmssd ?? payloadObj.restingHrvRmssd ?? null;
+          const breathingVal = summary.breathingMean ?? payloadObj.restingBreathingRate ?? null;
+          const baevskyVal = summary.hrvBaevsky ?? payloadObj.restingBaevsky ?? null;
+
+          db.prepare(`
+            INSERT INTO baselines (
+              id, status, invalid_reason, is_active, quality_score,
+              pulse_mean, pulse_median, pulse_min, pulse_max, pulse_sd, pulse_confidence, pulse_sample_count,
+              hrv_rmssd, hrv_sdnn, hrv_mean_nn, hrv_baevsky, hrv_confidence, hrv_sample_count,
+              breathing_mean, breathing_sd, breathing_confidence, breathing_sample_count,
+              blink_count, blink_rate_per_min, expression_map, dominant_expression,
+              eda_mean, eda_sd, eda_slope,
+              face_present_ratio, talking_ratio, motion_ratio, validation_histogram,
+              camera_label, camera_resolution, camera_fps, local_date, timezone,
+              started_at, ended_at, duration_seconds, measured_at,
+              sdk_version, requested_metrics, video_path,
+              resting_pulse, resting_hrv_rmssd, resting_breathing_rate, resting_baevsky,
+              is_calibrated, created_at
+            ) VALUES (
+              ?, ?, ?, ?, ?,
+              ?, ?, ?, ?, ?, ?, ?,
+              ?, ?, ?, ?, ?, ?,
+              ?, ?, ?, ?,
+              ?, ?, ?, ?,
+              ?, ?, ?,
+              ?, ?, ?, ?,
+              ?, ?, ?, ?, ?,
+              ?, ?, ?, ?,
+              ?, ?, ?,
+              ?, ?, ?, ?,
+              ?, ?
+            )
+            ON CONFLICT(id) DO UPDATE SET
+              status = excluded.status,
+              invalid_reason = excluded.invalid_reason,
+              is_active = excluded.is_active,
+              quality_score = excluded.quality_score,
+              pulse_mean = excluded.pulse_mean,
+              hrv_rmssd = excluded.hrv_rmssd,
+              breathing_mean = excluded.breathing_mean,
+              measured_at = excluded.measured_at
+          `).run(
+            baseId,
+            status,
+            invalidReason,
+            shouldBeActive,
+            summary.qualityScore ?? null,
+            summary.pulseMean ?? null,
+            summary.pulseMedian ?? null,
+            summary.pulseMin ?? null,
+            summary.pulseMax ?? null,
+            summary.pulseSd ?? null,
+            summary.pulseConfidence ?? null,
+            summary.pulseSampleCount ?? 0,
+            summary.hrvRmssd ?? null,
+            summary.hrvSdnn ?? null,
+            summary.hrvMeanNn ?? null,
+            summary.hrvBaevsky ?? null,
+            summary.hrvConfidence ?? null,
+            summary.hrvSampleCount ?? 0,
+            summary.breathingMean ?? null,
+            summary.breathingSd ?? null,
+            summary.breathingConfidence ?? null,
+            summary.breathingSampleCount ?? 0,
+            summary.blinkCount ?? 0,
+            summary.blinkRatePerMin ?? 0,
+            summary.expressionMap ? JSON.stringify(summary.expressionMap) : null,
+            summary.dominantExpression || null,
+            summary.edaMean ?? null,
+            summary.edaSd ?? null,
+            summary.edaSlope ?? null,
+            summary.facePresentRatio ?? 0,
+            summary.talkingRatio ?? 0,
+            summary.motionRatio ?? 0,
+            summary.validationHistogram ? JSON.stringify(summary.validationHistogram) : null,
+            provenance.cameraLabel || null,
+            provenance.cameraResolution || null,
+            provenance.cameraFps ?? null,
+            provenance.localDate || null,
+            provenance.timezone || null,
+            provenance.startedAt || now,
+            provenance.endedAt || now,
+            summary.durationSeconds || 60,
+            now,
+            provenance.sdkVersion || "3.5.0",
+            provenance.requestedMetrics ? JSON.stringify(provenance.requestedMetrics) : null,
+            payloadObj.videoPath || null,
+            pulseVal,
+            hrvVal,
+            breathingVal,
+            baevskyVal,
+            isValid ? 1 : 0,
+            now
+          );
+
+          // Insert downsampled telemetry samples if provided
+          if (Array.isArray(samples) && samples.length > 0) {
+            const insertSampleStmt = db.prepare(`
+              INSERT OR REPLACE INTO baseline_samples (
+                id, baseline_id, t_ms, pulse, pulse_conf, pulse_stable,
+                breathing, breathing_conf, breathing_stable,
+                hrv_rmssd, hrv_sdnn, hrv_conf, hrv_stable,
+                eda, blink, validation_code, created_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `);
+
+            for (let i = 0; i < samples.length; i++) {
+              const s = samples[i];
+              const sampleId = `${baseId}-s-${i}`;
+              insertSampleStmt.run(
+                sampleId,
+                baseId,
+                s.tMs || (i * 1000),
+                s.pulse ?? null,
+                s.pulseConfidence ?? null,
+                s.pulseStable ? 1 : 0,
+                s.breathingRate ?? null,
+                s.breathingConfidence ?? null,
+                s.breathingStable ? 1 : 0,
+                s.hrvRmssd ?? null,
+                s.hrvSdnn ?? null,
+                s.hrvConfidence ?? null,
+                s.hrvStable ? 1 : 0,
+                s.eda ?? null,
+                s.blinkDetected ? 1 : 0,
+                s.validationCode != null ? String(s.validationCode) : null,
+                now
+              );
+            }
+          }
+        })();
+
+        result = {
+          id: baseId,
+          status,
+          invalidReason,
+          isActive: Boolean(shouldBeActive),
+          isCalibrated: isValid,
+          qualityScore: summary.qualityScore ?? null,
+        };
         break;
       }
 
