@@ -41,6 +41,26 @@ function loadEnvironment() {
 
 loadEnvironment();
 
+// SmartSpectra FFI native runtime location setup for packaged apps
+if (app.isPackaged && !process.env.SMARTSPECTRA_CAPI_PATH) {
+  const LIB = {
+    darwin: "libsmartspectra_capi.dylib",
+    win32: "smartspectra_capi.dll",
+    linux: "libsmartspectra_capi.so",
+  }[process.platform];
+  if (LIB) {
+    process.env.SMARTSPECTRA_CAPI_PATH = path.join(process.resourcesPath, "smartspectra", LIB);
+  }
+}
+
+let bindSmartSpectraIpc = null;
+try {
+  const ssMain = require("@smartspectra/node-sdk/main");
+  bindSmartSpectraIpc = ssMain.bindSmartSpectraIpc;
+} catch (err) {
+  console.error("[main] Failed to load @smartspectra/node-sdk/main:", err.message);
+}
+
 // Register custom asset protocol scheme before app is ready
 if (protocol && typeof protocol.registerSchemesAsPrivileged === "function") {
   protocol.registerSchemesAsPrivileged([
@@ -81,9 +101,9 @@ app.on("second-instance", () => {
   }
 });
 
-const DEV_HOST = "127.0.0.1";
-const DEV_PORT = 5173;
-const DEV_SERVER_URL = `http://${DEV_HOST}:${DEV_PORT}`;
+const DEV_HOST = process.env.VITE_DEV_HOST || "127.0.0.1";
+const DEV_PORT = process.env.VITE_DEV_PORT ? parseInt(process.env.VITE_DEV_PORT, 10) : 5173;
+const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL || `http://${DEV_HOST}:${DEV_PORT}`;
 const appIconPath = path.join(__dirname, "../build/icon.png");
 
 let mainWindow = null;
@@ -522,6 +542,9 @@ function isAllowedAppOrigin(url) {
       return filePath === appPath || filePath.startsWith(appPath + path.sep);
     }
     if (parsed.origin === DEV_SERVER_URL) return true;
+    if (parsed.protocol === "http:" && (parsed.hostname === "127.0.0.1" || parsed.hostname === "localhost")) {
+      return true;
+    }
     if (parsed.protocol === "file:") {
       const distPath = path.resolve(__dirname, "../dist");
       const filePath = fileURLToPath(url);
@@ -568,10 +591,16 @@ function configureSessionSecurity() {
     });
   });
 
-  // Session Permission Handlers: Media only for trusted application origin
+  // Session Permission Handlers: Media and hardware checks for trusted application origin
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
     const url = details.requestingUrl || webContents.getURL();
-    if (isAllowedAppOrigin(url) && permission === "media") {
+    const isAllowedPermission =
+      permission === "media" ||
+      permission === "camera" ||
+      permission === "microphone" ||
+      permission === "speaker-selection";
+
+    if (isAllowedAppOrigin(url) && isAllowedPermission) {
       callback(true);
     } else {
       writeLogEntry("warn", "security:permissionDenied", `Denied request for '${permission}' from '${url}'`);
@@ -580,7 +609,13 @@ function configureSessionSecurity() {
   });
 
   session.defaultSession.setPermissionCheckHandler((webContents, permission, requestingOrigin) => {
-    return isAllowedAppOrigin(requestingOrigin) && permission === "media";
+    const isAllowedPermission =
+      permission === "media" ||
+      permission === "camera" ||
+      permission === "microphone" ||
+      permission === "speaker-selection";
+
+    return isAllowedAppOrigin(requestingOrigin) && isAllowedPermission;
   });
 }
 
@@ -613,6 +648,15 @@ function createWindow() {
       navigateOnDragDrop: false,
     },
   });
+
+  // Wire Presage SmartSpectra IPC bridge for this BrowserWindow
+  if (typeof bindSmartSpectraIpc === "function") {
+    try {
+      bindSmartSpectraIpc(mainWindow);
+    } catch (err) {
+      console.error("[main] Failed to bindSmartSpectraIpc for mainWindow:", err.message);
+    }
+  }
 
   // Block unexpected window opens
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -759,7 +803,7 @@ app.whenReady().then(() => {
     iconPath: appIconPath,
   });
 
-  // Handle mocktwo-asset:// protocol safely
+  // Handle mocktwo-asset:// protocol safely with Range request (206) support
   if (protocol && typeof protocol.handle === "function") {
     protocol.handle("mocktwo-asset", async (request) => {
       try {
@@ -767,12 +811,31 @@ app.whenReady().then(() => {
         const cleanHost = String(url.host || "").replace(/[^a-zA-Z0-9_-]/g, "");
         const cleanPathname = String(url.pathname || "").replace(/[^a-zA-Z0-9_\-\.\/]/g, "");
         const relative = path.join(cleanHost, cleanPathname);
-        const { resolveAssetPath } = require("./tavus/assetStore.cjs");
-        const safePath = resolveAssetPath(app.getPath("userData"), relative);
+        const userDataPath = app.getPath("userData");
+
+        let safePath = null;
+        if (cleanHost === "recordings" || relative.startsWith("recordings" + path.sep)) {
+          // Serve from recordings directory
+          const recRel = cleanHost === "recordings" ? cleanPathname.replace(/^\/+/, "") : relative.replace(/^recordings[\\\/]/, "");
+          const recordingsDir = path.resolve(userDataPath, "recordings");
+          const target = path.resolve(recordingsDir, recRel);
+          if (target.startsWith(recordingsDir + path.sep) && fs.existsSync(target)) {
+            safePath = target;
+          }
+        } else {
+          // Serve from images directory
+          const { resolveAssetPath } = require("./tavus/assetStore.cjs");
+          safePath = resolveAssetPath(userDataPath, relative);
+        }
+
         if (!safePath || !fs.existsSync(safePath)) {
           return new Response("Not found", { status: 404 });
         }
-        return net.fetch(pathToFileURL(safePath).toString());
+
+        // Forward headers so net.fetch handles HTTP Range requests for video seeking
+        return net.fetch(pathToFileURL(safePath).toString(), {
+          headers: request.headers,
+        });
       } catch (err) {
         writeLogEntry("warn", "protocol:mocktwo-asset", `Failed to serve asset: ${err.message}`);
         return new Response("Internal error", { status: 500 });
@@ -781,6 +844,9 @@ app.whenReady().then(() => {
   }
 
   storageManager = new StorageManager(app.getPath("userData"));
+  storageManager.reconcileOnStartup().catch((err) => {
+    writeLogEntry("warn", "storage:reconcile", `Startup reconciliation non-blocking error: ${err.message}`);
+  });
   permissionsService = new PermissionsService(storageManager, () => mainWindow);
 
   const { SeedOrchestrator } = require("./seed/seedOrchestrator.cjs");
@@ -805,6 +871,14 @@ app.whenReady().then(() => {
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
+});
+
+app.on("before-quit", () => {
+  if (storageManager) {
+    try {
+      storageManager.emergencyFlushSync();
+    } catch {}
+  }
 });
 
 app.on("activate", () => {
@@ -1119,6 +1193,37 @@ ipcMain.handle("storage:get-baseline", async (event) => {
   }
 });
 
+ipcMain.handle("storage:get-active-baseline", async (event) => {
+  try {
+    if (!isValidSender(event) || !storageManager) return null;
+    return await storageManager.execute("baseline:get-active");
+  } catch (err) {
+    writeLogEntry("warn", "ipc:storage:get-active-baseline", err.message);
+    return null;
+  }
+});
+
+ipcMain.handle("presage:get-config", async (event) => {
+  if (!isValidSender(event)) {
+    return { configured: false, apiKey: "", telemetry: false };
+  }
+  const rawKey = process.env.SMARTSPECTRA_API_KEY || "";
+  const apiKey = rawKey.trim();
+  const isPlaceholder =
+    !apiKey ||
+    apiKey === "YOUR_API_KEY_HERE" ||
+    apiKey === "your_api_key_here" ||
+    apiKey === "placeholder" ||
+    apiKey.length < 10;
+  const configured = !isPlaceholder;
+  const telemetry = process.env.SMARTSPECTRA_TELEMETRY === "true";
+  return {
+    configured,
+    apiKey: configured ? apiKey : "",
+    telemetry,
+  };
+});
+
 ipcMain.handle("storage:save-baseline", async (event, baseline) => {
   try {
     if (!isValidSender(event) || !storageManager) return null;
@@ -1228,6 +1333,161 @@ ipcMain.handle("audio:finalize-recording", async (event, id) => {
   } catch (err) {
     writeLogEntry("warn", "ipc:audio:finalize-recording", err.message);
     return null;
+  }
+});
+
+// -----------------------------------------------------------------------------
+// Unified Recording IPC Handlers (Sessions & Baselines)
+// -----------------------------------------------------------------------------
+const RECORDING_ID_REGEX = /^[A-Za-z0-9_-]{8,64}$/;
+
+ipcMain.handle("recording:start", async (event, payload) => {
+  try {
+    if (!isValidSender(event) || !storageManager || !payload || typeof payload !== "object") return null;
+    const { id, kind = "sessions" } = payload;
+    if (!RECORDING_ID_REGEX.test(id)) {
+      writeLogEntry("warn", "ipc:recording:start", `Invalid recording id format: ${id}`);
+      return null;
+    }
+
+    const relativePath = await storageManager.startRecordingStream(id, kind);
+
+    if (kind === "baseline") {
+      await storageManager.execute("baselines:start", {
+        id,
+        startedAt: payload.startedAt || new Date().toISOString(),
+        videoPath: relativePath,
+      });
+    } else {
+      await storageManager.execute("recordings:start", {
+        ...payload,
+        id,
+        videoPath: relativePath,
+      });
+    }
+
+    return { id, videoPath: relativePath };
+  } catch (err) {
+    writeLogEntry("error", "ipc:recording:start", err.message);
+    return null;
+  }
+});
+
+ipcMain.handle("recording:chunk", async (event, payload) => {
+  try {
+    if (!isValidSender(event) || !storageManager || !payload || typeof payload !== "object") return false;
+    const { id, seq = 0, chunk } = payload;
+    if (!RECORDING_ID_REGEX.test(id) || !chunk) return false;
+
+    let buffer;
+    if (Buffer.isBuffer(chunk)) {
+      buffer = chunk;
+    } else if (chunk instanceof ArrayBuffer || ArrayBuffer.isView(chunk)) {
+      buffer = Buffer.from(chunk);
+    } else if (Array.isArray(chunk)) {
+      buffer = Buffer.from(chunk);
+    } else {
+      return false;
+    }
+
+    if (buffer.length > 25 * 1024 * 1024) {
+      writeLogEntry("warn", "ipc:recording:chunk", "Chunk exceeds maximum allowed size (25 MB)");
+      return false;
+    }
+
+    await storageManager.appendChunk(id, Number(seq) || 0, buffer);
+    return true;
+  } catch (err) {
+    writeLogEntry("warn", "ipc:recording:chunk", err.message);
+    return false;
+  }
+});
+
+ipcMain.handle("recording:append-transcript", async (event, payload) => {
+  try {
+    if (!isValidSender(event) || !storageManager || !payload) return false;
+    const { recordingId } = payload;
+    if (!RECORDING_ID_REGEX.test(recordingId)) return false;
+    return await storageManager.execute("recordings:append-transcript", payload);
+  } catch (err) {
+    writeLogEntry("warn", "ipc:recording:append-transcript", err.message);
+    return false;
+  }
+});
+
+ipcMain.handle("recording:append-vitals", async (event, payload) => {
+  try {
+    if (!isValidSender(event) || !storageManager || !payload) return false;
+    const { recordingId } = payload;
+    if (!RECORDING_ID_REGEX.test(recordingId)) return false;
+    return await storageManager.execute("recordings:append-vitals", payload);
+  } catch (err) {
+    writeLogEntry("warn", "ipc:recording:append-vitals", err.message);
+    return false;
+  }
+});
+
+ipcMain.handle("recording:finalize", async (event, payload) => {
+  try {
+    if (!isValidSender(event) || !storageManager || !payload || typeof payload !== "object") return null;
+    const { id, kind = "sessions", durationMs = 0 } = payload;
+    if (!RECORDING_ID_REGEX.test(id)) return null;
+
+    const fileResult = await storageManager.finalizeRecordingStream(id, kind, durationMs);
+
+    if (kind === "baseline") {
+      const res = await storageManager.execute("baselines:finalize", {
+        ...payload,
+        id,
+        videoPath: fileResult?.relativePath,
+      });
+      return { id, ...fileResult, ...res };
+    } else {
+      const durationSeconds = Math.max(0, Math.round(durationMs / 1000));
+      const res = await storageManager.execute("recordings:finalize", {
+        ...payload,
+        id,
+        durationSeconds: payload.durationSeconds ?? durationSeconds,
+        videoPath: fileResult?.relativePath,
+        fileSizeBytes: fileResult?.fileSizeBytes,
+        mimeType: "video/webm",
+      });
+      return { id, ...fileResult, ...res };
+    }
+  } catch (err) {
+    writeLogEntry("error", "ipc:recording:finalize", err.message);
+    return null;
+  }
+});
+
+ipcMain.handle("recording:abort", async (event, payload) => {
+  try {
+    if (!isValidSender(event) || !storageManager || !payload) return false;
+    const { id, kind = "sessions" } = payload;
+    if (!RECORDING_ID_REGEX.test(id)) return false;
+    await storageManager.abortRecordingStream(id, kind);
+    if (kind !== "baseline") {
+      await storageManager.execute("recordings:finalize", {
+        id,
+        status: "abandoned",
+        endReason: "user_quit",
+        durationSeconds: 0,
+      }).catch(() => {});
+    }
+    return true;
+  } catch (err) {
+    writeLogEntry("warn", "ipc:recording:abort", err.message);
+    return false;
+  }
+});
+
+ipcMain.handle("storage:get-streak-dates", async (event) => {
+  try {
+    if (!isValidSender(event) || !storageManager) return [];
+    return await storageManager.execute("recordings:get-streak-dates");
+  } catch (err) {
+    writeLogEntry("warn", "ipc:storage:get-streak-dates", err.message);
+    return [];
   }
 });
 

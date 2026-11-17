@@ -1,7 +1,16 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
+// Presage SmartSpectra preload bridge (contextIsolation & sandbox compliant)
+try {
+  require("@smartspectra/node-sdk/preload");
+} catch (err) {
+  console.error("[preload] Failed to load SmartSpectra preload bridge:", err);
+}
+
 contextBridge.exposeInMainWorld("electronAPI", {
   platform: process.platform,
+
+  getPresageConfig: () => ipcRenderer.invoke("presage:get-config"),
 
   onMenuAction: (callback) => {
     if (typeof callback !== "function") return () => {};
@@ -71,15 +80,27 @@ contextBridge.exposeInMainWorld("electronAPI", {
     deleteRecording: (id) => ipcRenderer.invoke("storage:delete-recording", id),
     addNote: (recordingId, note) => ipcRenderer.invoke("storage:add-note", { recordingId, note }),
     getBaseline: () => ipcRenderer.invoke("storage:get-baseline"),
+    getActiveBaseline: () => ipcRenderer.invoke("storage:get-active-baseline"),
     saveBaseline: (b) => ipcRenderer.invoke("storage:save-baseline", b),
     clearBaseline: () => ipcRenderer.invoke("storage:clear-baseline"),
     getSettings: () => ipcRenderer.invoke("storage:get-settings"),
     setSetting: (key, value) => ipcRenderer.invoke("storage:set-setting", { key, value }),
     clearAllData: () => ipcRenderer.invoke("storage:clear-all"),
     checkFreeSpace: () => ipcRenderer.invoke("storage:check-space"),
+    getStreakDates: () => ipcRenderer.invoke("storage:get-streak-dates"),
   },
 
-  // Audio Chunk Recorder bridge
+  // Unified MediaRecorder bridge (Sessions & Baselines)
+  recording: {
+    start: (payload) => ipcRenderer.invoke("recording:start", payload),
+    chunk: (payload) => ipcRenderer.invoke("recording:chunk", payload),
+    appendTranscript: (payload) => ipcRenderer.invoke("recording:append-transcript", payload),
+    appendVitals: (payload) => ipcRenderer.invoke("recording:append-vitals", payload),
+    finalize: (payload) => ipcRenderer.invoke("recording:finalize", payload),
+    abort: (payload) => ipcRenderer.invoke("recording:abort", payload),
+  },
+
+  // Audio Chunk Recorder bridge (legacy compatibility)
   audio: {
     startRecording: (id) => ipcRenderer.invoke("audio:start-recording", id),
     appendChunk: (id, chunk) => ipcRenderer.invoke("audio:append-chunk", { id, chunk }),

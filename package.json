@@ -8,8 +8,9 @@
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
-    "dev": "node scripts/brand-electron-dev.cjs && concurrently -k \"vite --host 127.0.0.1\" \"wait-on tcp:5173 && electron .\"",
+    "dev": "node scripts/dev-runner.cjs",
     "build": "tsc -b && vite build",
+    "dev:app": "npm run build && open node_modules/electron/dist/Electron.app --args $(pwd)",
     "dist": "npm run build && electron-builder",
     "lint": "oxlint src",
     "test": "node --test src/services/*.test.ts tests/*.test.ts",
@@ -43,11 +44,25 @@
       "extendInfo": {
         "NSCameraUsageDescription": "mocktwo uses your camera to measure optical blood volume pulse and facial composure signals during rehearsal simulations. Video is analyzed locally in real time and is never recorded, stored, or transmitted.",
         "NSMicrophoneUsageDescription": "mocktwo uses your microphone for real-time speech and tone analysis during rehearsal simulations. Audio is processed locally on your device."
-      }
+      },
+      "extraResources": [
+        { "from": "node_modules/@smartspectra/node-sdk-darwin-${arch}/", "to": "smartspectra" }
+      ]
     },
     "win": {
       "target": [
         "nsis"
+      ],
+      "extraResources": [
+        { "from": "node_modules/@smartspectra/node-sdk-win32-${arch}/", "to": "smartspectra" }
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "extraResources": [
+        { "from": "node_modules/@smartspectra/node-sdk-linux-${arch}/", "to": "smartspectra" }
       ]
     },
     "nsis": {
@@ -58,6 +73,7 @@
     }
   },
   "dependencies": {
+    "@smartspectra/node-sdk": "^3.5.0",
     "better-sqlite3": "^13.2.0",
     "dotenv": "^18.0.10",
     "lucide-react": "^1.72.0",
