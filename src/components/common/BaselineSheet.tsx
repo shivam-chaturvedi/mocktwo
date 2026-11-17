@@ -13,6 +13,7 @@ import {
   Activity,
   Wind,
   Zap,
+  UserX,
 } from "lucide-react";
 import type { UserBaseline } from "../../types";
 
@@ -43,7 +44,7 @@ export const BaselineSheetModal: React.FC = () => {
   const [step, setStep] = useState<BaselineStep>("intro");
   const [countdown, setCountdown] = useState<number>(3);
   const [secondsElapsed, setSecondsElapsed] = useState<number>(0);
-  const [isFaceInFrame, setIsFaceInFrame] = useState<boolean>(true);
+  const [, setIsFaceInFrame] = useState<boolean>(true);
   const [isPaused, setIsPaused] = useState<boolean>(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState<boolean>(false);
   const [announcement, setAnnouncement] = useState<string>("");
@@ -341,26 +342,33 @@ export const BaselineSheetModal: React.FC = () => {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [showCancelConfirm, handleCancelClick]);
 
-  // Milestone locked status
-  const isPulseLocked = capture.currentVitals.pulse !== null || secondsElapsed >= 12;
-  const isBreathingLocked = capture.currentVitals.breathing !== null || secondsElapsed >= 30;
-  const isEdaLocked = capture.currentVitals.eda !== null || secondsElapsed >= 35;
-  const isHrvLocked = capture.currentVitals.hrv !== null || secondsElapsed >= 60;
+  // Milestone locked status - based purely on genuine SDK signal, never fake secondsElapsed fallbacks
+  const isPulseLocked = capture.currentVitals.pulse !== null;
+  const isBreathingLocked = capture.currentVitals.breathing !== null;
+  const isEdaLocked = capture.currentVitals.eda !== null;
+  const isHrvLocked = capture.currentVitals.hrv !== null;
 
   // Calm copy rotating every ~10s
   const calmCopyIndex = Math.min(
     CALM_MESSAGES.length - 1,
-    Math.floor(secondsElapsed / 10)
+    Math.floor((60 - capture.secondsRemaining) / 10)
   );
   const currentCalmMessage = CALM_MESSAGES[calmCopyIndex];
 
   // Ambient Ring SVG calculations
   const radius = 175;
   const circumference = 2 * Math.PI * radius;
-  const progressRatio = Math.min(1, Math.max(0, secondsElapsed / 60));
+  // Progress animates smoothly only when measuring
+  const progressRatio = capture.state === "measuring"
+    ? Math.min(1, Math.max(0, (60 - capture.secondsRemaining) / 60))
+    : 0;
   const strokeOffset = circumference * (1 - progressRatio);
-  const remainingSeconds = capture.state === "measuring" ? capture.secondsRemaining : Math.max(0, Math.ceil(60 - secondsElapsed));
-  const remainingText = capture.state === "positioning" ? "Positioning…" : `0:${remainingSeconds.toString().padStart(2, "0")} left`;
+  const remainingSeconds = capture.state === "measuring" ? capture.secondsRemaining : 60;
+  const remainingText = capture.state === "positioning"
+    ? (capture.validationHint || "Position face in frame…")
+    : capture.isClockPaused
+    ? `Paused (0:${remainingSeconds.toString().padStart(2, "0")} left)`
+    : `0:${remainingSeconds.toString().padStart(2, "0")} left`;
 
   return (
     <div
@@ -916,38 +924,216 @@ export const BaselineSheetModal: React.FC = () => {
                 </div>
               </div>
 
-              {/* Readiness Checks Pill Row */}
+              {/* Genuine Guidance Pill */}
               <div
                 style={{
-                  display: "flex",
-                  gap: "10px",
+                  display: "inline-flex",
                   alignItems: "center",
-                  fontSize: "11.5px",
+                  gap: "6px",
+                  padding: "6px 14px",
+                  borderRadius: "var(--radius-full)",
+                  backgroundColor: "var(--bg-control)",
+                  border: "1px solid var(--separator)",
+                  fontSize: "12px",
                   color: "var(--text-secondary)",
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                  <Check size={12} style={{ color: isFaceInFrame ? "var(--accent-green)" : "var(--accent-orange)" }} />
-                  <span>{isFaceInFrame ? "Face detected" : "Looking for face"}</span>
-                </div>
-                <span>•</span>
-                <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                  <Check size={12} style={{ color: "var(--accent-green)" }} />
-                  <span>Good lighting</span>
-                </div>
-                <span>•</span>
-                <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                  <Check size={12} style={{ color: "var(--accent-green)" }} />
-                  <span>Holding still</span>
-                </div>
+                <span>Position your face within the guide • Calibration will start shortly</span>
               </div>
             </div>
           )}
 
           {/* =================================================================== */}
-          {/* STEP 4: THE 60 SECONDS (Smooth Ambient Ring, Signal Milestones)     */}
+          {/* STEP 4A: SDK ERROR OR MISSING API KEY                               */}
           {/* =================================================================== */}
-          {step === "capturing" && (
+          {step === "capturing" && capture.state === "error" && (
+            <div
+              style={{
+                maxWidth: "480px",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                textAlign: "center",
+                padding: "20px",
+              }}
+            >
+              <div
+                style={{
+                  width: "52px",
+                  height: "52px",
+                  borderRadius: "50%",
+                  backgroundColor: "rgba(255, 159, 10, 0.15)",
+                  border: "1px solid rgba(255, 159, 10, 0.3)",
+                  display: "grid",
+                  placeItems: "center",
+                  color: "var(--accent-orange)",
+                  marginBottom: "16px",
+                }}
+              >
+                <AlertCircle size={26} />
+              </div>
+
+              <h3 style={{ fontSize: "18px", fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>
+                SmartSpectra API Key Required
+              </h3>
+              <p
+                style={{
+                  fontSize: "13px",
+                  color: "var(--text-secondary)",
+                  lineHeight: 1.5,
+                  marginTop: "10px",
+                  marginBottom: "18px",
+                }}
+              >
+                {capture.errorMessage ||
+                  "To measure optical blood volume pulse, breathing and HRV from video locally on this device, add your SmartSpectra API key to your .env file and restart the application."}
+              </p>
+
+              <div
+                style={{
+                  width: "100%",
+                  padding: "10px 14px",
+                  borderRadius: "var(--radius-sm)",
+                  backgroundColor: "var(--bg-control)",
+                  border: "1px solid var(--separator)",
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "12px",
+                  color: "var(--text-secondary)",
+                  textAlign: "left",
+                  marginBottom: "20px",
+                  wordBreak: "break-all",
+                }}
+              >
+                SMARTSPECTRA_API_KEY=your_key_here
+              </div>
+
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button
+                  onClick={handleCancelClick}
+                  className="mac-btn focus-ring"
+                  style={{
+                    padding: "7px 18px",
+                    borderRadius: "var(--radius-sm)",
+                    backgroundColor: "var(--bg-control)",
+                    border: "1px solid var(--separator)",
+                    color: "var(--text-primary)",
+                    fontSize: "12px",
+                    fontWeight: 500,
+                    cursor: "pointer",
+                  }}
+                >
+                  Close
+                </button>
+                <button
+                  onClick={() => capture.startCapture()}
+                  className="mac-btn focus-ring"
+                  style={{
+                    padding: "7px 18px",
+                    borderRadius: "var(--radius-sm)",
+                    backgroundColor: "var(--accent-blue)",
+                    color: "#ffffff",
+                    fontSize: "12px",
+                    fontWeight: 600,
+                    border: "none",
+                    cursor: "pointer",
+                  }}
+                >
+                  Retry
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* =================================================================== */}
+          {/* STEP 4B: INVALID CALIBRATION ATTEMPT                                */}
+          {/* =================================================================== */}
+          {step === "capturing" && capture.state === "invalid" && (
+            <div
+              style={{
+                maxWidth: "480px",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                textAlign: "center",
+                padding: "20px",
+              }}
+            >
+              <div
+                style={{
+                  width: "52px",
+                  height: "52px",
+                  borderRadius: "50%",
+                  backgroundColor: "rgba(255, 69, 58, 0.15)",
+                  border: "1px solid rgba(255, 69, 58, 0.3)",
+                  display: "grid",
+                  placeItems: "center",
+                  color: "var(--accent-red)",
+                  marginBottom: "16px",
+                }}
+              >
+                <UserX size={26} />
+              </div>
+
+              <h3 style={{ fontSize: "18px", fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>
+                Calibration Incomplete
+              </h3>
+              <p
+                style={{
+                  fontSize: "13px",
+                  color: "var(--text-secondary)",
+                  lineHeight: 1.5,
+                  marginTop: "10px",
+                  marginBottom: "20px",
+                }}
+              >
+                {capture.invalidReason ||
+                  "Sufficient optical signal could not be captured. Ensure adequate lighting and remain seated facing the camera."}
+              </p>
+
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button
+                  onClick={handleCancelClick}
+                  className="mac-btn focus-ring"
+                  style={{
+                    padding: "7px 18px",
+                    borderRadius: "var(--radius-sm)",
+                    backgroundColor: "var(--bg-control)",
+                    border: "1px solid var(--separator)",
+                    color: "var(--text-primary)",
+                    fontSize: "12px",
+                    fontWeight: 500,
+                    cursor: "pointer",
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    capture.reset();
+                    capture.startCapture();
+                  }}
+                  className="mac-btn focus-ring"
+                  style={{
+                    padding: "7px 18px",
+                    borderRadius: "var(--radius-sm)",
+                    backgroundColor: "var(--accent-blue)",
+                    color: "#ffffff",
+                    fontSize: "12px",
+                    fontWeight: 600,
+                    border: "none",
+                    cursor: "pointer",
+                  }}
+                >
+                  Try Again
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* =================================================================== */}
+          {/* STEP 4C: THE 60 SECONDS (Smooth Ambient Ring, Signal Milestones)    */}
+          {/* =================================================================== */}
+          {step === "capturing" && capture.state !== "error" && capture.state !== "invalid" && (
             <div
               style={{
                 display: "flex",
@@ -988,21 +1174,21 @@ export const BaselineSheetModal: React.FC = () => {
               >
                 {/* Left Milestone Chips: Pulse & Breathing */}
                 <div style={{ display: "flex", flexDirection: "column", gap: "12px", width: "170px" }}>
-                  {/* Pulse Milestone Chip (~12s) */}
+                  {/* Pulse Milestone Chip */}
                   <div
                     style={{
                       padding: "10px 14px",
                       borderRadius: "var(--radius-md)",
                       backgroundColor: isPulseLocked ? "rgba(10, 132, 255, 0.12)" : "var(--bg-control)",
                       border: isPulseLocked ? "1px solid var(--accent-blue)" : "1px solid var(--separator)",
-                      opacity: isPulseLocked ? 1 : 0.45,
+                      opacity: isPulseLocked ? 1 : 0.65,
                       transition: "all 0.3s ease",
                     }}
                   >
                     <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                       <Activity size={13} style={{ color: isPulseLocked ? "var(--accent-blue)" : "var(--text-tertiary)" }} />
                       <span style={{ fontSize: "11px", fontWeight: 650, color: isPulseLocked ? "var(--accent-blue)" : "var(--text-secondary)" }}>
-                        {isPulseLocked ? "Pulse found" : "Detecting pulse…"}
+                        {isPulseLocked ? "Pulse found" : capture.state === "measuring" ? "Detecting pulse…" : "Awaiting face…"}
                       </span>
                     </div>
                     <div
@@ -1016,27 +1202,25 @@ export const BaselineSheetModal: React.FC = () => {
                     >
                       {capture.currentVitals.pulse !== null
                         ? `${capture.currentVitals.pulse} bpm`
-                        : isPulseLocked
-                        ? "Locking signal…"
                         : "—"}
                     </div>
                   </div>
 
-                  {/* Breathing Milestone Chip (~30s) */}
+                  {/* Breathing Milestone Chip */}
                   <div
                     style={{
                       padding: "10px 14px",
                       borderRadius: "var(--radius-md)",
                       backgroundColor: isBreathingLocked ? "rgba(50, 215, 75, 0.12)" : "var(--bg-control)",
                       border: isBreathingLocked ? "1px solid var(--accent-green)" : "1px solid var(--separator)",
-                      opacity: isBreathingLocked ? 1 : 0.45,
+                      opacity: isBreathingLocked ? 1 : 0.65,
                       transition: "all 0.3s ease",
                     }}
                   >
                     <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                       <Wind size={13} style={{ color: isBreathingLocked ? "var(--accent-green)" : "var(--text-tertiary)" }} />
                       <span style={{ fontSize: "11px", fontWeight: 650, color: isBreathingLocked ? "var(--accent-green)" : "var(--text-secondary)" }}>
-                        {isBreathingLocked ? "Breathing found" : "Detecting breath…"}
+                        {isBreathingLocked ? "Breathing found" : capture.state === "measuring" ? "Detecting breath…" : "Awaiting face…"}
                       </span>
                     </div>
                     <div
@@ -1050,8 +1234,6 @@ export const BaselineSheetModal: React.FC = () => {
                     >
                       {capture.currentVitals.breathing !== null
                         ? `${capture.currentVitals.breathing} br/m`
-                        : isBreathingLocked
-                        ? "Locking signal…"
                         : "—"}
                     </div>
                   </div>
@@ -1080,12 +1262,15 @@ export const BaselineSheetModal: React.FC = () => {
                       cy="180"
                       r={radius}
                       fill="none"
-                      stroke="var(--accent-blue)"
+                      stroke={capture.isClockPaused ? "var(--accent-orange)" : "var(--accent-blue)"}
                       strokeWidth="5"
-                      strokeDasharray={circumference}
-                      strokeDashoffset={strokeOffset}
+                      strokeDasharray={capture.state === "positioning" ? "12 8" : circumference}
+                      strokeDashoffset={capture.state === "positioning" ? 0 : strokeOffset}
                       strokeLinecap="round"
-                      style={{ transition: "stroke-dashoffset 0.1s linear" }}
+                      style={{
+                        transition: "stroke-dashoffset 0.2s linear, stroke 0.3s ease",
+                        opacity: capture.state === "positioning" ? 0.6 : 1,
+                      }}
                     />
                   </svg>
 
@@ -1112,20 +1297,20 @@ export const BaselineSheetModal: React.FC = () => {
                         height: "100%",
                         objectFit: "cover",
                         transform: "scaleX(-1)",
-                        opacity: isPaused ? 0.4 : 1,
+                        opacity: (isPaused || capture.isClockPaused) ? 0.4 : 1,
                         transition: "opacity 0.2s ease",
                       }}
                     />
 
-                    {/* Inline Quality Guard Notice if face lost */}
-                    {(isPaused || capture.isClockPaused || (capture.validationCode !== null && capture.validationCode !== 0)) && (
+                    {/* Inline Quality Guard / Guidance Notice */}
+                    {(capture.state === "positioning" && capture.validationCode !== 0) && (
                       <div
                         style={{
                           position: "absolute",
                           inset: 0,
                           display: "grid",
                           placeItems: "center",
-                          backgroundColor: "rgba(0, 0, 0, 0.55)",
+                          backgroundColor: "rgba(0, 0, 0, 0.5)",
                           padding: "16px",
                           textAlign: "center",
                           zIndex: 5,
@@ -1142,7 +1327,36 @@ export const BaselineSheetModal: React.FC = () => {
                             fontWeight: 600,
                           }}
                         >
-                          {capture.validationHint || "Keep your face in the frame"}
+                          {capture.validationHint || "Position your face in the camera to begin"}
+                        </div>
+                      </div>
+                    )}
+
+                    {(capture.state === "measuring" && (capture.isClockPaused || isPaused)) && (
+                      <div
+                        style={{
+                          position: "absolute",
+                          inset: 0,
+                          display: "grid",
+                          placeItems: "center",
+                          backgroundColor: "rgba(0, 0, 0, 0.6)",
+                          padding: "16px",
+                          textAlign: "center",
+                          zIndex: 5,
+                        }}
+                      >
+                        <div
+                          style={{
+                            padding: "6px 14px",
+                            borderRadius: "var(--radius-sm)",
+                            backgroundColor: "rgba(255, 159, 10, 0.3)",
+                            border: "1px solid var(--accent-orange)",
+                            color: "var(--accent-orange)",
+                            fontSize: "12px",
+                            fontWeight: 600,
+                          }}
+                        >
+                          {"Paused — " + (capture.validationHint || "Face lost. Return to frame to resume")}
                         </div>
                       </div>
                     )}
@@ -1155,14 +1369,14 @@ export const BaselineSheetModal: React.FC = () => {
                       bottom: "10px",
                       fontSize: "11px",
                       fontFamily: "var(--font-mono)",
-                      color: "var(--text-tertiary)",
+                      color: capture.isClockPaused ? "var(--accent-orange)" : "var(--text-tertiary)",
                       backgroundColor: "var(--bg-elevated)",
                       padding: "2px 8px",
                       borderRadius: "var(--radius-full)",
                       border: "1px solid var(--separator)",
                     }}
                   >
-                    {capture.state === "positioning" ? "Positioning…" : remainingText}
+                    {remainingText}
                   </div>
                 </div>
 
@@ -1175,14 +1389,14 @@ export const BaselineSheetModal: React.FC = () => {
                       borderRadius: "var(--radius-md)",
                       backgroundColor: isEdaLocked ? "rgba(255, 159, 10, 0.12)" : "var(--bg-control)",
                       border: isEdaLocked ? "1px solid var(--accent-orange)" : "1px solid var(--separator)",
-                      opacity: isEdaLocked ? 1 : 0.45,
+                      opacity: isEdaLocked ? 1 : 0.65,
                       transition: "all 0.3s ease",
                     }}
                   >
                     <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                       <Zap size={13} style={{ color: isEdaLocked ? "var(--accent-orange)" : "var(--text-tertiary)" }} />
                       <span style={{ fontSize: "11px", fontWeight: 650, color: isEdaLocked ? "var(--accent-orange)" : "var(--text-secondary)" }}>
-                        {isEdaLocked ? "Skin response found" : "Locking signal…"}
+                        {isEdaLocked ? "Skin response found" : capture.state === "measuring" ? "Analyzing arousal…" : "Awaiting face…"}
                       </span>
                     </div>
                     <div
@@ -1191,9 +1405,10 @@ export const BaselineSheetModal: React.FC = () => {
                         fontWeight: 700,
                         color: isEdaLocked ? "var(--text-primary)" : "var(--text-tertiary)",
                         marginTop: "2px",
+                        fontFamily: "var(--font-mono)",
                       }}
                     >
-                      {isEdaLocked ? "Active" : "—"}
+                      {capture.currentVitals.eda !== null ? `${capture.currentVitals.eda.toFixed(1)}` : "—"}
                     </div>
                   </div>
 
@@ -1204,14 +1419,14 @@ export const BaselineSheetModal: React.FC = () => {
                       borderRadius: "var(--radius-md)",
                       backgroundColor: isHrvLocked ? "rgba(10, 132, 255, 0.12)" : "var(--bg-control)",
                       border: isHrvLocked ? "1px solid var(--accent-blue)" : "1px solid var(--separator)",
-                      opacity: isHrvLocked ? 1 : 0.45,
+                      opacity: isHrvLocked ? 1 : 0.65,
                       transition: "all 0.3s ease",
                     }}
                   >
                     <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                       <Heart size={13} style={{ color: isHrvLocked ? "var(--accent-blue)" : "var(--text-tertiary)" }} />
                       <span style={{ fontSize: "11px", fontWeight: 650, color: isHrvLocked ? "var(--accent-blue)" : "var(--text-secondary)" }}>
-                        {isHrvLocked ? "HRV ready" : "Awaiting 60s window"}
+                        {isHrvLocked ? "HRV calculated" : capture.state === "measuring" ? "Awaiting 60s window…" : "Awaiting face…"}
                       </span>
                     </div>
                     <div
@@ -1225,8 +1440,6 @@ export const BaselineSheetModal: React.FC = () => {
                     >
                       {capture.currentVitals.hrv !== null
                         ? `${capture.currentVitals.hrv} ms`
-                        : isHrvLocked
-                        ? "Calculating…"
                         : "—"}
                     </div>
                   </div>

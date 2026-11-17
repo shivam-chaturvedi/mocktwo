@@ -709,36 +709,60 @@ export const RecordingsScreen: React.FC = () => {
                 Session Dialogue Transcript
               </div>
 
-              {activeRecording.transcript.map((line) => {
-                const isActive = playbackTime >= line.timestampSeconds && playbackTime < line.timestampSeconds + 8;
-                const isUser = line.speaker === "You";
+              {activeRecording.transcript && activeRecording.transcript.length > 0 ? (
+                activeRecording.transcript.map((line, idx) => {
+                  const lineTime =
+                    typeof line.timestampSeconds === "number"
+                      ? line.timestampSeconds
+                      : typeof (line as any).startMs === "number"
+                      ? Math.floor((line as any).startMs / 1000)
+                      : 0;
+                  const isActive = playbackTime >= lineTime && playbackTime < lineTime + 6;
+                  const isUser =
+                    line.speaker === "You" ||
+                    String(line.speaker).toLowerCase() === "user";
 
-                return (
-                  <div
-                    key={line.id}
-                    onClick={() => handleSeek(line.timestampSeconds)}
-                    style={{
-                      padding: "8px 12px",
-                      borderRadius: "var(--radius-sm)",
-                      backgroundColor: isActive ? "rgba(10, 132, 255, 0.12)" : "var(--bg-elevated)",
-                      border: isActive ? "1px solid var(--accent-blue)" : "1px solid var(--separator)",
-                      cursor: "default",
-                    }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "2px" }}>
-                      <span style={{ fontSize: "11.5px", fontWeight: 650, color: isUser ? "var(--accent-blue)" : "var(--accent-orange)" }}>
-                        {isUser ? "You" : personaName}
-                      </span>
-                      <span style={{ fontSize: "10.5px", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)" }}>
-                        {formatSeconds(line.timestampSeconds)}
-                      </span>
+                  return (
+                    <div
+                      key={line.id || `line-${idx}`}
+                      onClick={() => handleSeek(lineTime)}
+                      className="focus-ring"
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          handleSeek(lineTime);
+                        }
+                      }}
+                      style={{
+                        padding: "8px 12px",
+                        borderRadius: "var(--radius-sm)",
+                        backgroundColor: isActive ? "rgba(10, 132, 255, 0.12)" : "var(--bg-elevated)",
+                        border: isActive ? "1px solid var(--accent-blue)" : "1px solid var(--separator)",
+                        cursor: "pointer",
+                        transition: "all 0.15s ease",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "2px" }}>
+                        <span style={{ fontSize: "11.5px", fontWeight: 650, color: isUser ? "var(--accent-blue)" : "var(--accent-orange)" }}>
+                          {isUser ? "You" : personaName}
+                        </span>
+                        <span style={{ fontSize: "10.5px", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)" }}>
+                          {formatSeconds(lineTime)}
+                        </span>
+                      </div>
+                      <p style={{ fontSize: "12.5px", color: "var(--text-primary)", lineHeight: 1.45, margin: 0 }}>
+                        {line.text}
+                      </p>
                     </div>
-                    <p style={{ fontSize: "12.5px", color: "var(--text-primary)", lineHeight: 1.45, margin: 0 }}>
-                      {line.text}
-                    </p>
-                  </div>
-                );
-              })}
+                  );
+                })
+              ) : (
+                <div style={{ padding: "20px 0", textAlign: "center", color: "var(--text-tertiary)", fontSize: "12.5px" }}>
+                  No transcript segments recorded for this session.
+                </div>
+              )}
 
               {/* Add Note Form */}
               <form onSubmit={handleAddNote} style={{ marginTop: "12px", display: "flex", gap: "8px" }}>
