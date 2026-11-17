@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useApp } from "../../context";
+import { useBaselineCapture } from "../../hooks/useBaselineCapture";
 import {
   Sun,
   Smile,
@@ -44,23 +45,45 @@ export const BaselineSheetModal: React.FC = () => {
   const [secondsElapsed, setSecondsElapsed] = useState<number>(0);
   const [isFaceInFrame, setIsFaceInFrame] = useState<boolean>(true);
   const [isPaused, setIsPaused] = useState<boolean>(false);
-  const [totalPausedSeconds, setTotalPausedSeconds] = useState<number>(0);
-  const [restartMessage, setRestartMessage] = useState<string | null>(null);
   const [showCancelConfirm, setShowCancelConfirm] = useState<boolean>(false);
   const [announcement, setAnnouncement] = useState<string>("");
 
-  // Result metrics
+  // Active camera stream for preview and SDK session
+  const [activeStream, setActiveStream] = useState<MediaStream | null>(null);
+
+  // Result metrics - Real values or null, zero synthetic fallbacks
   const [resultMetrics, setResultMetrics] = useState<{
-    pulse: number;
-    breathing: number;
-    hrv: number;
+    pulse: number | null;
+    breathing: number | null;
+    hrv: number | null;
     quality: "Good" | "Fair" | "Poor";
+    qualityScore: number;
   }>({
-    pulse: 68,
-    breathing: 14,
-    hrv: 54,
-    quality: "Good",
+    pulse: null,
+    breathing: null,
+    hrv: null,
+    quality: "Poor",
+    qualityScore: 0,
   });
+
+  // Presage SmartSpectra 60s baseline capture hook
+  const capture = useBaselineCapture({
+    stream: activeStream,
+    makeActive: true,
+    cameraLabel: settings.selectedCamera,
+    onComplete: (summary) => {
+      setResultMetrics({
+        pulse: summary.pulseMean,
+        breathing: summary.breathingMean,
+        hrv: summary.hrvRmssd,
+        quality: summary.qualityScore >= 80 ? "Good" : summary.qualityScore >= 60 ? "Fair" : "Poor",
+        qualityScore: summary.qualityScore,
+      });
+      setStep("result");
+    },
+  });
+
+  const restartMessage = capture.isClockPaused ? "Face lost or obscured — measurement paused" : null;
 
   // Media & timer refs
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -82,6 +105,7 @@ export const BaselineSheetModal: React.FC = () => {
       });
       mediaStreamRef.current = null;
     }
+    setActiveStream(null);
     if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
@@ -119,7 +143,12 @@ export const BaselineSheetModal: React.FC = () => {
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 640, height: 480, facingMode: "user" },
+        video: {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          frameRate: { ideal: 30 },
+          facingMode: "user",
+        },
         audio: false,
       });
 
@@ -129,6 +158,7 @@ export const BaselineSheetModal: React.FC = () => {
       }
 
       mediaStreamRef.current = stream;
+      setActiveStream(stream);
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         videoRef.current.play().catch(() => {});
@@ -165,7 +195,6 @@ export const BaselineSheetModal: React.FC = () => {
           if (c <= 1) {
             setStep("capturing");
             setSecondsElapsed(0);
-            setTotalPausedSeconds(0);
             captureStartTimeRef.current = Date.now();
             return 0;
           }
@@ -178,56 +207,47 @@ export const BaselineSheetModal: React.FC = () => {
     }
   }, [step, countdown]);
 
-  // Step 4: Real Elapsed Time Progress Loop
+  // Start SmartSpectra session when entering capturing state
   useEffect(() => {
-    if (step !== "capturing") return;
+    if (step === "capturing") {
+      capture.startCapture();
+    }
+  }, [step]);
 
-    let localPausedAccumulator = totalPausedSeconds;
+  // Sync elapsed seconds and announcements from capture hook
+  useEffect(() => {
+    if (step === "capturing") {
+      const elapsed = 60 - capture.secondsRemaining;
+      setSecondsElapsed(elapsed);
 
-    const tick = () => {
-      if (isPaused) {
-        captureRafRef.current = requestAnimationFrame(tick);
-        return;
+      if (capture.state === "positioning") {
+        setAnnouncement(capture.validationHint || "Position your face in the frame…");
+      } else if (elapsed === 12) {
+        setAnnouncement("Calibrating optical pulse signal…");
+      } else if (elapsed === 30) {
+        setAnnouncement("Calibrating respiratory waveform…");
+      } else if (elapsed === 50) {
+        setAnnouncement("Assessing heart rate variability…");
       }
+    }
+  }, [step, capture.secondsRemaining, capture.state, capture.validationHint]);
 
-      const now = Date.now();
-      const rawElapsed = (now - captureStartTimeRef.current) / 1000 - localPausedAccumulator;
-      const currentSeconds = Math.max(0, Math.min(60, rawElapsed));
-      setSecondsElapsed(currentSeconds);
-
-      // Milestone announcements
-      if (Math.floor(currentSeconds) === 12 && currentSeconds - 12 < 0.1) {
-        setAnnouncement("Pulse found: 68 bpm");
-      } else if (Math.floor(currentSeconds) === 30 && currentSeconds - 30 < 0.1) {
-        setAnnouncement("Breathing found: 14 breaths per minute");
-      } else if (Math.floor(currentSeconds) === 35 && currentSeconds - 35 < 0.1) {
-        setAnnouncement("Skin response found");
-      } else if (Math.floor(currentSeconds) === 60) {
-        setAnnouncement("HRV ready");
-      }
-
-      if (currentSeconds >= 60) {
-        // Complete!
+  // Handle capture completion and error transitions
+  useEffect(() => {
+    if (step === "capturing") {
+      if (capture.state === "saved" && capture.summary) {
         stopCamera();
         setResultMetrics({
-          pulse: 68,
-          breathing: 14,
-          hrv: 54,
-          quality: "Good",
+          pulse: capture.summary.pulseMean,
+          breathing: capture.summary.breathingMean,
+          hrv: capture.summary.hrvRmssd,
+          quality: capture.summary.qualityScore >= 80 ? "Good" : capture.summary.qualityScore >= 60 ? "Fair" : "Poor",
+          qualityScore: capture.summary.qualityScore,
         });
         setStep("result");
-        return;
       }
-
-      captureRafRef.current = requestAnimationFrame(tick);
-    };
-
-    captureRafRef.current = requestAnimationFrame(tick);
-
-    return () => {
-      if (captureRafRef.current) cancelAnimationFrame(captureRafRef.current);
-    };
-  }, [step, isPaused, totalPausedSeconds, stopCamera]);
+    }
+  }, [step, capture.state, capture.summary, stopCamera]);
 
   // Quality Guard: track paused duration when face is lost
   const handleFaceInFrameChange = useCallback((inFrame: boolean) => {
@@ -236,24 +256,8 @@ export const BaselineSheetModal: React.FC = () => {
       setIsPaused(true);
       pausedAtRef.current = Date.now();
     } else {
-      if (pausedAtRef.current) {
-        const pausedDelta = (Date.now() - pausedAtRef.current) / 1000;
-        pausedAtRef.current = null;
-        setIsPaused(false);
-        setTotalPausedSeconds((prev) => {
-          const next = prev + pausedDelta;
-          if (next > 10) {
-            // Restart capture if lost > 10 seconds total
-            setRestartMessage("Measurement restarted to ensure accurate clinical baseline.");
-            setSecondsElapsed(0);
-            captureStartTimeRef.current = Date.now();
-            return 0;
-          }
-          return next;
-        });
-      } else {
-        setIsPaused(false);
-      }
+      pausedAtRef.current = null;
+      setIsPaused(false);
     }
   }, []);
 
@@ -264,23 +268,11 @@ export const BaselineSheetModal: React.FC = () => {
         handleFaceInFrameChange(custom.detail.inFrame);
       }
     };
-    const handleFastForward = () => {
-      stopCamera();
-      setResultMetrics({
-        pulse: 68,
-        breathing: 14,
-        hrv: 54,
-        quality: "Good",
-      });
-      setStep("result");
-    };
     window.addEventListener("mocktwo-face-status", handleFaceEvent);
-    window.addEventListener("mocktwo-complete-baseline", handleFastForward);
     return () => {
       window.removeEventListener("mocktwo-face-status", handleFaceEvent);
-      window.removeEventListener("mocktwo-complete-baseline", handleFastForward);
     };
-  }, [handleFaceInFrameChange, stopCamera]);
+  }, [handleFaceInFrameChange]);
 
   // Open macOS system settings camera privacy pane
   const handleOpenSystemSettings = () => {
@@ -295,43 +287,39 @@ export const BaselineSheetModal: React.FC = () => {
     if (step === "capturing" && secondsElapsed >= 10) {
       setShowCancelConfirm(true);
     } else {
+      capture.reset();
       stopCamera();
       closeBaselineSheet();
     }
-  }, [step, secondsElapsed, stopCamera, closeBaselineSheet]);
+  }, [step, secondsElapsed, stopCamera, closeBaselineSheet, capture]);
 
   const handleConfirmCancel = () => {
+    capture.reset();
     stopCamera();
     setShowCancelConfirm(false);
     closeBaselineSheet();
   };
 
-  // Save baseline to storage via BiometricsService
+  // Save baseline to storage via BiometricsService (only if quality is acceptable and has pulse)
   const handleSave = async () => {
+    if (resultMetrics.quality === "Poor") {
+      closeBaselineSheet();
+      return;
+    }
+
     const newBaseline: UserBaseline = {
-      restingPulse: resultMetrics.pulse,
-      restingBreathingRate: resultMetrics.breathing,
-      restingHrvRmssd: resultMetrics.hrv,
-      restingBaevsky: 82,
-      restingEdaArousal: 0.22,
-      restingExpressions: {
-        neutral: 0.88,
-        happy: 0.08,
-        surprise: 0.02,
-        contempt: 0.0,
-        fear: 0.01,
-        sad: 0.01,
-        disgust: 0.0,
-        angry: 0.0,
-      },
+      restingPulse: resultMetrics.pulse ?? null,
+      restingBreathingRate: resultMetrics.breathing ?? null,
+      restingHrvRmssd: resultMetrics.hrv ?? null,
       measuredAt: new Date().toISOString(),
       isCalibrated: true,
-      qualityScore: 94,
+      isActive: true,
+      status: "valid",
+      qualityScore: resultMetrics.qualityScore,
       qualityRating: resultMetrics.quality,
-      sdkVersion: "smartspectra-3.2.0-local",
       durationSeconds: 60,
-      restingHR: resultMetrics.pulse,
-      restingHRV: resultMetrics.hrv,
+      restingHR: resultMetrics.pulse ?? null,
+      restingHRV: resultMetrics.hrv ?? null,
     };
 
     await saveBaselineData(newBaseline);
@@ -356,10 +344,10 @@ export const BaselineSheetModal: React.FC = () => {
   }, [showCancelConfirm, handleCancelClick]);
 
   // Milestone locked status
-  const isPulseLocked = secondsElapsed >= 12;
-  const isBreathingLocked = secondsElapsed >= 30;
-  const isEdaLocked = secondsElapsed >= 35;
-  const isHrvLocked = secondsElapsed >= 60;
+  const isPulseLocked = capture.currentVitals.pulse !== null || secondsElapsed >= 12;
+  const isBreathingLocked = capture.currentVitals.breathing !== null || secondsElapsed >= 30;
+  const isEdaLocked = capture.currentVitals.eda !== null || secondsElapsed >= 35;
+  const isHrvLocked = capture.currentVitals.hrv !== null || secondsElapsed >= 60;
 
   // Calm copy rotating every ~10s
   const calmCopyIndex = Math.min(
@@ -373,8 +361,8 @@ export const BaselineSheetModal: React.FC = () => {
   const circumference = 2 * Math.PI * radius;
   const progressRatio = Math.min(1, Math.max(0, secondsElapsed / 60));
   const strokeOffset = circumference * (1 - progressRatio);
-  const remainingSeconds = Math.max(0, Math.ceil(60 - secondsElapsed));
-  const remainingText = `0:${remainingSeconds.toString().padStart(2, "0")} left`;
+  const remainingSeconds = capture.state === "measuring" ? capture.secondsRemaining : Math.max(0, Math.ceil(60 - secondsElapsed));
+  const remainingText = capture.state === "positioning" ? "Positioning…" : `0:${remainingSeconds.toString().padStart(2, "0")} left`;
 
   return (
     <div
@@ -1028,7 +1016,11 @@ export const BaselineSheetModal: React.FC = () => {
                         fontFamily: "var(--font-mono)",
                       }}
                     >
-                      {isPulseLocked ? "68 bpm" : "—"}
+                      {capture.currentVitals.pulse !== null
+                        ? `${capture.currentVitals.pulse} bpm`
+                        : isPulseLocked
+                        ? "Locking signal…"
+                        : "—"}
                     </div>
                   </div>
 
@@ -1058,7 +1050,11 @@ export const BaselineSheetModal: React.FC = () => {
                         fontFamily: "var(--font-mono)",
                       }}
                     >
-                      {isBreathingLocked ? "14 br/m" : "—"}
+                      {capture.currentVitals.breathing !== null
+                        ? `${capture.currentVitals.breathing} br/m`
+                        : isBreathingLocked
+                        ? "Locking signal…"
+                        : "—"}
                     </div>
                   </div>
                 </div>
@@ -1124,16 +1120,17 @@ export const BaselineSheetModal: React.FC = () => {
                     />
 
                     {/* Inline Quality Guard Notice if face lost */}
-                    {isPaused && (
+                    {(isPaused || capture.isClockPaused || (capture.validationCode !== null && capture.validationCode !== 0)) && (
                       <div
                         style={{
                           position: "absolute",
                           inset: 0,
                           display: "grid",
                           placeItems: "center",
-                          backgroundColor: "rgba(0, 0, 0, 0.5)",
+                          backgroundColor: "rgba(0, 0, 0, 0.55)",
                           padding: "16px",
                           textAlign: "center",
+                          zIndex: 5,
                         }}
                       >
                         <div
@@ -1147,7 +1144,7 @@ export const BaselineSheetModal: React.FC = () => {
                             fontWeight: 600,
                           }}
                         >
-                          Keep your face in the frame
+                          {capture.validationHint || "Keep your face in the frame"}
                         </div>
                       </div>
                     )}
@@ -1167,7 +1164,7 @@ export const BaselineSheetModal: React.FC = () => {
                       border: "1px solid var(--separator)",
                     }}
                   >
-                    {remainingText}
+                    {capture.state === "positioning" ? "Positioning…" : remainingText}
                   </div>
                 </div>
 
@@ -1228,7 +1225,11 @@ export const BaselineSheetModal: React.FC = () => {
                         fontFamily: "var(--font-mono)",
                       }}
                     >
-                      {isHrvLocked ? "54 ms" : "—"}
+                      {capture.currentVitals.hrv !== null
+                        ? `${capture.currentVitals.hrv} ms`
+                        : isHrvLocked
+                        ? "Calculating…"
+                        : "—"}
                     </div>
                   </div>
                 </div>
@@ -1395,14 +1396,20 @@ export const BaselineSheetModal: React.FC = () => {
                   </div>
                   <div
                     style={{
-                      fontSize: "22px",
+                      fontSize: resultMetrics.pulse !== null ? "22px" : "15px",
                       fontWeight: 700,
                       color: "var(--text-primary)",
                       marginTop: "4px",
                       fontFamily: "var(--font-mono)",
                     }}
                   >
-                    {resultMetrics.pulse} <span style={{ fontSize: "12px", fontWeight: 500, color: "var(--text-secondary)" }}>bpm</span>
+                    {resultMetrics.pulse !== null ? (
+                      <>
+                        {resultMetrics.pulse} <span style={{ fontSize: "12px", fontWeight: 500, color: "var(--text-secondary)" }}>bpm</span>
+                      </>
+                    ) : (
+                      <span style={{ fontSize: "13px", fontWeight: 500, color: "var(--text-tertiary)" }}>No signal</span>
+                    )}
                   </div>
                 </div>
 
@@ -1420,14 +1427,20 @@ export const BaselineSheetModal: React.FC = () => {
                   </div>
                   <div
                     style={{
-                      fontSize: "22px",
+                      fontSize: resultMetrics.breathing !== null ? "22px" : "15px",
                       fontWeight: 700,
                       color: "var(--text-primary)",
                       marginTop: "4px",
                       fontFamily: "var(--font-mono)",
                     }}
                   >
-                    {resultMetrics.breathing} <span style={{ fontSize: "12px", fontWeight: 500, color: "var(--text-secondary)" }}>br/m</span>
+                    {resultMetrics.breathing !== null ? (
+                      <>
+                        {resultMetrics.breathing} <span style={{ fontSize: "12px", fontWeight: 500, color: "var(--text-secondary)" }}>br/m</span>
+                      </>
+                    ) : (
+                      <span style={{ fontSize: "13px", fontWeight: 500, color: "var(--text-tertiary)" }}>No signal</span>
+                    )}
                   </div>
                 </div>
 
@@ -1445,19 +1458,19 @@ export const BaselineSheetModal: React.FC = () => {
                   </div>
                   <div
                     style={{
-                      fontSize: "22px",
+                      fontSize: resultMetrics.hrv !== null ? "22px" : "15px",
                       fontWeight: 700,
                       color: "var(--text-primary)",
                       marginTop: "4px",
                       fontFamily: "var(--font-mono)",
                     }}
                   >
-                    {resultMetrics.hrv ? (
+                    {resultMetrics.hrv !== null ? (
                       <>
                         {resultMetrics.hrv} <span style={{ fontSize: "12px", fontWeight: 500, color: "var(--text-secondary)" }}>ms</span>
                       </>
                     ) : (
-                      "Not measured"
+                      <span style={{ fontSize: "13px", fontWeight: 500, color: "var(--text-tertiary)" }}>Not measured</span>
                     )}
                   </div>
                 </div>
@@ -1484,6 +1497,19 @@ export const BaselineSheetModal: React.FC = () => {
                   {resultMetrics.quality}
                 </span>
               </div>
+
+              {/* Mandatory Wellness Disclaimer */}
+              <p
+                style={{
+                  fontSize: "11px",
+                  color: "var(--text-tertiary)",
+                  lineHeight: 1.4,
+                  maxWidth: "420px",
+                  margin: "0 0 20px 0",
+                }}
+              >
+                SmartSpectra metrics are for general wellness and conversational composure training only, and not for medical diagnosis or treatment.
+              </p>
 
               {/* Actions */}
               <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
