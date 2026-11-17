@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useApp } from "../../context";
 import { Button } from "./Button";
 import { CategoryIcon } from "./CategoryIcon";
@@ -6,17 +6,22 @@ import { Badge } from "./Badge";
 import { AudioVisualizer } from "./AudioVisualizer";
 import { PersonaPicker } from "./PersonaPicker";
 import { LazyAvatarImage } from "./LazyAvatarImage";
-import { formatContextSetting, renderScenarioText, type Persona, VALIDATION_HINTS } from "../../types";
+import { useMediaDevices } from "../../hooks/useMediaDevices";
+import { formatContextSetting, renderScenarioText, type Persona } from "../../types";
 import { WELLNESS_DISCLAIMER } from "../../services/biometrics";
 import { serviceRegistry } from "../../services/api";
 import {
   Mic,
+  MicOff,
   Video,
+  VideoOff,
   X,
   Target,
   Play,
   Activity,
   ShieldCheck,
+  Camera,
+  AlertCircle,
 } from "lucide-react";
 
 export const BriefingSheet: React.FC = () => {
@@ -30,23 +35,65 @@ export const BriefingSheet: React.FC = () => {
     personas,
     settings,
     updateSettings,
-    runMiniBaseline,
-    showToast,
+    baseline,
+    openBaselineSheet,
     openStudio,
   } = useApp();
 
   const isSessionServiceAvailable = serviceRegistry.session.isAvailable();
 
-  const [micMuted, setMicMuted] = useState(false);
-  const [cameraOff, setCameraOff] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [isStarting, setIsStarting] = useState(false);
-  const [permissionError, setPermissionError] = useState<"camera" | "microphone" | null>(null);
   const [isCrossfading, setIsCrossfading] = useState(false);
-  const [isMeasuringBaseline, setIsMeasuringBaseline] = useState(false);
-  const [miniBaselineProgress, setMiniBaselineProgress] = useState<number | null>(null);
-  const [baselinePulseResult, setBaselinePulseResult] = useState<number | null>(null);
+  const [showBaselineGateModal, setShowBaselineGateModal] = useState(false);
   const crossfadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  const handleCameraChange = useCallback(
+    (deviceId: string) => {
+      updateSettings({ selectedCamera: deviceId });
+    },
+    [updateSettings]
+  );
+
+  const handleMicrophoneChange = useCallback(
+    (deviceId: string) => {
+      updateSettings({ selectedMicrophone: deviceId });
+    },
+    [updateSettings]
+  );
+
+  // Real hardware device enumeration & stream management
+  const {
+    cameras,
+    microphones,
+    stream,
+    audioLevel,
+    cameraOff,
+    micMuted,
+    permissionError,
+    isLoading: isStreamLoading,
+    toggleMute,
+    toggleVideo,
+    stopAllTracks,
+    setPermissionError,
+  } = useMediaDevices({
+    enabled: isBriefingOpen,
+    selectedCameraId: settings.selectedCamera,
+    selectedMicrophoneId: settings.selectedMicrophone,
+    onCameraChange: handleCameraChange,
+    onMicrophoneChange: handleMicrophoneChange,
+  });
+
+  // Attach live stream to mirror video element and ensure autoplay
+  useEffect(() => {
+    if (videoRef.current && stream) {
+      if (videoRef.current.srcObject !== stream) {
+        videoRef.current.srcObject = stream;
+      }
+      videoRef.current.play().catch(() => {});
+    }
+  }, [stream]);
 
   useEffect(() => {
     return () => {
@@ -68,24 +115,7 @@ export const BriefingSheet: React.FC = () => {
     return defaultP || personas[0];
   }, [activeSessionPersona, personas, selectedScenario]);
 
-  const effectivePersona: Persona = useMemo(() => {
-    if (currentPersona) return currentPersona;
-    return {
-      id: "persona-default",
-      name: selectedScenario?.personaName || selectedScenario?.guestName || "Practice Counterpart",
-      monogram: (selectedScenario?.personaName || "PC").slice(0, 2).toUpperCase(),
-      title: "Counterpart",
-      contextSetting: selectedScenario?.contextSetting || "Meeting Room",
-      seniority: selectedScenario?.seniority || "Standard",
-      language: "English (US)",
-      temperamentTraits: ["Direct"],
-      voice: "Default",
-      backstory: "Practice counterpart for conversational simulation.",
-      communicationNotes: "Focus on composure and clear responses.",
-      scenariosCount: 1,
-      source: "Library",
-    };
-  }, [currentPersona, selectedScenario]);
+  const effectivePersona: Persona | undefined = currentPersona;
 
   const handleSelectPersona = (newPersona: Persona) => {
     if (settings.reducedMotion) {
@@ -104,16 +134,17 @@ export const BriefingSheet: React.FC = () => {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape" && isBriefingOpen && countdown === null) {
+        stopAllTracks();
         closeBriefing();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isBriefingOpen, countdown, closeBriefing]);
+  }, [isBriefingOpen, countdown, closeBriefing, stopAllTracks]);
 
   // Countdown timer before simulation begins
   useEffect(() => {
-    if (countdown === null) return;
+    if (countdown === null || !effectivePersona) return;
     if (countdown > 1) {
       const timer = setTimeout(() => {
         setCountdown((prev) => (prev !== null ? prev - 1 : null));
@@ -123,32 +154,29 @@ export const BriefingSheet: React.FC = () => {
       const timer = setTimeout(() => {
         setCountdown(null);
         setIsStarting(false);
+        stopAllTracks();
         beginSimulation(effectivePersona);
       }, 650);
       return () => clearTimeout(timer);
     }
-  }, [countdown, beginSimulation, effectivePersona]);
+  }, [countdown, beginSimulation, effectivePersona, stopAllTracks]);
 
   if (!isBriefingOpen || !selectedScenario) return null;
 
-  const cameraOptions = [
-    "FaceTime HD Camera (Built-in)",
-    "Studio Display Camera",
-    "External Webcam",
-  ];
-
-  const micOptions = [
-    "MacBook Studio Microphone (Built-in)",
-    "AirPods Pro",
-    "External USB Microphone",
-  ];
-
   const handleStartSession = async () => {
     if (countdown !== null || isStarting) return;
+
+    // Gate 1: Enforce Calm Baseline Calibration before first session
+    if (!baseline) {
+      setShowBaselineGateModal(true);
+      return;
+    }
+
     setIsStarting(true);
     setPermissionError(null);
 
     try {
+      // Gate 2: Enforce OS Media Access
       if (window.electronAPI?.requestMediaAccess) {
         const camOk = await window.electronAPI.requestMediaAccess("camera");
         if (!camOk) {
@@ -170,9 +198,13 @@ export const BriefingSheet: React.FC = () => {
     }
   };
 
-  const setting = formatContextSetting(effectivePersona.contextSetting || effectivePersona.roomNumber || "");
-  const seniority = effectivePersona.seniority || effectivePersona.loyaltyTier || "";
-  const tone = effectivePersona.temperamentTraits ? effectivePersona.temperamentTraits.join(" & ") : (effectivePersona.title || "");
+  const setting = effectivePersona
+    ? formatContextSetting(effectivePersona.contextSetting || effectivePersona.roomNumber || "")
+    : "";
+  const seniority = effectivePersona ? effectivePersona.seniority || effectivePersona.loyaltyTier || "" : "";
+  const tone = effectivePersona?.temperamentTraits?.length
+    ? effectivePersona.temperamentTraits.join(" · ")
+    : effectivePersona?.title || "";
 
   return (
     <div
@@ -188,7 +220,10 @@ export const BriefingSheet: React.FC = () => {
         padding: "24px",
       }}
       onClick={() => {
-        if (countdown === null) closeBriefing();
+        if (countdown === null) {
+          stopAllTracks();
+          closeBriefing();
+        }
       }}
     >
       <div
@@ -210,7 +245,7 @@ export const BriefingSheet: React.FC = () => {
         aria-modal="true"
       >
         {/* Countdown Overlay */}
-        {countdown !== null && (
+        {countdown !== null && effectivePersona && (
           <div
             style={{
               position: "absolute",
@@ -266,7 +301,10 @@ export const BriefingSheet: React.FC = () => {
           </div>
 
           <button
-            onClick={closeBriefing}
+            onClick={() => {
+              stopAllTracks();
+              closeBriefing();
+            }}
             aria-label="Close"
             className="hover-subtle focus-ring"
             style={{
@@ -302,44 +340,52 @@ export const BriefingSheet: React.FC = () => {
               gap: "20px",
             }}
           >
-            {/* Header Block shows: {setting} · {seniority} · {tone} */}
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "16px",
-                opacity: isCrossfading ? 0.2 : 1,
-                transform: isCrossfading ? "scale(0.98)" : "scale(1)",
-                transition: settings.reducedMotion ? "none" : "opacity 150ms ease, transform 150ms ease",
-              }}
-            >
-              <LazyAvatarImage
-                src={effectivePersona.avatarUrl}
-                name={effectivePersona.name}
-                size={56}
-              />
-              <div>
-                <h3
-                  style={{
-                    fontSize: "17px",
-                    fontWeight: 650,
-                    color: "var(--text-primary)",
-                    margin: 0,
-                    letterSpacing: "-0.015em",
-                  }}
-                >
-                  {effectivePersona.name}
-                </h3>
-                <div style={{ fontSize: "12.5px", color: "var(--text-secondary)", marginTop: "2px" }}>
-                  {setting} · {seniority}
-                </div>
-                <div style={{ fontSize: "11.5px", color: "var(--accent-orange)", marginTop: "2px", fontWeight: 500 }}>
-                  Tone: {tone}
+            {/* Header Block shows real persona info */}
+            {effectivePersona ? (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "16px",
+                  opacity: isCrossfading ? 0.2 : 1,
+                  transform: isCrossfading ? "scale(0.98)" : "scale(1)",
+                  transition: settings.reducedMotion ? "none" : "opacity 150ms ease, transform 150ms ease",
+                }}
+              >
+                <LazyAvatarImage
+                  src={effectivePersona.avatarUrl}
+                  name={effectivePersona.name}
+                  size={56}
+                />
+                <div>
+                  <h3
+                    style={{
+                      fontSize: "17px",
+                      fontWeight: 650,
+                      color: "var(--text-primary)",
+                      margin: 0,
+                      letterSpacing: "-0.015em",
+                    }}
+                  >
+                    {effectivePersona.name}
+                  </h3>
+                  <div style={{ fontSize: "12.5px", color: "var(--text-secondary)", marginTop: "2px" }}>
+                    {setting} · {seniority}
+                  </div>
+                  {tone && (
+                    <div style={{ fontSize: "11.5px", color: "var(--accent-orange)", marginTop: "2px", fontWeight: 500 }}>
+                      Tone: {tone}
+                    </div>
+                  )}
                 </div>
               </div>
-            </div>
+            ) : (
+              <div style={{ fontSize: "13px", color: "var(--text-tertiary)" }}>
+                No persona assigned to this scenario.
+              </div>
+            )}
 
-            {/* PERSONA Section */}
+            {/* PERSONA Picker Section */}
             <div>
               <h4
                 style={{
@@ -464,9 +510,10 @@ export const BriefingSheet: React.FC = () => {
                     fontWeight: 600,
                   }}
                 >
-                  Hardware &amp; Sensor Calibration
+                  Hardware & Camera Check
                 </h4>
-                {/* Live validation hint pill */}
+
+                {/* Real Hardware Status Indicator */}
                 <div
                   style={{
                     display: "inline-flex",
@@ -474,24 +521,31 @@ export const BriefingSheet: React.FC = () => {
                     gap: "5px",
                     padding: "2px 8px",
                     borderRadius: "var(--radius-full)",
-                    backgroundColor: "rgba(48, 209, 88, 0.12)",
-                    border: "1px solid rgba(48, 209, 88, 0.25)",
+                    backgroundColor: stream && !cameraOff ? "rgba(48, 209, 88, 0.12)" : "rgba(255, 255, 255, 0.06)",
+                    border: stream && !cameraOff ? "1px solid rgba(48, 209, 88, 0.25)" : "1px solid var(--separator)",
                     fontSize: "10.5px",
-                    color: "var(--accent-green)",
+                    color: stream && !cameraOff ? "var(--accent-green)" : "var(--text-tertiary)",
                     fontWeight: 500,
                   }}
                 >
-                  <span style={{ width: "5px", height: "5px", borderRadius: "50%", backgroundColor: "var(--accent-green)" }} />
-                  <span>{VALIDATION_HINTS.OK}</span>
+                  <span
+                    style={{
+                      width: "5px",
+                      height: "5px",
+                      borderRadius: "50%",
+                      backgroundColor: stream && !cameraOff ? "var(--accent-green)" : "var(--text-tertiary)",
+                    }}
+                  />
+                  <span>{stream && !cameraOff ? "Live Preview" : cameraOff ? "Camera Paused" : "Camera Ready"}</span>
                 </div>
               </div>
 
-              {/* 16:9 Camera tile */}
+              {/* 16:9 Live Camera Tile with Mirror Video Element */}
               <div
                 style={{
                   width: "100%",
                   aspectRatio: "16 / 9",
-                  backgroundColor: "var(--bg-window)",
+                  backgroundColor: "#0d0d0e",
                   borderRadius: "var(--radius-md)",
                   border: "1px solid var(--separator)",
                   display: "flex",
@@ -504,62 +558,133 @@ export const BriefingSheet: React.FC = () => {
                 }}
               >
                 {cameraOff ? (
-                  <span style={{ fontSize: "12.5px", color: "var(--text-tertiary)" }}>
-                    Camera is turned off
-                  </span>
-                ) : (
-                  <>
-                    <div
-                      style={{
-                        width: "44px",
-                        height: "44px",
-                        borderRadius: "50%",
-                        backgroundColor: "var(--bg-control)",
-                        border: "1px solid var(--separator)",
-                        display: "grid",
-                        placeItems: "center",
-                        color: "var(--text-primary)",
-                        fontSize: "13px",
-                        fontWeight: 650,
-                        marginBottom: "4px",
-                      }}
-                    >
-                      EV
-                    </div>
-                    <span style={{ fontSize: "11.5px", color: "var(--text-secondary)", fontWeight: 500 }}>
-                      Mirror Preview
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px" }}>
+                    <Video size={24} style={{ color: "var(--text-tertiary)" }} />
+                    <span style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>
+                      Camera is paused
                     </span>
-                  </>
+                  </div>
+                ) : isStreamLoading ? (
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px" }}>
+                    <Camera size={24} style={{ color: "var(--text-tertiary)", opacity: 0.6 }} />
+                    <span style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>
+                      Starting camera…
+                    </span>
+                  </div>
+                ) : stream ? (
+                  <video
+                    ref={(el) => {
+                      videoRef.current = el;
+                      if (el && stream && el.srcObject !== stream) {
+                        el.srcObject = stream;
+                        el.play().catch(() => {});
+                      }
+                    }}
+                    autoPlay
+                    playsInline
+                    muted
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "cover",
+                      transform: "scaleX(-1)", // Mirror effect for natural self-view
+                    }}
+                  />
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px" }}>
+                    <Camera size={24} style={{ color: "var(--text-tertiary)" }} />
+                    <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                      Camera preview idle
+                    </span>
+                  </div>
                 )}
 
-                {/* Mic level visualizer */}
+                {/* Zoom-style Mic Mute Indicator — always visible, bottom-left of camera view */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleMute();
+                  }}
+                  title={micMuted ? "Unmute Microphone" : "Mute Microphone"}
+                  aria-label={micMuted ? "Unmute Microphone" : "Mute Microphone"}
+                  style={{
+                    position: "absolute",
+                    bottom: "10px",
+                    left: "10px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: "32px",
+                    height: "32px",
+                    borderRadius: "50%",
+                    backgroundColor: micMuted ? "rgba(239, 68, 68, 0.9)" : "rgba(0, 0, 0, 0.72)",
+                    border: micMuted ? "none" : "1px solid rgba(255, 255, 255, 0.18)",
+                    backdropFilter: "blur(8px)",
+                    WebkitBackdropFilter: "blur(8px)",
+                    cursor: "pointer",
+                    padding: 0,
+                    transition: "background-color 0.15s ease, transform 0.1s ease",
+                    zIndex: 10,
+                    outline: "none",
+                    boxShadow: micMuted ? "0 0 0 2px rgba(239,68,68,0.35)" : "none",
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.transform = "scale(1.1)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.transform = "scale(1)"; }}
+                >
+                  {/* Mic icon with optional red diagonal slash overlay (Zoom-style) */}
+                  <span style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <Mic size={15} color={micMuted ? "#fff" : "rgba(255,255,255,0.9)"} />
+                    {micMuted && (
+                      /* Red diagonal slash — exact Zoom style */
+                      <svg
+                        width="22"
+                        height="22"
+                        viewBox="0 0 22 22"
+                        style={{
+                          position: "absolute",
+                          top: "50%",
+                          left: "50%",
+                          transform: "translate(-50%, -50%)",
+                          pointerEvents: "none",
+                        }}
+                      >
+                        {/* White outline stroke so slash is visible on any background */}
+                        <line x1="3" y1="19" x2="19" y2="3" stroke="rgba(239,68,68,0.9)" strokeWidth="2.5" strokeLinecap="round" />
+                      </svg>
+                    )}
+                  </span>
+                </button>
+
+                {/* Real Live Mic Audio Visualizer */}
                 <div
                   style={{
                     position: "absolute",
-                    bottom: "6px",
-                    right: "8px",
+                    bottom: "8px",
+                    right: "10px",
                     display: "flex",
                     alignItems: "center",
                     gap: "6px",
-                    backgroundColor: "rgba(0, 0, 0, 0.65)",
-                    padding: "2px 6px",
+                    backgroundColor: "rgba(0, 0, 0, 0.75)",
+                    padding: "3px 8px",
                     borderRadius: "var(--radius-sm)",
-                    border: "1px solid rgba(255, 255, 255, 0.08)",
+                    border: "1px solid rgba(255, 255, 255, 0.1)",
+                    backdropFilter: "blur(6px)",
                   }}
                 >
-                  <AudioVisualizer active={!micMuted} barsCount={6} size="sm" />
+                  <AudioVisualizer active={!micMuted && Boolean(stream)} stream={stream} level={audioLevel} barsCount={6} size="sm" />
                 </div>
               </div>
 
-              {/* Camera & Mic Selectors */}
-              <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "10px" }}>
+              {/* Dynamic Camera & Microphone Hardware Selectors */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "12px" }}>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
                   <div>
                     <label style={{ display: "block", fontSize: "11px", color: "var(--text-tertiary)", marginBottom: "3px" }}>
                       Camera Source
                     </label>
                     <select
-                      value={settings.selectedCamera}
+                      value={settings.selectedCamera || (cameras[0]?.deviceId ?? "")}
                       onChange={(e) => updateSettings({ selectedCamera: e.target.value })}
                       style={{
                         width: "100%",
@@ -572,11 +697,15 @@ export const BriefingSheet: React.FC = () => {
                         outline: "none",
                       }}
                     >
-                      {cameraOptions.map((cam) => (
-                        <option key={cam} value={cam}>
-                          {cam}
-                        </option>
-                      ))}
+                      {cameras.length > 0 ? (
+                        cameras.map((cam) => (
+                          <option key={cam.deviceId} value={cam.deviceId}>
+                            {cam.label}
+                          </option>
+                        ))
+                      ) : (
+                        <option value="">Default Camera</option>
+                      )}
                     </select>
                   </div>
 
@@ -585,7 +714,7 @@ export const BriefingSheet: React.FC = () => {
                       Microphone
                     </label>
                     <select
-                      value={settings.selectedMicrophone}
+                      value={settings.selectedMicrophone || (microphones[0]?.deviceId ?? "")}
                       onChange={(e) => updateSettings({ selectedMicrophone: e.target.value })}
                       style={{
                         width: "100%",
@@ -598,136 +727,91 @@ export const BriefingSheet: React.FC = () => {
                         outline: "none",
                       }}
                     >
-                      {micOptions.map((mic) => (
-                        <option key={mic} value={mic}>
-                          {mic}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Camera Pulse Measurement (renamed from Heart Rate Sensor) */}
-                <div
-                  style={{
-                    padding: "8px 10px",
-                    borderRadius: "var(--radius-sm)",
-                    backgroundColor: "var(--bg-control)",
-                    border: "1px solid var(--separator)",
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                      <Activity size={13} style={{ color: "var(--accent-green)" }} />
-                      <span style={{ fontSize: "11.5px", fontWeight: 600, color: "var(--text-primary)" }}>
-                        Camera Pulse Measurement
-                      </span>
-                    </div>
-
-                    <button
-                      onClick={async () => {
-                        setIsMeasuringBaseline(true);
-                        setMiniBaselineProgress(0);
-                        const interval = setInterval(() => {
-                          setMiniBaselineProgress((p) => (p === null || p >= 95 ? p : p + 5));
-                        }, 90);
-                        try {
-                          const p = await runMiniBaseline(20);
-                          clearInterval(interval);
-                          setMiniBaselineProgress(100);
-                          setBaselinePulseResult(p.restingPulse);
-                          showToast(`Resting pulse verified: ${p.restingPulse} bpm`);
-                        } catch {
-                          clearInterval(interval);
-                        } finally {
-                          setTimeout(() => setIsMeasuringBaseline(false), 400);
-                        }
-                      }}
-                      disabled={isMeasuringBaseline}
-                      className="hover-subtle"
-                      style={{
-                        fontSize: "11px",
-                        color: "var(--accent-blue)",
-                        fontWeight: 500,
-                        background: "none",
-                        border: "none",
-                        cursor: "default",
-                        padding: 0,
-                      }}
-                    >
-                      {isMeasuringBaseline ? "Calibrating…" : "Quick 20s baseline"}
-                    </button>
-                  </div>
-
-                  {miniBaselineProgress !== null && (
-                    <div style={{ marginTop: "4px" }}>
-                      <div style={{ height: "3px", borderRadius: "1.5px", backgroundColor: "var(--bg-window)", overflow: "hidden" }}>
-                        <div
-                          style={{
-                            height: "100%",
-                            width: `${miniBaselineProgress}%`,
-                            backgroundColor: "var(--accent-blue)",
-                            transition: "width 0.1s ease",
-                          }}
-                        />
-                      </div>
-                      {baselinePulseResult && (
-                        <span style={{ fontSize: "10.5px", color: "var(--accent-green)", display: "block", marginTop: "3px" }}>
-                          ✓ Baseline pulse: {baselinePulseResult} bpm
-                        </span>
+                      {microphones.length > 0 ? (
+                        microphones.map((mic) => (
+                          <option key={mic.deviceId} value={mic.deviceId}>
+                            {mic.label}
+                          </option>
+                        ))
+                      ) : (
+                        <option value="">Default Microphone</option>
                       )}
-                    </div>
-                  )}
-                </div>
-
-                {/* 3-point Environmental Checklist */}
-                <div
-                  style={{
-                    padding: "8px 10px",
-                    borderRadius: "var(--radius-sm)",
-                    backgroundColor: "rgba(255, 255, 255, 0.02)",
-                    border: "1px solid var(--separator)",
-                    fontSize: "11px",
-                    color: "var(--text-secondary)",
-                    lineHeight: 1.4,
-                  }}
-                >
-                  <div style={{ fontWeight: 600, color: "var(--text-primary)", marginBottom: "3px" }}>
-                    Optical Sensor Checklist:
-                  </div>
-                  <div>• Place device on a stable surface (minimizes motion artifacts)</div>
-                  <div>• Face even front light (avoid harsh backlight or deep shadows)</div>
-                  <div>• Remain reasonably still while speaking</div>
-                  <div style={{ fontSize: "10px", color: "var(--text-tertiary)", marginTop: "4px" }}>
-                    Bright flickering screens or direct lights behind you reduce measurement accuracy.
+                    </select>
                   </div>
                 </div>
               </div>
 
-              {/* Hardware toggles */}
-              <div style={{ display: "flex", gap: "8px", marginBottom: "8px" }}>
+              {/* Hardware stream controls */}
+              <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
                 <Button
                   variant={micMuted ? "outline" : "secondary"}
                   size="sm"
-                  icon={<Mic size={13} />}
-                  onClick={() => setMicMuted((prev) => !prev)}
-                  style={{ flex: 1, fontSize: "11.5px" }}
+                  icon={micMuted ? <MicOff size={13} style={{ color: "#ef4444" }} /> : <Mic size={13} />}
+                  onClick={toggleMute}
+                  style={{ flex: 1, fontSize: "11.5px", color: micMuted ? "#ef4444" : undefined }}
                 >
                   {micMuted ? "Unmute Mic" : "Mute Mic"}
                 </Button>
                 <Button
                   variant={cameraOff ? "outline" : "secondary"}
                   size="sm"
-                  icon={<Video size={13} />}
-                  onClick={() => setCameraOff((prev) => !prev)}
-                  style={{ flex: 1, fontSize: "11.5px" }}
+                  icon={cameraOff ? <VideoOff size={13} style={{ color: "#ef4444" }} /> : <Video size={13} />}
+                  onClick={toggleVideo}
+                  style={{ flex: 1, fontSize: "11.5px", color: cameraOff ? "#ef4444" : undefined }}
                 >
                   {cameraOff ? "Video On" : "Video Off"}
                 </Button>
               </div>
 
-              {/* Mandatory Disclaimer */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              {/* Baseline Status Card */}
+              <div
+                style={{
+                  padding: "10px 12px",
+                  borderRadius: "var(--radius-sm)",
+                  backgroundColor: "var(--bg-control)",
+                  border: "1px solid var(--separator)",
+                  marginBottom: "8px",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "7px" }}>
+                    <Activity size={13} style={{ color: baseline ? "var(--accent-green)" : "var(--accent-orange)" }} />
+                    <span style={{ fontSize: "11.5px", fontWeight: 600, color: "var(--text-primary)" }}>
+                      Calm Baseline Calibration
+                    </span>
+                  </div>
+
+                  {baseline ? (
+                    <span style={{ fontSize: "11px", color: "var(--accent-green)", fontWeight: 500 }}>
+                      ✓ {baseline.restingPulse} bpm
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        stopAllTracks();
+                        closeBriefing();
+                        openBaselineSheet();
+                      }}
+                      className="hover-subtle"
+                      style={{
+                        fontSize: "11px",
+                        color: "var(--accent-blue)",
+                        fontWeight: 600,
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        padding: 0,
+                      }}
+                    >
+                      Calibrate (60s)
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Mandatory Privacy & Wellness Disclaimer */}
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "auto" }}>
                 <ShieldCheck size={12} style={{ color: "var(--text-tertiary)" }} />
                 <span style={{ fontSize: "10.5px", color: "var(--text-tertiary)" }}>
                   {WELLNESS_DISCLAIMER} Stored locally.
@@ -788,7 +872,14 @@ export const BriefingSheet: React.FC = () => {
           </span>
 
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <Button variant="secondary" size="md" onClick={closeBriefing}>
+            <Button
+              variant="secondary"
+              size="md"
+              onClick={() => {
+                stopAllTracks();
+                closeBriefing();
+              }}
+            >
               Cancel
             </Button>
             <Button
@@ -804,6 +895,89 @@ export const BriefingSheet: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Calm Baseline Gate Modal: Shown when user clicks Start Session without a baseline */}
+      {showBaselineGateModal && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 1200,
+            backgroundColor: "rgba(0, 0, 0, 0.75)",
+            backdropFilter: "blur(8px)",
+            WebkitBackdropFilter: "blur(8px)",
+            display: "grid",
+            placeItems: "center",
+            padding: "20px",
+          }}
+          onClick={() => setShowBaselineGateModal(false)}
+        >
+          <div
+            className="glass-surface"
+            style={{
+              width: "100%",
+              maxWidth: "440px",
+              padding: "24px",
+              borderRadius: "var(--radius-lg)",
+              border: "1px solid var(--separator)",
+              backgroundColor: "var(--bg-card)",
+              boxShadow: "0 20px 40px rgba(0,0,0,0.6)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "14px" }}>
+              <div
+                style={{
+                  width: "40px",
+                  height: "40px",
+                  borderRadius: "50%",
+                  backgroundColor: "rgba(10, 132, 255, 0.15)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "var(--accent-blue)",
+                }}
+              >
+                <AlertCircle size={20} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 650, color: "var(--text-primary)" }}>
+                  Set your calm baseline first
+                </h3>
+                <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                  Required before your rehearsal simulation
+                </span>
+              </div>
+            </div>
+
+            <p style={{ margin: "0 0 20px 0", fontSize: "13px", lineHeight: 1.5, color: "var(--text-secondary)" }}>
+              We measure your resting pulse, breathing and HRV for 60 seconds so pressure moments during the simulation can be compared to your personal normal.
+            </p>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+              <Button
+                variant="secondary"
+                size="md"
+                onClick={() => setShowBaselineGateModal(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="md"
+                onClick={() => {
+                  setShowBaselineGateModal(false);
+                  stopAllTracks();
+                  closeBriefing();
+                  openBaselineSheet();
+                }}
+              >
+                Set Baseline
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

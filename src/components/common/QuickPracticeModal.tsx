@@ -12,6 +12,7 @@ import {
   Sliders,
 } from "lucide-react";
 import type { PracticeScenario } from "../../types";
+import { type QuickStartCategory, CATEGORY_MEMBERS } from "../../utils/quickStart";
 
 type QuickPracticeMode = "describe" | "scenarios";
 type GoalPreset = "Interview" | "Sales pitch" | "Presentation" | "Negotiation" | "Tough conversation";
@@ -44,15 +45,10 @@ const PRESET_SUGGESTIONS: Record<GoalPreset, [string, string, string]> = {
   ],
 };
 
-const CATEGORY_OPTIONS = [
+type CategoryOption = "Auto" | QuickStartCategory;
+const CATEGORY_OPTIONS: readonly CategoryOption[] = [
   "Auto",
-  "Job Interviews",
-  "Sales Pitches & Client Calls",
-  "Presentations & Demos",
-  "Difficult Conversations",
-  "High-Stakes Negotiation",
-  "Customer Service & Escalations",
-  "Hospitality & Service",
+  ...(Object.keys(CATEGORY_MEMBERS) as QuickStartCategory[]),
 ];
 
 const LENGTH_OPTIONS = [
@@ -67,6 +63,7 @@ let sessionPersistentDraft = "";
 export const QuickPracticeModal: React.FC = () => {
   const {
     isQuickPracticeOpen,
+    quickPracticeInitialCategory,
     closeQuickPractice,
     scenarios,
     personas,
@@ -83,7 +80,7 @@ export const QuickPracticeModal: React.FC = () => {
   const [activePreset, setActivePreset] = useState<GoalPreset>("Interview");
   const [draftText, setDraftText] = useState(sessionPersistentDraft);
   const [selectedPersonaId, setSelectedPersonaId] = useState<string>("auto");
-  const [selectedCategory, setSelectedCategory] = useState<string>("Auto");
+  const [selectedCategory, setSelectedCategory] = useState<string>(() => quickPracticeInitialCategory || "Auto");
   const [selectedLength, setSelectedLength] = useState<number>(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -97,6 +94,15 @@ export const QuickPracticeModal: React.FC = () => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const previousActiveElementRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (isQuickPracticeOpen) {
+      const nextCategory = quickPracticeInitialCategory || "Auto";
+      void Promise.resolve().then(() => {
+        setSelectedCategory(nextCategory);
+      });
+    }
+  }, [isQuickPracticeOpen, quickPracticeInitialCategory]);
 
   // Update session persistent draft when typing
   const handleDraftChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {

@@ -80,7 +80,8 @@ export interface AppContextType {
 
   // Quick Practice
   isQuickPracticeOpen: boolean;
-  openQuickPractice: () => void;
+  quickPracticeInitialCategory?: string;
+  openQuickPractice: (initialCategory?: string) => void;
   closeQuickPractice: () => void;
   triggerRandomPractice: () => void;
   triggerLastUsedPractice: () => void;

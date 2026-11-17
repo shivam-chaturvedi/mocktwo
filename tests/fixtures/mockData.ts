@@ -31,9 +31,9 @@ export const INITIAL_EMPLOYEE = INITIAL_USER;
 
 export const INITIAL_SETTINGS: AppSettings = {
   theme: "dark",
-  selectedCamera: "FaceTime HD Camera (Built-in)",
-  selectedMicrophone: "MacBook Studio Microphone (Built-in)",
-  selectedSpeaker: "Internal MacBook Speakers",
+  selectedCamera: "",
+  selectedMicrophone: "",
+  selectedSpeaker: "",
   autoStartAudio: true,
   hapticFeedback: true,
   reducedMotion: false,

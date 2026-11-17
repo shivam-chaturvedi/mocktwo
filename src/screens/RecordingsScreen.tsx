@@ -54,7 +54,9 @@ export const RecordingsScreen: React.FC = () => {
   const [inspectorTab, setInspectorTab] = useState<"coaching" | "analytics">("coaching");
   const [noteInput, setNoteInput] = useState("");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [hasVideoError, setHasVideoError] = useState(false);
 
+  const videoRef = useRef<HTMLVideoElement | null>(null);
   const playTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const activeRecording = selectedRecording || (recordings.length > 0 ? recordings[0] : null);
@@ -76,15 +78,45 @@ export const RecordingsScreen: React.FC = () => {
 
   const handleCloseDebrief = () => {
     setIsPlaying(false);
+    if (videoRef.current) videoRef.current.pause();
     setPlaybackTime(0);
     closeDebriefMode();
   };
 
-  // Media Player Simulation Timer
   const activeRecordingDuration = activeRecording?.durationSeconds || 0;
   const activeRecordingId = activeRecording?.id;
+
+  // Reset player when recording changes
   useEffect(() => {
-    if (isPlaying && activeRecordingId) {
+    setIsPlaying(false);
+    setPlaybackTime(0);
+    setHasVideoError(false);
+    if (videoRef.current) {
+      videoRef.current.currentTime = 0;
+      videoRef.current.pause();
+    }
+  }, [activeRecordingId]);
+
+  // Synchronize play state with video element
+  useEffect(() => {
+    if (!videoRef.current) return;
+    if (isPlaying && videoRef.current.paused) {
+      videoRef.current.play().catch(() => {});
+    } else if (!isPlaying && !videoRef.current.paused) {
+      videoRef.current.pause();
+    }
+  }, [isPlaying]);
+
+  // Synchronize playback speed with video element
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.playbackRate = playbackSpeed;
+    }
+  }, [playbackSpeed]);
+
+  // Fallback timer only if video is not available or errored
+  useEffect(() => {
+    if (isPlaying && hasVideoError && activeRecordingId) {
       playTimerRef.current = setInterval(() => {
         setPlaybackTime((prev) => {
           if (prev >= activeRecordingDuration) {
@@ -100,7 +132,15 @@ export const RecordingsScreen: React.FC = () => {
     return () => {
       if (playTimerRef.current) clearInterval(playTimerRef.current);
     };
-  }, [isPlaying, playbackSpeed, activeRecordingId, activeRecordingDuration]);
+  }, [isPlaying, hasVideoError, playbackSpeed, activeRecordingId, activeRecordingDuration]);
+
+  const handleSeek = (newTimeSec: number) => {
+    const clamped = Math.max(0, Math.min(activeRecordingDuration, newTimeSec));
+    setPlaybackTime(clamped);
+    if (videoRef.current) {
+      videoRef.current.currentTime = clamped;
+    }
+  };
 
   // Keyboard Shortcuts for Media Player
   useEffect(() => {
@@ -113,10 +153,10 @@ export const RecordingsScreen: React.FC = () => {
         setIsPlaying((prev) => !prev);
       } else if (e.key === "ArrowLeft" && activeRecording) {
         e.preventDefault();
-        setPlaybackTime((prev) => Math.max(0, prev - 5));
+        handleSeek(playbackTime - 5);
       } else if (e.key === "ArrowRight" && activeRecording) {
         e.preventDefault();
-        setPlaybackTime((prev) => Math.min(activeRecording.durationSeconds, prev + 5));
+        handleSeek(playbackTime + 5);
       } else if (e.metaKey && e.altKey && e.key === "0") {
         e.preventDefault();
         setIsInspectorOpen((prev) => !prev);
@@ -130,10 +170,6 @@ export const RecordingsScreen: React.FC = () => {
     const m = Math.floor(sec / 60);
     const s = Math.floor(sec % 60);
     return `${m}:${s < 10 ? "0" : ""}${s}`;
-  };
-
-  const handleSeek = (time: number) => {
-    setPlaybackTime(Math.min(activeRecording?.durationSeconds || 0, Math.max(0, time)));
   };
 
   const handleAddNote = (e: React.FormEvent) => {
@@ -527,19 +563,41 @@ export const RecordingsScreen: React.FC = () => {
                   boxShadow: "var(--shadow-card)",
                 }}
               >
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-                  <LazyAvatarImage
-                    src={activeRecording.personaAvatarUrl}
-                    name={personaName}
-                    size={68}
+                {activeRecording?.id && !hasVideoError ? (
+                  <video
+                    ref={videoRef}
+                    src={`mocktwo-asset://recordings/sessions/${activeRecording.id}/video.webm`}
+                    playsInline
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "cover",
+                    }}
+                    onTimeUpdate={() => {
+                      if (videoRef.current) {
+                        setPlaybackTime(Math.floor(videoRef.current.currentTime));
+                      }
+                    }}
+                    onEnded={() => setIsPlaying(false)}
+                    onPlay={() => setIsPlaying(true)}
+                    onPause={() => setIsPlaying(false)}
+                    onError={() => setHasVideoError(true)}
                   />
-                  <div style={{ fontSize: "14px", fontWeight: 650, color: "var(--text-primary)", marginTop: "10px" }}>
-                    {personaName}
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                    <LazyAvatarImage
+                      src={activeRecording.personaAvatarUrl}
+                      name={personaName}
+                      size={68}
+                    />
+                    <div style={{ fontSize: "14px", fontWeight: 650, color: "var(--text-primary)", marginTop: "10px" }}>
+                      {personaName}
+                    </div>
+                    <div style={{ fontSize: "11px", color: "var(--text-secondary)", marginTop: "2px" }}>
+                      {activeRecording?.videoPath ? "Video recorded" : "Audio-only session"} · {biometrics?.coverageRatio || `${activeRecording.durationSeconds}s`}
+                    </div>
                   </div>
-                  <div style={{ fontSize: "11px", color: "var(--text-secondary)", marginTop: "2px" }}>
-                    Camera pulse recorded · {biometrics?.coverageRatio || `${activeRecording.durationSeconds}s clean`}
-                  </div>
-                </div>
+                )}
 
                 {/* Big Center Play / Pause Overlay Button */}
                 <button

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useApp } from "../context";
+import { useMediaRecorder } from "../hooks/useMediaRecorder";
 import { AudioVisualizer } from "../components/common/AudioVisualizer";
 import { Button } from "../components/common/Button";
 import {
@@ -18,15 +19,19 @@ import { VALIDATION_HINTS, type ValidationStatusCode } from "../types";
 export const LiveSimulationScreen: React.FC = () => {
   const { selectedScenario, activeSessionPersona, finishSimulation, user, activeSessionId } = useApp();
 
-  const currentPersona = activeSessionPersona || {
-    id: selectedScenario.id,
-    name: selectedScenario.personaName || selectedScenario.guestName,
-    avatarUrl: selectedScenario.personaAvatarUrl || selectedScenario.guestAvatarUrl,
-    setting: selectedScenario.setting || selectedScenario.roomNumber,
-    seniority: selectedScenario.seniority || selectedScenario.loyaltyTier,
-    temperamentTraits: [selectedScenario.personaTone || selectedScenario.guestMood],
-    voice: "Alloy (Warm British)"
-  };
+  const currentPersona = useMemo(() => {
+    return (
+      activeSessionPersona || {
+        id: selectedScenario.id,
+        name: selectedScenario.personaName || selectedScenario.guestName,
+        avatarUrl: selectedScenario.personaAvatarUrl || selectedScenario.guestAvatarUrl,
+        setting: selectedScenario.setting || selectedScenario.roomNumber,
+        seniority: selectedScenario.seniority || selectedScenario.loyaltyTier,
+        temperamentTraits: [selectedScenario.personaTone || selectedScenario.guestMood],
+        voice: "Alloy (Warm British)",
+      }
+    );
+  }, [activeSessionPersona, selectedScenario]);
 
   const [secondsElapsed, setSecondsElapsed] = useState(0);
   const [micMuted, setMicMuted] = useState(false);
@@ -42,68 +47,99 @@ export const LiveSimulationScreen: React.FC = () => {
   const hasFinishedRef = useRef(false);
   const startTimeRef = useRef<number | null>(null);
   const sessionIdRef = useRef<string | null>(null);
+  const sessionStartTimeRef = useRef<number | null>(null);
+  const turnSeqRef = useRef(0);
+  const pipVideoRef = useRef<HTMLVideoElement | null>(null);
+  const [userStream, setUserStream] = useState<MediaStream | null>(null);
+  const recorder = useMediaRecorder();
 
-  // Audio chunk recording subsystem for rehearsals
+  // Sequential chunk recording subsystem for rehearsals (persisting to local disk & SQLite)
   useEffect(() => {
     if (!sessionIdRef.current) {
       sessionIdRef.current = activeSessionId || `session-${Date.now()}`;
     }
     const sessionId = sessionIdRef.current;
-    let mediaRecorder: MediaRecorder | null = null;
-    let audioStream: MediaStream | null = null;
+    sessionStartTimeRef.current = Date.now();
+    let stream: MediaStream | null = null;
     let isCancelled = false;
 
-    const initAudio = async () => {
-      if (window.electronAPI?.audio) {
-        try {
-          await window.electronAPI.audio.startRecording(sessionId);
-          if (isCancelled) return;
-          if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-            audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            if (isCancelled) {
-              audioStream.getTracks().forEach((t) => t.stop());
-              return;
-            }
-            mediaRecorder = new MediaRecorder(audioStream);
-            mediaRecorder.ondataavailable = async (e) => {
-              if (e.data && e.data.size > 0 && window.electronAPI?.audio && !isCancelled) {
-                try {
-                  const buffer = await e.data.arrayBuffer();
-                  await window.electronAPI.audio.appendChunk(sessionId, buffer);
-                } catch (err) {
-                  console.warn("[LiveSimulationScreen] Failed to append audio chunk:", err);
-                }
-              }
-            };
-            mediaRecorder.start(1000);
-          }
-        } catch (err) {
-          console.error("[LiveSimulationScreen] Audio recording setup error:", err);
+    const initRecording = async () => {
+      try {
+        if (typeof window !== "undefined" && window.electronAPI?.requestMediaAccess) {
+          try {
+            await window.electronAPI.requestMediaAccess("camera");
+            await window.electronAPI.requestMediaAccess("microphone");
+          } catch {}
         }
+
+        if (navigator.mediaDevices?.getUserMedia) {
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({
+              video: { width: 640, height: 480, facingMode: "user" },
+              audio: true,
+            });
+          } catch {
+            try {
+              stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            } catch {
+              try {
+                stream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+              } catch {}
+            }
+          }
+        }
+
+        if (isCancelled) {
+          stream?.getTracks().forEach((t) => t.stop());
+          return;
+        }
+
+        if (stream) {
+          setUserStream(stream);
+          await recorder.start(stream, {
+            id: sessionId,
+            kind: "sessions",
+            scenarioId: selectedScenario.id,
+            scenarioTitle: selectedScenario.title,
+            personaId: currentPersona.id,
+            personaName: currentPersona.name,
+            personaAvatarUrl: currentPersona.avatarUrl,
+            plannedDurationSeconds: TOTAL_SESSION_SECONDS,
+          });
+        }
+      } catch (err) {
+        console.error("[LiveSimulationScreen] Setup error:", err);
       }
     };
 
-    initAudio();
+    initRecording();
 
     return () => {
       isCancelled = true;
-      if (mediaRecorder && mediaRecorder.state !== "inactive") {
-        try {
-          mediaRecorder.stop();
-        } catch {
-          // ignore
-        }
-      }
-      if (audioStream) {
-        audioStream.getTracks().forEach((t) => t.stop());
-      }
-      if (window.electronAPI?.audio) {
-        window.electronAPI.audio.finalizeRecording(sessionId).catch((err) => {
-          console.error("[LiveSimulationScreen] Failed to finalize audio recording:", err);
+      if (stream) {
+        stream.getTracks().forEach((t) => {
+          try {
+            t.stop();
+          } catch {}
         });
       }
+      if (!hasFinishedRef.current) {
+        recorder.abort().catch(() => {});
+      }
     };
-  }, [activeSessionId]);
+  }, [activeSessionId, selectedScenario, currentPersona, recorder]);
+
+  // Synchronize mic and camera mute states with media stream tracks
+  useEffect(() => {
+    if (userStream) {
+      userStream.getAudioTracks().forEach((t) => {
+        t.enabled = !micMuted;
+      });
+      userStream.getVideoTracks().forEach((t) => {
+        t.enabled = !cameraOff;
+      });
+    }
+  }, [userStream, micMuted, cameraOff]);
 
   // Optical sensor validation status: simulated briefly without showing live numbers
   const currentValidationStatus: ValidationStatusCode = useMemo(() => {
@@ -126,20 +162,44 @@ export const LiveSimulationScreen: React.FC = () => {
       if (clampedElapsed >= TOTAL_SESSION_SECONDS && !hasFinishedRef.current) {
         hasFinishedRef.current = true;
         clearInterval(timer);
-        finishSimulation(TOTAL_SESSION_SECONDS);
+        recorder.stop({
+          scenarioId: selectedScenario.id,
+          scenarioTitle: selectedScenario.title,
+          personaId: currentPersona.id,
+          personaName: currentPersona.name,
+          durationSeconds: TOTAL_SESSION_SECONDS,
+          status: "completed",
+        }).then(() => {
+          finishSimulation(TOTAL_SESSION_SECONDS);
+        }).catch(() => {
+          finishSimulation(TOTAL_SESSION_SECONDS);
+        });
       }
     }, 250);
 
     return () => clearInterval(timer);
-  }, [finishSimulation]);
+  }, [finishSimulation, selectedScenario, currentPersona, recorder]);
 
   // Turn-taking simulation
   useEffect(() => {
     const turnInterval = setInterval(() => {
-      setCounterpartSpeaking((prev) => !prev);
+      setCounterpartSpeaking((prev) => {
+        const next = !prev;
+        const nowMs = sessionStartTimeRef.current ? Date.now() - sessionStartTimeRef.current : 0;
+        recorder.appendTranscript([
+          {
+            seq: turnSeqRef.current++,
+            speaker: next ? "counterpart" : "user",
+            text: next ? "Let's review the terms and SLA commitments." : "I understand your perspective, let's explore options.",
+            startMs: Math.max(0, nowMs - 4000),
+            endMs: nowMs,
+          },
+        ]);
+        return next;
+      });
     }, 4500);
     return () => clearInterval(turnInterval);
-  }, []);
+  }, [recorder]);
 
   // Auto-hide top bar after 3.5 seconds of inactivity
   const handleMouseMove = () => {
@@ -175,10 +235,20 @@ export const LiveSimulationScreen: React.FC = () => {
     return `${m}:${s < 10 ? "0" : ""}${s}`;
   };
 
-  const handleEndEarly = () => {
+  const handleEndEarly = async () => {
     if (hasFinishedRef.current) return;
     hasFinishedRef.current = true;
     setShowEndModal(false);
+    try {
+      await recorder.stop({
+        scenarioId: selectedScenario.id,
+        scenarioTitle: selectedScenario.title,
+        personaId: currentPersona.id,
+        personaName: currentPersona.name,
+        durationSeconds: secondsElapsed,
+        status: secondsElapsed >= 30 ? "completed" : "interrupted",
+      });
+    } catch {}
     finishSimulation(secondsElapsed);
   };
 
@@ -473,12 +543,8 @@ export const LiveSimulationScreen: React.FC = () => {
             zIndex: 502
           }}
         >
-          {cameraOff ? (
-            <span style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>
-              Camera Off
-            </span>
-          ) : (
-            <>
+          {cameraOff || !userStream?.getVideoTracks()?.length ? (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px" }}>
               <div
                 style={{
                   width: "40px",
@@ -496,10 +562,29 @@ export const LiveSimulationScreen: React.FC = () => {
               >
                 {user?.name ? user.name.slice(0, 2).toUpperCase() : "U"}
               </div>
-              <span style={{ fontSize: "12px", color: "var(--text-secondary)", fontWeight: 500 }}>
-                {user?.name ? `You (${user.name})` : "You"}
+              <span style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>
+                {cameraOff ? "Camera Off" : "Starting camera…"}
               </span>
-            </>
+            </div>
+          ) : (
+            <video
+              ref={(el) => {
+                pipVideoRef.current = el;
+                if (el && userStream && el.srcObject !== userStream) {
+                  el.srcObject = userStream;
+                  el.play().catch(() => {});
+                }
+              }}
+              autoPlay
+              playsInline
+              muted
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+                transform: "scaleX(-1)",
+              }}
+            />
           )}
 
           {micMuted && (
@@ -517,7 +602,8 @@ export const LiveSimulationScreen: React.FC = () => {
                 gap: "4px",
                 fontSize: "10.5px",
                 color: "var(--accent-red)",
-                fontWeight: 500
+                fontWeight: 500,
+                zIndex: 4,
               }}
             >
               <MicOff size={11} />

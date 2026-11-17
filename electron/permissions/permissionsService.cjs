@@ -70,7 +70,7 @@ class PermissionsService {
     }
 
     if (process.platform === "darwin" && this.systemPreferences) {
-      if (currentStatus === "not-determined") {
+      if (currentStatus === "not-determined" || currentStatus === "unknown") {
         try {
           let granted = false;
           if (typeof this.systemPreferences.askForMediaAccess === "function") {

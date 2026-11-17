@@ -89,7 +89,6 @@ export const BaselineSheetModal: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const captureStartTimeRef = useRef<number>(0);
-  const captureRafRef = useRef<number | null>(null);
   const getReadyTimerRef = useRef<NodeJS.Timeout | null>(null);
   const pausedAtRef = useRef<number | null>(null);
   const modalRef = useRef<HTMLDivElement | null>(null);
@@ -118,13 +117,9 @@ export const BaselineSheetModal: React.FC = () => {
     return () => {
       isMountedRef.current = false;
       stopCamera();
-      const raf = captureRafRef.current;
-      if (raf) cancelAnimationFrame(raf);
-      const timer = getReadyTimerRef.current;
-      if (timer) clearTimeout(timer);
-      const prevEl = previousActiveElementRef.current;
-      if (prevEl && typeof prevEl.focus === "function") {
-        prevEl.focus();
+      if (getReadyTimerRef.current) clearTimeout(getReadyTimerRef.current);
+      if (previousActiveElementRef.current && typeof previousActiveElementRef.current.focus === "function") {
+        previousActiveElementRef.current.focus();
       }
     };
   }, [stopCamera]);

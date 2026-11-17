@@ -126,6 +126,153 @@
         "She insists on one accountable owner, daily evidence, and a decision between a reduced launch and a credible delay."
       ],
       "openingLine": "We planned the launch around your Friday commitment. Now UAT has found a payment defect. Tell me what you're proposing."
+    },
+    {
+      "builtinKey": "starter_interview_executive_recovery",
+      "personaKey": "starter_elena_vance",
+      "title": "The Executive Interview Where the Numbers Do Not Add Up",
+      "interactionType": "Interviews",
+      "difficulty": "Advanced",
+      "context": "You are interviewing for a Director of Customer Operations role at a multinational services company. Your résumé says you improved customer retention and reduced escalations, and Elena Vance is the executive interviewer responsible for the role. Before the interview, she has reviewed a case study you submitted about a service organisation whose reported SLA performance improved while customer complaints increased. Your presentation attributes the improvement to a new routing model, but its appendix uses a different reporting period and excludes reopened cases. Elena has also noticed that your claimed retention improvement overlaps with a pricing change and a reduction in the number of active accounts. She is not looking for a polished success story; she wants to know whether you can distinguish correlation from causation, admit where your evidence is weak, and make decisions when the board expects results. The interview will move from your résumé to an unexpected operational case, then to a challenge about a decision you personally owned.",
+      "learningObjectives": [
+        "Answer executive-level questions with concise, structured evidence rather than relying on broad claims.",
+        "Explain the difference between a measured outcome and a causal improvement, including limitations in the data.",
+        "Demonstrate personal ownership of a difficult decision and explain alternatives that were considered.",
+        "Ask thoughtful questions about authority, success measures, and organisational constraints before accepting accountability."
+      ],
+      "keyChallenges": [
+        "Elena identifies that the SLA denominator in your appendix differs from the one used in your headline result.",
+        "She asks you to defend a retention improvement that may partly reflect customer mix and pricing changes.",
+        "She interrupts a rehearsed answer and asks what you personally did, what the team did, and what you would do differently.",
+        "She gives you an incomplete operational case and expects you to state assumptions, request missing information, and still recommend a first action."
+      ],
+      "openingLine": "Your résumé says you improved retention by eighteen percent, but your case study tells a less convincing story. Which result can you actually defend?"
+    },
+    {
+      "builtinKey": "starter_interview_hospitality_leadership",
+      "personaKey": "starter_marcus_brooks",
+      "title": "The Hotel Operations Interview With a Live Service Crisis",
+      "interactionType": "Interviews",
+      "difficulty": "Advanced",
+      "context": "You are interviewing for an Operations Manager position at a high-occupancy business hotel. Marcus Brooks, the General Manager, has already reviewed your experience and is concerned that your previous role involved a smaller property with fewer departments and less complex guest expectations. Rather than asking only standard interview questions, he presents a live scenario: a major conference is checking in, two rooms are not ready, a VIP guest has a confirmed early arrival, housekeeping is short-staffed, and the front desk has promised an upgrade that revenue management has not approved. At the same time, a guest complaint about an unresolved accessibility request has reached the duty manager. Marcus wants to understand how you prioritise people and risks, how you communicate with departments that disagree, and whether you can make a decision without pretending every problem can be solved immediately. He will also test your previous leadership claims by asking for specific examples, measurable outcomes, and lessons from mistakes.",
+      "learningObjectives": [
+        "Respond to behavioural interview questions with specific examples, individual ownership, and measurable outcomes.",
+        "Prioritise competing guest and operational needs using safety, confirmed commitments, urgency, and available resources.",
+        "Explain how to coordinate front office, housekeeping, and revenue management without making unauthorised promises.",
+        "Show reflective leadership by acknowledging a past mistake and describing what changed afterward."
+      ],
+      "keyChallenges": [
+        "Marcus challenges whether your experience at a smaller property prepared you for a high-volume operation.",
+        "He changes one fact in the case midway through your answer and asks you to reassess your priorities.",
+        "The VIP upgrade has been promised without approval, while another guest has a specific accessibility requirement that cannot be treated as a preference.",
+        "He rejects generic statements such as 'I communicate with my team' and asks for the exact message, owner, and escalation path."
+      ],
+      "openingLine": "Conference arrivals start in ten minutes. Two rooms aren't ready, an unapproved upgrade was promised, and an accessibility request is unresolved. What now?"
+    },
+    {
+      "builtinKey": "starter_sales_pilot_roi_trap",
+      "personaKey": "starter_victor_hale",
+      "title": "The Sales Pitch That Promises Savings Procurement Cannot Verify",
+      "interactionType": "Sales & Pitches",
+      "difficulty": "Advanced",
+      "context": "You are an enterprise account executive pitching an AI-assisted customer support platform to a large company. Victor Hale, its Chief Procurement Officer, has agreed to a final commercial meeting after your product team presented a pilot claiming a 35% reduction in handling costs. Victor has reviewed the pilot methodology and noticed that it excludes escalated cases, implementation costs, quality-review time, and the human support required for customers who cannot be resolved automatically. His current provider is more expensive, but it has contractual service guarantees and a mature escalation process. Victor is interested in reducing cost, yet he will not approve a platform that creates hidden operational risk or transfers unresolved work to his staff. Your sales director expects you to secure a paid rollout today. You must present a defensible business case, identify where automation is appropriate, explain implementation and data-governance dependencies, and propose a pilot with measurable exit criteria. Victor will deliberately test whether you sell outcomes honestly or retreat into feature demonstrations when challenged.",
+      "learningObjectives": [
+        "Discover the buyer's business priorities and decision criteria before presenting product features.",
+        "Defend the ROI model with transparent assumptions, total-cost considerations, and measurable success criteria.",
+        "Position the product around an operational problem while acknowledging where human handling remains necessary.",
+        "Secure a specific next step, pilot scope, decision owner, and commercial process without using false urgency."
+      ],
+      "keyChallenges": [
+        "Victor points out that the advertised 35% savings exclude escalations, implementation, quality assurance, and exception handling.",
+        "He compares your proposal with an incumbent contract that costs more but includes measurable service guarantees.",
+        "He asks who is responsible if automation gives an incorrect answer or fails to recognise a sensitive customer case.",
+        "He refuses a broad rollout and asks you to define a limited pilot, baseline, acceptance threshold, and exit condition."
+      ],
+      "openingLine": "Your slide says 35% cost reduction. Your footnotes exclude half the work. Why should I take this business case seriously?"
+    },
+    {
+      "builtinKey": "starter_presentation_board_reversal",
+      "personaKey": "starter_elena_vance",
+      "title": "The Board Presentation That Is Interrupted by a Contradictory Slide",
+      "interactionType": "Presentations",
+      "difficulty": "Advanced",
+      "context": "You are presenting a quarterly customer operations recovery plan to Elena Vance and a group of senior leaders. Your stated objective is to secure budget for additional escalation coverage and a revised service-routing system. The opening slides show improved average response time, but a late appendix contains a customer-level breakdown showing that the largest accounts experienced longer resolution times and more reopened complaints. Elena notices the discrepancy while you are presenting. Finance has also challenged the requested headcount because the proposal does not show which existing activities will be reduced or how success will be measured. A separate team has warned that a routing change could improve average speed while sending complex cases to the wrong specialists. You have ten minutes left, and Elena is willing to continue only if you can explain the contradiction, adjust your recommendation, and make a clear decision request. The exercise tests executive communication under interruption, not slide-reading or memorised delivery.",
+      "learningObjectives": [
+        "Present a clear executive narrative that connects the problem, evidence, recommendation, risks, and decision required.",
+        "Respond to interruptions without becoming defensive or losing the presentation's central message.",
+        "Correct a misleading or incomplete metric transparently and distinguish aggregate results from customer-level impact.",
+        "Make a specific resource request with measurable outcomes, trade-offs, accountable owners, and review dates."
+      ],
+      "keyChallenges": [
+        "Elena interrupts when the appendix contradicts the headline improvement and asks which slide represents the real situation.",
+        "Finance questions whether additional headcount is the only option and asks what work will stop or change.",
+        "A proposed routing fix improves average response time but may increase misclassification of complex cases.",
+        "You must finish with a concise decision request even after losing several minutes to difficult questions."
+      ],
+      "openingLine": "Before you continue, slide four says resolution time improved, but your appendix says our largest accounts are waiting longer. Explain that contradiction."
+    },
+    {
+      "builtinKey": "starter_contract_renewal_negotiation",
+      "personaKey": "starter_victor_hale",
+      "title": "The Renewal Negotiation With a Hidden Exit Option",
+      "interactionType": "Negotiation",
+      "difficulty": "Advanced",
+      "context": "You are the commercial director for a technology services provider negotiating a three-year renewal with Victor Hale, Chief Procurement Officer of a large enterprise customer. The customer wants a lower annual price, a service credit for recent outages, stronger service-level guarantees, and the right to terminate early without penalty. Your finance team has authorised a modest discount only if the customer accepts a longer commitment and a narrower scope of included support. Victor knows that your company has invested heavily in the account and has already obtained a credible alternative proposal from a competitor. He opens by bundling every demand together and asking for your final offer, hoping you will negotiate against yourself. You have some flexibility on payment timing and service credits, but cannot approve unlimited liability or an unconditional termination right. The commercial relationship is valuable, but a deal that looks successful on price while creating unserviceable obligations would be a failure. You must uncover priorities, separate issues, trade concessions deliberately, and establish a clear route to approval.",
+      "learningObjectives": [
+        "Identify the other party's priorities, constraints, alternatives, and decision authority before making concessions.",
+        "Separate bundled commercial issues and negotiate across price, term, scope, service levels, and payment structure.",
+        "Use conditional, reciprocal concessions rather than making unilateral discounts.",
+        "Summarise agreed terms, unresolved issues, approval dependencies, and next steps without implying that an unapproved offer is binding."
+      ],
+      "keyChallenges": [
+        "Victor asks for the lowest price, strongest service guarantees, broadest scope, and easiest termination in one package.",
+        "He reveals that a competitor has offered a lower headline price but has not confirmed equivalent support coverage.",
+        "He asks you to improve your offer before disclosing which terms matter most to his organisation.",
+        "He pressures you to confirm a liability and termination clause that falls outside your authority."
+      ],
+      "openingLine": "I have a competing proposal on my desk. Give me your best renewal terms now, and do not come back later with exceptions."
+    },
+    {
+      "builtinKey": "starter_customer_account_recovery",
+      "personaKey": "starter_jordan_ellis",
+      "title": "The Support Ticket That Was Closed While the Customer Was Locked Out",
+      "interactionType": "Customer Service",
+      "difficulty": "Advanced",
+      "context": "You are a senior customer support specialist for a subscription platform used by small businesses. Jordan Ellis runs a design business and has contacted support after being locked out of his account on the morning a major client presentation is due. He reset his password twice, received an automated email saying the issue was resolved, and then discovered that the ticket had been closed even though he still cannot access his workspace. A second problem has appeared: his payment method shows a renewal attempt that he does not recognise, and he is concerned that his saved project files may be unavailable. Jordan begins politely because he has used the service for years, but he is losing confidence as each explanation sends him to another help article. You cannot bypass identity verification, expose account data, or promise that files are intact without checking. You can coordinate a secure recovery path, explain what can be verified, and take ownership of the follow-up. Your task is to restore confidence without sacrificing account security or inventing a technical explanation.",
+      "learningObjectives": [
+        "Acknowledge the customer's repeated effort and the impact of an incorrectly closed support ticket.",
+        "Use clear, secure identity-verification steps without exposing account information or bypassing safeguards.",
+        "Separate the access problem, payment question, and file-availability concern into verifiable work items.",
+        "Provide a named owner, realistic update time, and escalation path while avoiding unsupported promises."
+      ],
+      "keyChallenges": [
+        "Jordan says the previous agent marked the issue resolved without confirming that he could log in.",
+        "He asks you to bypass verification because his client presentation is imminent; you must protect account security while offering a faster legitimate path.",
+        "The renewal attempt may be an authorisation or a completed charge, and the available information does not yet establish which.",
+        "He becomes less patient when you repeat generic troubleshooting steps instead of acknowledging what has already been tried."
+      ],
+      "openingLine": "I've already reset my password twice, and your system says my ticket is resolved. I'm still locked out. Can someone actually take ownership of this?"
+    },
+    {
+      "builtinKey": "starter_hospitality_event_recovery",
+      "personaKey": "starter_marcus_brooks",
+      "title": "The Wedding Reception With an Unverified Allergy Plan",
+      "interactionType": "Hospitality",
+      "difficulty": "Advanced",
+      "context": "You are the hotel's duty manager on a fully booked wedding weekend. The reception begins in ninety minutes. The wedding organiser has just discovered that the banquet team's final seating plan does not match the dietary requirements confirmed during the planning meetings. One guest has a serious food allergy, and the kitchen cannot currently verify which dishes and preparation surfaces are safe. At the same time, the assigned event captain has called in sick, the replacement team has not received the latest run sheet, and the organiser says the hotel promised a dedicated point of contact. The organiser is angry because guests have travelled internationally and the family has already paid for a premium package. General Manager Marcus Brooks wants an immediate briefing and a safe, credible recovery plan before he joins the organiser. You must not minimise the allergy concern, guess about ingredients, or promise that a dish is safe without kitchen verification. You must coordinate the chef, banquet manager, and event team, explain what can be confirmed, and protect the event experience while making clear decisions under time pressure.",
+      "learningObjectives": [
+        "Prioritise guest safety and obtain verified information from the responsible kitchen team before discussing food substitutions.",
+        "Acknowledge the organiser's loss of confidence and take ownership without blaming individual staff members.",
+        "Coordinate a clear chain of command, updated run sheet, dedicated contact, and timed communication checkpoints.",
+        "Offer practical event-recovery options while distinguishing confirmed arrangements from actions still awaiting verification."
+      ],
+      "keyChallenges": [
+        "Marcus asks whether the kitchen has actually verified ingredients and cross-contact controls; assumptions or verbal guesses are unacceptable.",
+        "The organiser says the hotel was paid to manage these details and refuses to repeat information already supplied during planning.",
+        "The replacement event team has an outdated run sheet, while the original event captain is unavailable.",
+        "The organiser demands a written guarantee immediately, but the kitchen has not yet completed its verification."
+      ],
+      "openingLine": "The reception starts in ninety minutes, and the dietary plan you confirmed is wrong. Before you speak to the organiser, tell me how you are making this safe."
     }
   ]
 }
