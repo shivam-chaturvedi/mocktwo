@@ -3,8 +3,47 @@ const { contextBridge, ipcRenderer } = require("electron");
 // Presage SmartSpectra preload bridge (contextIsolation & sandbox compliant)
 try {
   require("@smartspectra/node-sdk/preload");
-} catch (err) {
-  console.error("[preload] Failed to load SmartSpectra preload bridge:", err);
+} catch (_err) {
+  // In sandboxed Electron preload, bare specifiers to node_modules may fail to resolve.
+  // We provide the exact standard bridge expected by @smartspectra/node-sdk/renderer.
+  const ATTACH_CHANNEL = "smartspectra:attach";
+  let ssPort = null;
+  let ssMessageListener = null;
+
+  const onPortMessage = (event) => {
+    if (ssMessageListener) ssMessageListener(event.data);
+  };
+
+  contextBridge.exposeInMainWorld("__smartspectraBridge", {
+    diagnostics: false,
+    attach() {
+      if (ssPort) return;
+      const channel = new MessageChannel();
+      ssPort = channel.port1;
+      ssPort.onmessage = onPortMessage;
+      ipcRenderer.postMessage(ATTACH_CHANNEL, null, [channel.port2]);
+      ssPort.start();
+    },
+    postMessage(message) {
+      if (!ssPort) throw new Error("@smartspectra/node-sdk/preload: postMessage before attach()");
+      try {
+        ssPort.postMessage(message);
+      } catch (err) {
+        console.error(`[smartspectra/preload] port.postMessage failed for ${message && message.kind}:`, err);
+        throw err;
+      }
+    },
+    onMessage(callback) {
+      ssMessageListener = typeof callback === "function" ? callback : null;
+    },
+    close() {
+      if (ssPort) {
+        try { ssPort.close(); } catch { /* already closed */ }
+        ssPort = null;
+      }
+      ssMessageListener = null;
+    },
+  });
 }
 
 contextBridge.exposeInMainWorld("electronAPI", {
