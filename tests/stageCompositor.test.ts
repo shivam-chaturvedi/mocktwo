@@ -166,8 +166,9 @@ test("StageCompositor: Initializes canvas stream, mixes audio graph, updates cap
     compositor.setCaption("Dr. Amara Bennett", "Let us discuss the contract renewal.");
     compositor.setCaption("You", "I agree, let's explore terms.");
 
-    // Test teardown
+    // Test teardown idempotency
     compositor.destroy();
+    compositor.destroy(); // Second call must be a safe no-op
     assert.strictEqual(canvasStreamStopped, true, "Canvas tracks must be stopped on destroy");
     assert.strictEqual(audioContextClosed, true, "AudioContext must be closed on destroy");
   } finally {

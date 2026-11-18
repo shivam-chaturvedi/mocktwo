@@ -69,6 +69,7 @@ test("CameraManager: Hard releases source track and all registered consumer clon
 
     // 3. Release: Must hard-stop source and all consumer clones
     cameraManager.release();
+    cameraManager.release(); // Idempotent release check
 
     assert.strictEqual(sourceStopped, true, "Source track must be physically stopped");
     assert.strictEqual(clone1Stopped, true, "Clone 1 must be physically stopped");
@@ -78,6 +79,8 @@ test("CameraManager: Hard releases source track and all registered consumer clon
     assert.strictEqual(currentTrack, null, "Listeners must be notified of null track on release");
 
     unsub();
+    cameraManager.release(); // Calling after unsub should not call listener again
+    assert.strictEqual(currentTrack, null);
   } finally {
     if (originalDescriptor) {
       Object.defineProperty(globalThis, "navigator", originalDescriptor);
