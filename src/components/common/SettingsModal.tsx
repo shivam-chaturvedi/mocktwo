@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useApp } from "../../context";
 import { Button } from "./Button";
-import { EmptyState } from "./EmptyState";
 import { PermissionPrompt } from "./PermissionPrompt";
 import { usePermission } from "../../hooks/usePermission";
 import { MocktwoLogo } from "./MocktwoLogo";
@@ -9,8 +8,6 @@ import {
   X,
   Sliders,
   Mic,
-  Bell,
-  User,
   Shield,
   Film,
   Activity,
@@ -18,9 +15,10 @@ import {
   Trash2,
   FolderOpen,
   Camera,
+  Volume2,
 } from "lucide-react";
 import { WELLNESS_DISCLAIMER } from "../../services/biometrics";
-import type { AppSettings } from "../../types";
+import { playTurnSound } from "../../utils/audioFeedback";
 
 export const SettingsModal: React.FC = () => {
   const {
@@ -28,35 +26,36 @@ export const SettingsModal: React.FC = () => {
     closeSettings,
     settings,
     updateSettings,
-    user,
-    updateUser,
-    openSignOutConfirm,
     baseline,
-    measureBaseline,
     showToast,
-    isAuthenticated,
-    navigateTo,
+    openBaselineSheet,
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<"general" | "hardware" | "privacy" | "notifications" | "recordings" | "account">("general");
-  const [name, setName] = useState(user.name);
-  const [role, setRole] = useState(user.role);
-  const [workspace, setWorkspace] = useState(user.workspace || "mocktwo Workspace");
-  const [isTestingMic, setIsTestingMic] = useState(false);
-  const [isRecalibrating, setIsRecalibrating] = useState(false);
-  const [isSaved, setIsSaved] = useState(false);
+  const [activeTab, setActiveTab] = useState<"general" | "hardware" | "privacy" | "recordings">("general");
+
+  // Real Microphone Testing State
+  const [micTestingState, setMicTestingState] = useState<"idle" | "listening" | "success" | "silent">("idle");
+  const [micVolumeLevel, setMicVolumeLevel] = useState<number>(0);
+  const micStreamRef = useRef<MediaStream | null>(null);
+  const micAnimFrameRef = useRef<number | null>(null);
+
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
+  const [isClearingBuffers, setIsClearingBuffers] = useState(false);
 
-  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const micTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
+  // Clean up any ongoing microphone test when closing or switching tabs
   useEffect(() => {
     return () => {
-      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-      if (micTimeoutRef.current) clearTimeout(micTimeoutRef.current);
+      if (micStreamRef.current) {
+        micStreamRef.current.getTracks().forEach((t) => t.stop());
+        micStreamRef.current = null;
+      }
+      if (micAnimFrameRef.current) {
+        cancelAnimationFrame(micAnimFrameRef.current);
+        micAnimFrameRef.current = null;
+      }
     };
-  }, []);
+  }, [isSettingsOpen, activeTab]);
 
   const cameraPermission = usePermission("camera");
   const micPermission = usePermission("microphone");
@@ -105,30 +104,104 @@ export const SettingsModal: React.FC = () => {
 
   if (!isSettingsOpen) return null;
 
-  const handleSaveProfile = (e: React.FormEvent) => {
-    e.preventDefault();
-    updateUser({ name, role, workspace, property: workspace });
-    setIsSaved(true);
-    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-    saveTimeoutRef.current = setTimeout(() => setIsSaved(false), 2000);
-  };
-
-  const handleRecalibrateBaseline = async () => {
-    setIsRecalibrating(true);
+  // Real Microphone Audio Meter Test
+  const handleStartMicTest = async () => {
+    if (micTestingState === "listening") return;
     try {
-      await measureBaseline(30);
-    } finally {
-      setIsRecalibrating(false);
+      setMicTestingState("listening");
+      setMicVolumeLevel(0);
+
+      const constraints: MediaStreamConstraints = {
+        audio: settings.selectedMicrophone ? { deviceId: { exact: settings.selectedMicrophone } } : true,
+        video: false,
+      };
+
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      micStreamRef.current = stream;
+
+      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const ctx = new AudioCtx();
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.4;
+      source.connect(analyser);
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      let peakVolume = 0;
+      const startTime = Date.now();
+
+      const sample = () => {
+        if (!micStreamRef.current) return;
+        const elapsed = Date.now() - startTime;
+        if (elapsed > 3500) {
+          stream.getTracks().forEach((t) => t.stop());
+          micStreamRef.current = null;
+          ctx.close().catch(() => {});
+
+          if (peakVolume > 8) {
+            setMicTestingState("success");
+            showToast(`Microphone active: peak input volume was ${Math.round(peakVolume)}%`);
+          } else {
+            setMicTestingState("silent");
+            showToast("Microphone active, but no speaking volume detected.");
+          }
+
+          setTimeout(() => {
+            setMicTestingState("idle");
+            setMicVolumeLevel(0);
+          }, 3500);
+          return;
+        }
+
+        analyser.getByteFrequencyData(dataArray);
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          sum += dataArray[i];
+        }
+        const avg = sum / dataArray.length;
+        const normalized = Math.min(100, Math.round((avg / 128) * 100));
+        if (normalized > peakVolume) peakVolume = normalized;
+        setMicVolumeLevel(normalized);
+
+        micAnimFrameRef.current = requestAnimationFrame(sample);
+      };
+
+      micAnimFrameRef.current = requestAnimationFrame(sample);
+    } catch (err: any) {
+      console.warn("[SettingsModal] Test mic error:", err);
+      setMicTestingState("idle");
+      showToast("Could not access microphone: " + (err.message || "Permission required"));
     }
   };
 
-  const tabs: { id: "general" | "hardware" | "privacy" | "notifications" | "recordings" | "account"; label: string; icon: React.ReactNode }[] = [
+  const handleRecalibrateBaseline = () => {
+    closeSettings();
+    openBaselineSheet();
+  };
+
+  const handleClearCachedBuffers = async () => {
+    setIsClearingBuffers(true);
+    try {
+      if (window.electronAPI?.storage?.clearVideoCache) {
+        const res = await window.electronAPI.storage.clearVideoCache();
+        const mb = res?.clearedBytes ? (res.clearedBytes / (1024 * 1024)).toFixed(1) : "0";
+        showToast(`Cleared ${mb} MB of cached video buffers (${res?.filesRemoved || 0} temporary chunks removed)`);
+      } else {
+        showToast("Local recording cache cleared");
+      }
+    } catch (err: any) {
+      showToast("Failed to clear video cache: " + err.message);
+    } finally {
+      setIsClearingBuffers(false);
+    }
+  };
+
+  const tabs: { id: "general" | "hardware" | "privacy" | "recordings"; label: string; icon: React.ReactNode }[] = [
     { id: "general", label: "General", icon: <Sliders size={13} /> },
     { id: "hardware", label: "Audio, Video & Sensors", icon: <Mic size={13} /> },
     { id: "privacy", label: "Privacy & Data", icon: <Shield size={13} /> },
-    { id: "notifications", label: "Notifications", icon: <Bell size={13} /> },
     { id: "recordings", label: "Recordings", icon: <Film size={13} /> },
-    { id: "account", label: "Account", icon: <User size={13} /> },
   ];
 
   return (
@@ -250,53 +323,62 @@ export const SettingsModal: React.FC = () => {
           {/* GENERAL TAB */}
           {activeTab === "general" && (
             <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-              {/* Language Selection */}
+              {/* Turn-Taking Sounds */}
               <div>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <div>
-                    <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", display: "block" }}>
-                      Language
-                    </span>
-                    <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-                      Language used for counterpart voice generation and coaching reports.
-                    </span>
-                  </div>
-                  <select
-                    value={settings.language || "English (US)"}
-                    onChange={(e) => updateSettings({ language: e.target.value })}
-                    style={{
-                      padding: "6px 12px",
-                      backgroundColor: "var(--bg-control)",
-                      border: "1px solid var(--separator)",
-                      borderRadius: "var(--radius-sm)",
-                      color: "var(--text-primary)",
-                      fontSize: "12.5px",
-                      cursor: "pointer",
-                    }}
-                  >
-                    <option value="English (US)">English (US)</option>
-                    <option value="English (UK)">English (UK)</option>
-                    <option value="French">French (Français)</option>
-                    <option value="German">German (Deutsch)</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Turn-Taking Sounds */}
-              <div style={{ borderTop: "1px solid var(--separator)", paddingTop: "16px" }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <div>
+                  <div style={{ maxWidth: "460px" }}>
                     <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", display: "block" }}>
                       Turn-taking sounds
                     </span>
-                    <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-                      Subtle audio feedback when transitioning between dialogue speaking turns.
+                    <span style={{ fontSize: "12px", color: "var(--text-secondary)", lineHeight: 1.4, display: "block", marginTop: "2px" }}>
+                      Plays a subtle harmonic chime when the AI counterpart finishes speaking, indicating that it is your turn to respond.
+                    </span>
+                  </div>
+
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <button
+                      type="button"
+                      onClick={() => playTurnSound("preview")}
+                      className="mac-btn mac-btn-secondary focus-ring"
+                      style={{
+                        padding: "4px 10px",
+                        fontSize: "11px",
+                        fontWeight: 500,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "4px",
+                        cursor: "pointer",
+                      }}
+                      title="Listen to a preview of the turn chime"
+                    >
+                      <Volume2 size={12} />
+                      Test chime
+                    </button>
+                    <input
+                      type="checkbox"
+                      checked={settings.hapticFeedback}
+                      onChange={(e) => updateSettings({ hapticFeedback: e.target.checked })}
+                      style={{ width: "16px", height: "16px", cursor: "pointer" }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Reduced Motion Accessibility Option */}
+              <div style={{ borderTop: "1px solid var(--separator)", paddingTop: "16px" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div style={{ maxWidth: "460px" }}>
+                    <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", display: "block" }}>
+                      Reduce UI motion
+                    </span>
+                    <span style={{ fontSize: "12px", color: "var(--text-secondary)", lineHeight: 1.4, display: "block", marginTop: "2px" }}>
+                      Minimizes animations, pulse ring transitions, and decorative movement across windows.
                     </span>
                   </div>
                   <input
                     type="checkbox"
-                    checked={settings.hapticFeedback}
-                    onChange={(e) => updateSettings({ hapticFeedback: e.target.checked })}
+                    checked={settings.reducedMotion}
+                    onChange={(e) => updateSettings({ reducedMotion: e.target.checked })}
                     style={{ width: "16px", height: "16px", cursor: "pointer" }}
                   />
                 </div>
@@ -380,7 +462,7 @@ export const SettingsModal: React.FC = () => {
                   <label style={{ fontSize: "12.5px", fontWeight: 600, color: "var(--text-primary)", display: "block", marginBottom: "6px" }}>
                     Microphone Input
                   </label>
-                  <div style={{ display: "flex", gap: "10px" }}>
+                  <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
                     <select
                       value={settings.selectedMicrophone}
                       onChange={(e) => updateSettings({ selectedMicrophone: e.target.value })}
@@ -403,17 +485,35 @@ export const SettingsModal: React.FC = () => {
                       )}
                     </select>
                     <Button
-                      variant="secondary"
+                      variant={micTestingState === "listening" ? "primary" : "secondary"}
                       size="sm"
-                      onClick={() => {
-                        setIsTestingMic(true);
-                        if (micTimeoutRef.current) clearTimeout(micTimeoutRef.current);
-                        micTimeoutRef.current = setTimeout(() => setIsTestingMic(false), 2000);
-                      }}
+                      onClick={handleStartMicTest}
+                      disabled={micTestingState === "listening"}
+                      style={{ minWidth: "105px" }}
                     >
-                      {isTestingMic ? "Testing (98%)…" : "Test Mic"}
+                      {micTestingState === "listening" ? `Listening… ${micVolumeLevel}%` : micTestingState === "success" ? `Mic OK (${micVolumeLevel}%)` : "Test Mic"}
                     </Button>
                   </div>
+
+                  {/* Real Live Volume Meter during Test */}
+                  {micTestingState === "listening" && (
+                    <div style={{ marginTop: "8px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10.5px", color: "var(--text-tertiary)", marginBottom: "3px" }}>
+                        <span>Speak normally into your microphone...</span>
+                        <span>{micVolumeLevel}%</span>
+                      </div>
+                      <div style={{ width: "100%", height: "4px", backgroundColor: "var(--bg-control)", borderRadius: "var(--radius-full)", overflow: "hidden" }}>
+                        <div
+                          style={{
+                            width: `${micVolumeLevel}%`,
+                            height: "100%",
+                            backgroundColor: micVolumeLevel > 70 ? "var(--accent-orange)" : "var(--accent-green)",
+                            transition: "width 0.05s linear",
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -449,36 +549,12 @@ export const SettingsModal: React.FC = () => {
                 <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
                   <Activity size={15} style={{ color: "var(--accent-red)" }} />
                   <span style={{ fontSize: "13px", fontWeight: 650, color: "var(--text-primary)" }}>
-                    Camera Pulse Measurement
+                    Camera Optical Telemetry
                   </span>
                 </div>
                 <p style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: "12px", lineHeight: 1.4 }}>
-                  Measures resting pulse rate, heart rate variability (HRV), and breathing using your built-in optical camera. No external straps or hardware required.
+                  Measures resting pulse, heart rate variability (HRV), and respiration rate using your built-in optical webcam. No wearable straps or cloud processing required.
                 </p>
-
-                <div style={{ marginBottom: "12px" }}>
-                  <label style={{ fontSize: "12px", color: "var(--text-secondary)", display: "block", marginBottom: "4px" }}>
-                    Measurement Mode
-                  </label>
-                  <select
-                    value={settings.heartRateSource || "camera"}
-                    onChange={(e) => updateSettings({ heartRateSource: e.target.value as AppSettings["heartRateSource"] })}
-                    style={{
-                      width: "100%",
-                      padding: "8px 12px",
-                      backgroundColor: "var(--bg-control)",
-                      border: "1px solid var(--separator)",
-                      borderRadius: "var(--radius-sm)",
-                      color: "var(--text-primary)",
-                      fontSize: "13px",
-                    }}
-                  >
-                    <option value="camera">Optical Camera Pulse Measurement (Default)</option>
-                    <option value="mock">Precision Pulse Sensor (Simulated Hardware)</option>
-                    <option value="bluetooth">Bluetooth Strap / Apple Watch Bridge (BLE)</option>
-                    <option value="unavailable">Disabled / Do not measure biometrics</option>
-                  </select>
-                </div>
 
                 <div
                   style={{
@@ -499,7 +575,7 @@ export const SettingsModal: React.FC = () => {
                     <div style={{ fontSize: "11.5px", color: "var(--text-secondary)", marginTop: "2px" }}>
                       {baseline ? (
                         <span>
-                          Current baseline: <strong>{baseline.restingPulse || baseline.restingHR} bpm</strong> · HRV {baseline.restingHrvRmssd || baseline.restingHRV} ms
+                          Current calm baseline: <strong>{baseline.restingPulse || baseline.restingHR} bpm</strong> · Breathing {baseline.restingBreathingRate || "—"} br/m · HRV {baseline.restingHrvRmssd || baseline.restingHRV || "—"} ms
                         </span>
                       ) : (
                         "No baseline calibrated yet"
@@ -510,9 +586,8 @@ export const SettingsModal: React.FC = () => {
                     variant="secondary"
                     size="sm"
                     onClick={handleRecalibrateBaseline}
-                    disabled={isRecalibrating}
                   >
-                    {isRecalibrating ? "Measuring…" : "Recalibrate baseline"}
+                    Recalibrate baseline (90s)
                   </Button>
                 </div>
 
@@ -539,8 +614,11 @@ export const SettingsModal: React.FC = () => {
                   </div>
                   <input
                     type="checkbox"
-                    checked={false}
-                    onChange={() => showToast("Telemetry preference saved (Disabled)")}
+                    checked={Boolean(settings.telemetryEnabled)}
+                    onChange={(e) => {
+                      updateSettings({ telemetryEnabled: e.target.checked });
+                      showToast(e.target.checked ? "Anonymous diagnostics enabled" : "Anonymous diagnostics disabled");
+                    }}
                     style={{ width: "16px", height: "16px", cursor: "pointer" }}
                   />
                 </div>
@@ -595,7 +673,7 @@ export const SettingsModal: React.FC = () => {
                           Camera Access
                         </div>
                         <div style={{ fontSize: "11.5px", color: "var(--text-secondary)" }}>
-                          Used exclusively for local optical pulse and composure estimation
+                          Used exclusively for local optical pulse, breathing, and composure sensing
                         </div>
                       </div>
                     </div>
@@ -764,9 +842,10 @@ export const SettingsModal: React.FC = () => {
                     variant="secondary"
                     size="sm"
                     icon={<FolderOpen size={12} />}
-                    onClick={() => {
+                    onClick={async () => {
                       if (window.electronAPI?.revealLogs) {
-                        window.electronAPI.revealLogs();
+                        showToast("Opening logs directory in Finder...");
+                        await window.electronAPI.revealLogs();
                       }
                     }}
                   >
@@ -797,36 +876,7 @@ export const SettingsModal: React.FC = () => {
             </div>
           )}
 
-          {/* NOTIFICATIONS TAB */}
-          {activeTab === "notifications" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingBottom: "14px", borderBottom: "1px solid var(--separator)" }}>
-                <div>
-                  <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", display: "block" }}>
-                    Daily Practice Reminders
-                  </span>
-                  <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-                    Receive a notification before your workday to rehearse upcoming high-stakes talks.
-                  </span>
-                </div>
-                <input type="checkbox" defaultChecked style={{ width: "16px", height: "16px" }} />
-              </div>
-
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <div>
-                  <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", display: "block" }}>
-                    Streak Protection
-                  </span>
-                  <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-                    Notify if daily rehearsal streak is at risk before 20:00.
-                  </span>
-                </div>
-                <input type="checkbox" defaultChecked style={{ width: "16px", height: "16px" }} />
-              </div>
-            </div>
-          )}
-
-          {/* RECORDINGS & PRIVACY TAB */}
+          {/* RECORDINGS TAB */}
           {activeTab === "recordings" && (
             <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
               <div>
@@ -839,7 +889,20 @@ export const SettingsModal: React.FC = () => {
 
                 <select
                   value={settings.recordingsRetentionDays || 90}
-                  onChange={(e) => updateSettings({ recordingsRetentionDays: Number(e.target.value) })}
+                  onChange={async (e) => {
+                    const days = Number(e.target.value);
+                    updateSettings({ recordingsRetentionDays: days });
+                    if (days > 0 && window.electronAPI?.storage?.enforceRetention) {
+                      const res = await window.electronAPI.storage.enforceRetention(days);
+                      if (res?.deletedCount && res.deletedCount > 0) {
+                        showToast(`Retention policy applied: Removed ${res.deletedCount} recordings older than ${days} days.`);
+                      } else {
+                        showToast(`Retention policy updated: Keep recordings for ${days} days.`);
+                      }
+                    } else if (days === 0) {
+                      showToast("Retention policy updated: Never auto-delete.");
+                    }
+                  }}
                   style={{
                     width: "100%",
                     padding: "8px 12px",
@@ -848,6 +911,7 @@ export const SettingsModal: React.FC = () => {
                     borderRadius: "var(--radius-sm)",
                     color: "var(--text-primary)",
                     fontSize: "13px",
+                    cursor: "pointer",
                   }}
                 >
                   <option value={30}>Keep for 30 days, then delete</option>
@@ -884,119 +948,13 @@ export const SettingsModal: React.FC = () => {
                 <Button
                   variant="secondary"
                   size="sm"
-                  onClick={() => showToast("Local recording cache cleared")}
+                  disabled={isClearingBuffers}
+                  onClick={handleClearCachedBuffers}
                 >
-                  Clear Cached Video Buffers
+                  {isClearingBuffers ? "Clearing…" : "Clear Cached Video Buffers"}
                 </Button>
               </div>
             </div>
-          )}
-
-          {/* ACCOUNT TAB */}
-          {activeTab === "account" && (
-            !isAuthenticated || !user.email ? (
-              <EmptyState
-                icon={<User size={24} />}
-                title="Not signed in"
-                description="Sign in with your work email to access your workspace scenarios, records, and team settings."
-                primaryAction={{
-                  label: "Sign In",
-                  onClick: () => {
-                    closeSettings();
-                    navigateTo("sign-in");
-                  },
-                }}
-              />
-            ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-              <form onSubmit={handleSaveProfile} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-                <div>
-                  <label style={{ fontSize: "12px", color: "var(--text-secondary)", display: "block", marginBottom: "4px" }}>
-                    Full Name
-                  </label>
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    style={{
-                      width: "100%",
-                      padding: "7px 10px",
-                      backgroundColor: "var(--bg-control)",
-                      border: "1px solid var(--separator)",
-                      borderRadius: "var(--radius-sm)",
-                      color: "var(--text-primary)",
-                      fontSize: "13px",
-                    }}
-                  />
-                </div>
-
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                  <div>
-                    <label style={{ fontSize: "12px", color: "var(--text-secondary)", display: "block", marginBottom: "4px" }}>
-                      Role Title
-                    </label>
-                    <input
-                      type="text"
-                      value={role}
-                      onChange={(e) => setRole(e.target.value)}
-                      style={{
-                        width: "100%",
-                        padding: "7px 10px",
-                        backgroundColor: "var(--bg-control)",
-                        border: "1px solid var(--separator)",
-                        borderRadius: "var(--radius-sm)",
-                        color: "var(--text-primary)",
-                        fontSize: "13px",
-                      }}
-                    />
-                  </div>
-
-                  <div>
-                    <label style={{ fontSize: "12px", color: "var(--text-secondary)", display: "block", marginBottom: "4px" }}>
-                      Workspace
-                    </label>
-                    <input
-                      type="text"
-                      value={workspace}
-                      onChange={(e) => setWorkspace(e.target.value)}
-                      style={{
-                        width: "100%",
-                        padding: "7px 10px",
-                        backgroundColor: "var(--bg-control)",
-                        border: "1px solid var(--separator)",
-                        borderRadius: "var(--radius-sm)",
-                        color: "var(--text-primary)",
-                        fontSize: "13px",
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: "8px" }}>
-                  <span style={{ fontSize: "11.5px", color: isSaved ? "var(--accent-green)" : "var(--text-tertiary)" }}>
-                    {isSaved ? "Saved" : `User ID: ${user.userId || "USR-0001"}`}
-                  </span>
-                  <Button type="submit" variant="primary" size="sm">
-                    Save Profile
-                  </Button>
-                </div>
-              </form>
-
-              <div style={{ borderTop: "1px solid var(--separator)", paddingTop: "14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div>
-                  <span style={{ fontSize: "12.5px", fontWeight: 600, color: "var(--accent-red)", display: "block" }}>
-                    Sign Out of mocktwo
-                  </span>
-                  <span style={{ fontSize: "11.5px", color: "var(--text-secondary)" }}>
-                    Sign out of this workspace on this Mac.
-                  </span>
-                </div>
-                <Button variant="outline" size="sm" onClick={openSignOutConfirm} style={{ color: "var(--accent-red)" }}>
-                  Sign Out…
-                </Button>
-              </div>
-            </div>
-            )
           )}
         </div>
       </div>

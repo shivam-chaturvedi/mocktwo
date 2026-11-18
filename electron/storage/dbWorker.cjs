@@ -2193,6 +2193,61 @@ parentPort.on("message", ({ id, type, payload }) => {
         break;
       }
 
+      case "recordings:enforce-retention": {
+        const days = Number(payload);
+        if (days && days > 0) {
+          const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+          const expired = db.prepare("SELECT id, video_path, audio_path FROM recordings WHERE created_at < ?").all(cutoff);
+          let deletedCount = 0;
+          for (const exp of expired) {
+            try {
+              db.prepare("DELETE FROM recordings WHERE id = ?").run(exp.id);
+              const sessionDir = path.join(recordingsDir, "sessions", exp.id);
+              if (fs.existsSync(sessionDir)) {
+                fs.rmSync(sessionDir, { recursive: true, force: true });
+              }
+              if (exp.audio_path && fs.existsSync(exp.audio_path)) {
+                fs.unlinkSync(exp.audio_path);
+              }
+              deletedCount++;
+            } catch (err) {
+              console.warn("[dbWorker] Retention cleanup error for", exp.id, err.message);
+            }
+          }
+          result = { deletedCount };
+        } else {
+          result = { deletedCount: 0 };
+        }
+        break;
+      }
+
+      case "recordings:clear-video-cache": {
+        let clearedBytes = 0;
+        let filesRemoved = 0;
+        const cacheDirs = [
+          path.join(recordingsDir, "quarantine"),
+          path.join(recordingsDir, "temp"),
+        ];
+        for (const dir of cacheDirs) {
+          if (fs.existsSync(dir)) {
+            try {
+              const entries = fs.readdirSync(dir);
+              for (const entry of entries) {
+                const fullPath = path.join(dir, entry);
+                try {
+                  const stat = fs.statSync(fullPath);
+                  clearedBytes += stat.size;
+                  fs.rmSync(fullPath, { recursive: true, force: true });
+                  filesRemoved++;
+                } catch {}
+              }
+            } catch {}
+          }
+        }
+        result = { clearedBytes, filesRemoved };
+        break;
+      }
+
       case "recordings:add-note": {
         const { recordingId, note } = payload || {};
         if (!recordingId || !note) {

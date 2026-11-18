@@ -343,11 +343,6 @@ function buildMenu() {
                 click: () => sendAction("open-settings-privacy"),
               },
               { type: "separator" },
-              {
-                label: "Sign Out…",
-                click: () => sendAction("sign-out"),
-              },
-              { type: "separator" },
               { role: "services" },
               { type: "separator" },
               { role: "hide", label: "Hide mocktwo" },
@@ -1360,6 +1355,26 @@ ipcMain.handle("storage:delete-recording", async (event, id) => {
   } catch (err) {
     writeLogEntry("warn", "ipc:storage:delete-recording", err.message);
     return false;
+  }
+});
+
+ipcMain.handle("storage:enforce-retention", async (event, days) => {
+  try {
+    if (!isValidSender(event) || !storageManager) return { deletedCount: 0 };
+    return await storageManager.execute("recordings:enforce-retention", days);
+  } catch (err) {
+    writeLogEntry("warn", "ipc:storage:enforce-retention", err.message);
+    return { deletedCount: 0 };
+  }
+});
+
+ipcMain.handle("storage:clear-video-cache", async (event) => {
+  try {
+    if (!isValidSender(event) || !storageManager) return { clearedBytes: 0, filesRemoved: 0 };
+    return await storageManager.execute("recordings:clear-video-cache");
+  } catch (err) {
+    writeLogEntry("warn", "ipc:storage:clear-video-cache", err.message);
+    return { clearedBytes: 0, filesRemoved: 0 };
   }
 });
 

@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { VALIDATION_HINTS, type ValidationStatusCode } from "../types";
 import { CameraOffWarningModal } from "../components/common/CameraOffWarningModal";
+import { playTurnSound } from "../utils/audioFeedback";
 import { CviSession, type CviUtterance, type CviUtteranceStreaming, type CviSpeakingEvent } from "../services/tavus/cviSession";
 import { StageCompositor } from "../services/recording/stageCompositor";
 
@@ -56,7 +57,8 @@ interface CviBlockingError {
 }
 
 export const LiveSimulationScreen: React.FC = () => {
-  const { selectedScenario, activeSessionPersona, finishSimulation, user, activeSessionId, navigateTo } = useApp();
+  const { selectedScenario, activeSessionPersona, finishSimulation, user, activeSessionId, navigateTo, settings } = useApp();
+  const prevCounterpartSpeakingRef = useRef<boolean>(false);
 
   const currentPersona = useMemo(() => {
     return (
@@ -577,7 +579,12 @@ export const LiveSimulationScreen: React.FC = () => {
         },
         onSpeaking: (speakingEvent: CviSpeakingEvent) => {
           if (speakingEvent.role === "persona") {
+            const wasSpeaking = prevCounterpartSpeakingRef.current;
+            prevCounterpartSpeakingRef.current = speakingEvent.speaking;
             setCounterpartSpeaking(speakingEvent.speaking);
+            if (wasSpeaking && !speakingEvent.speaking && settings?.hapticFeedback) {
+              playTurnSound("your-turn");
+            }
           }
         },
         onError: (err) => {

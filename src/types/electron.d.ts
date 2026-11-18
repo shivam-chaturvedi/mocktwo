@@ -82,6 +82,8 @@ export interface ElectronAPI {
     onBaselineChange?: (callback: (baseline: any) => void) => () => void;
     getSettings: () => Promise<Record<string, any>>;
     setSetting: (key: string, value: any) => Promise<boolean>;
+    enforceRetention?: (days: number) => Promise<{ deletedCount: number }>;
+    clearVideoCache?: () => Promise<{ clearedBytes: number; filesRemoved: number }>;
     clearAllData: () => Promise<boolean>;
     checkFreeSpace: () => Promise<number>;
     getStreakDates: () => Promise<string[]>;

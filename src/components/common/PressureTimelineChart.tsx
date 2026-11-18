@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import {
   ResponsiveContainer,
   LineChart,
@@ -16,8 +16,9 @@ import {
   formatTimeSeconds,
   type TimelinePoint,
 } from "../../services/timelineAdapter";
-import { Activity, AlertTriangle, ShieldCheck } from "lucide-react";
+import { Activity, AlertTriangle, ShieldCheck, Info } from "lucide-react";
 import { WELLNESS_DISCLAIMER } from "../../services/biometrics";
+import { TimelineExplainerModal } from "./TimelineExplainerModal";
 
 interface PressureTimelineChartProps {
   biometrics: SessionBiometrics | undefined | null;
@@ -139,6 +140,7 @@ export const PressureTimelineChart: React.FC<PressureTimelineChartProps> = ({
   onSeek,
   style,
 }) => {
+  const [showExplainer, setShowExplainer] = useState(false);
   const timeline = useMemo(
     () => buildTimelineSeries(biometrics, durationSeconds, baselinePulse),
     [biometrics, durationSeconds, baselinePulse]
@@ -277,6 +279,27 @@ export const PressureTimelineChart: React.FC<PressureTimelineChartProps> = ({
             >
               {timeline.status}
             </span>
+            <button
+              onClick={() => setShowExplainer(true)}
+              aria-label="How pressure timeline is calculated"
+              title="Understanding Pressure Timeline"
+              className="hover-subtle focus-ring"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: "20px",
+                height: "20px",
+                borderRadius: "50%",
+                backgroundColor: "var(--bg-control)",
+                border: "1px solid var(--separator)",
+                color: "var(--text-secondary)",
+                cursor: "pointer",
+                padding: 0,
+              }}
+            >
+              <Info size={11} />
+            </button>
           </div>
           <div style={{ fontSize: "11px", color: "var(--text-secondary)", marginTop: "2px" }}>
             Pulse (12 s average) and arousal (EDA proxy)
@@ -583,12 +606,39 @@ export const PressureTimelineChart: React.FC<PressureTimelineChartProps> = ({
           color: "var(--text-tertiary)",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-          <ShieldCheck size={11} />
-          <span>{WELLNESS_DISCLAIMER}</span>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+            <ShieldCheck size={11} />
+            <span>{WELLNESS_DISCLAIMER}</span>
+          </div>
+          <button
+            onClick={() => setShowExplainer(true)}
+            className="hover-subtle focus-ring"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "4px",
+              background: "none",
+              border: "none",
+              padding: "1px 5px",
+              borderRadius: "var(--radius-xs)",
+              color: "var(--accent-blue)",
+              fontSize: "10px",
+              fontWeight: 500,
+              cursor: "pointer",
+            }}
+          >
+            <Info size={11} />
+            <span>How readings are calculated</span>
+          </button>
         </div>
         <span>0:00 to 0:12s shaded as sensor warm-up window</span>
       </div>
+
+      <TimelineExplainerModal
+        isOpen={showExplainer}
+        onClose={() => setShowExplainer(false)}
+      />
     </div>
   );
 };

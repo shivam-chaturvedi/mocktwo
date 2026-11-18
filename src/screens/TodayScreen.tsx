@@ -30,6 +30,10 @@ import {
   Info,
 } from "lucide-react";
 import { ComposureExplainerModal } from "../components/common/ComposureExplainerModal";
+import {
+  MetricExplainerModal,
+  type MetricType,
+} from "../components/common/MetricExplainerModal";
 
 type QuickStartVariant = "A" | "B" | "C" | "D";
 
@@ -60,6 +64,7 @@ export const TodayScreen: React.FC = () => {
   } = useApp();
 
   const [showComposureExplainer, setShowComposureExplainer] = useState(false);
+  const [explainingMetric, setExplainingMetric] = useState<MetricType | null>(null);
 
   // Time-aware greeting
   const [{ greeting, formattedDate }] = useState(() => {
@@ -1304,17 +1309,65 @@ export const TodayScreen: React.FC = () => {
                     }}
                   >
                     <div>
-                      <span style={{ fontSize: "9px", color: "var(--text-tertiary)", textTransform: "uppercase", display: "block" }}>
-                        30-Day Avg
-                      </span>
+                      <div style={{ display: "flex", alignItems: "center", gap: "3px" }}>
+                        <span style={{ fontSize: "9px", color: "var(--text-tertiary)", textTransform: "uppercase" }}>
+                          30-Day Avg
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setShowComposureExplainer(true)}
+                          aria-label="Explain 30-Day Average Composure"
+                          title="What is composure score and how is it calculated?"
+                          className="hover-subtle focus-ring"
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            width: "12px",
+                            height: "12px",
+                            borderRadius: "50%",
+                            backgroundColor: "transparent",
+                            border: "none",
+                            color: "var(--text-tertiary)",
+                            cursor: "pointer",
+                            padding: 0,
+                          }}
+                        >
+                          <Info size={10} />
+                        </button>
+                      </div>
                       <span className="tabular-nums" style={{ fontSize: "11.5px", fontWeight: 700, color: "var(--text-primary)" }}>
                         {real30DayAvg !== null ? `${real30DayAvg}%` : "—"}
                       </span>
                     </div>
                     <div>
-                      <span style={{ fontSize: "9px", color: "var(--text-tertiary)", textTransform: "uppercase", display: "block" }}>
-                        Recovery
-                      </span>
+                      <div style={{ display: "flex", alignItems: "center", gap: "3px" }}>
+                        <span style={{ fontSize: "9px", color: "var(--text-tertiary)", textTransform: "uppercase" }}>
+                          Recovery
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setExplainingMetric("recovery")}
+                          aria-label="Explain Autonomic Recovery"
+                          title="What is Recovery and how is it measured?"
+                          className="hover-subtle focus-ring"
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            width: "12px",
+                            height: "12px",
+                            borderRadius: "50%",
+                            backgroundColor: "transparent",
+                            border: "none",
+                            color: "var(--text-tertiary)",
+                            cursor: "pointer",
+                            padding: 0,
+                          }}
+                        >
+                          <Info size={10} />
+                        </button>
+                      </div>
                       <span className="tabular-nums" style={{ fontSize: "11.5px", fontWeight: 700, color: "var(--text-primary)" }}>
                         {latestCompleted?.sessionBiometrics?.recoverySecondsApprox != null
                           ? `${latestCompleted.sessionBiometrics.recoverySecondsApprox}s`
@@ -1843,6 +1896,12 @@ export const TodayScreen: React.FC = () => {
       <ComposureExplainerModal
         isOpen={showComposureExplainer}
         onClose={() => setShowComposureExplainer(false)}
+      />
+
+      <MetricExplainerModal
+        isOpen={explainingMetric !== null}
+        metricType={explainingMetric}
+        onClose={() => setExplainingMetric(null)}
       />
     </div>
   );

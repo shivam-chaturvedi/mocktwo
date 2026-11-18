@@ -15,6 +15,19 @@ import { getComposureTier } from "../types";
 import { WELLNESS_DISCLAIMER } from "../services/biometrics";
 import { EmptyState } from "../components/common/EmptyState";
 import { ComposureExplainerModal } from "../components/common/ComposureExplainerModal";
+import {
+  MetricExplainerModal,
+  type MetricType,
+} from "../components/common/MetricExplainerModal";
+
+function getMetricTypeFromSkillName(name: string): MetricType {
+  const lower = name.toLowerCase();
+  if (lower.includes("recovery")) return "recovery";
+  if (lower.includes("pulse")) return "pulse";
+  if (lower.includes("autonomic")) return "autonomic_balance";
+  if (lower.includes("expression")) return "expression_calm";
+  return "composure";
+}
 
 export const ProgressScreen: React.FC = () => {
   const {
@@ -30,6 +43,7 @@ export const ProgressScreen: React.FC = () => {
   const [activeTab, setActiveTab] = useState<"overview" | "skills" | "breakdown">("overview");
   const [timeRange, setTimeRange] = useState<"7D" | "30D" | "90D" | "All">("30D");
   const [showExplainer, setShowExplainer] = useState(false);
+  const [explainingMetric, setExplainingMetric] = useState<MetricType | null>(null);
 
   const completedRecordings = useMemo(() => {
     const now = Date.now();
@@ -144,6 +158,13 @@ export const ProgressScreen: React.FC = () => {
     const delta = scores.length > 1 ? scores[0] - scores[scores.length - 1] : 0;
     const trendText = scores.length > 1 ? (delta >= 0 ? `+${delta}%` : `${delta}%`) : scores.length === 1 ? "Baseline" : "No data";
 
+    const avgHrvVal = recentHrvSessions.length > 0
+      ? Math.round(recentHrvSessions.reduce((acc, s) => acc + s.val, 0) / recentHrvSessions.length)
+      : null;
+    const autonomicScore = avgHrvVal !== null && baselineHrv !== null && baselineHrv > 0
+      ? Math.max(40, Math.min(100, Math.round((avgHrvVal / baselineHrv) * 100)))
+      : avgScore;
+
     return [
       {
         name: "Composure" as const,
@@ -168,10 +189,12 @@ export const ProgressScreen: React.FC = () => {
       },
       {
         name: "Autonomic balance" as const,
-        score: avgScore,
+        score: autonomicScore,
         trend: trendText,
-        level: getLevel(avgScore),
-        plainNote: "Resting nervous-system balance (HRV RMSSD vs your resting baseline).",
+        level: getLevel(autonomicScore),
+        plainNote: avgHrvVal !== null
+          ? `Vagal autonomic balance (avg ${avgHrvVal} ms HRV RMSSD across 60s+ rehearsals).`
+          : "Resting nervous-system balance (requires ≥ 60s steady session reads).",
       },
       {
         name: "Expression calm" as const,
@@ -181,7 +204,7 @@ export const ProgressScreen: React.FC = () => {
         plainNote: "Maintaining relaxed facial micro-expressions without visible signs of tension.",
       },
     ];
-  }, [completedRecordings, avgComposure, avgRecoverySeconds, avgPulseBpm, baselinePulse]);
+  }, [completedRecordings, avgComposure, avgRecoverySeconds, avgPulseBpm, baselinePulse, recentHrvSessions, baselineHrv]);
 
   // Dynamically derived Category Performance from completed recordings
   const categoryPerformance = useMemo(() => {
@@ -500,14 +523,62 @@ export const ProgressScreen: React.FC = () => {
                       </span>
                     </div>
                     <div style={{ padding: "8px 10px", borderRadius: "var(--radius-sm)", backgroundColor: "var(--bg-control)" }}>
-                      <span style={{ fontSize: "10.5px", color: "var(--text-tertiary)", display: "block" }}>Avg Recovery</span>
-                      <span className="tabular-nums" style={{ fontSize: "14px", fontWeight: 650, color: "var(--accent-green)" }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                        <span style={{ fontSize: "10.5px", color: "var(--text-tertiary)" }}>Avg Recovery</span>
+                        <button
+                          type="button"
+                          onClick={() => setExplainingMetric("recovery")}
+                          aria-label="Explain Autonomic Recovery"
+                          title="What is recovery and how is it measured?"
+                          className="hover-subtle focus-ring"
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            width: "14px",
+                            height: "14px",
+                            borderRadius: "50%",
+                            backgroundColor: "transparent",
+                            border: "none",
+                            color: "var(--text-tertiary)",
+                            cursor: "pointer",
+                            padding: 0,
+                          }}
+                        >
+                          <Info size={11} />
+                        </button>
+                      </div>
+                      <span className="tabular-nums" style={{ fontSize: "14px", fontWeight: 650, color: "var(--accent-green)", display: "block", marginTop: "2px" }}>
                         {avgRecoverySeconds !== null ? `${avgRecoverySeconds}s` : "—"}
                       </span>
                     </div>
                     <div style={{ padding: "8px 10px", borderRadius: "var(--radius-sm)", backgroundColor: "var(--bg-control)" }}>
-                      <span style={{ fontSize: "10.5px", color: "var(--text-tertiary)", display: "block" }}>Avg Pulse</span>
-                      <span className="tabular-nums" style={{ fontSize: "14px", fontWeight: 650, color: "var(--accent-blue)" }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                        <span style={{ fontSize: "10.5px", color: "var(--text-tertiary)" }}>Avg Pulse</span>
+                        <button
+                          type="button"
+                          onClick={() => setExplainingMetric("pulse")}
+                          aria-label="Explain Average Pulse"
+                          title="How pulse is measured"
+                          className="hover-subtle focus-ring"
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            width: "14px",
+                            height: "14px",
+                            borderRadius: "50%",
+                            backgroundColor: "transparent",
+                            border: "none",
+                            color: "var(--text-tertiary)",
+                            cursor: "pointer",
+                            padding: 0,
+                          }}
+                        >
+                          <Info size={11} />
+                        </button>
+                      </div>
+                      <span className="tabular-nums" style={{ fontSize: "14px", fontWeight: 650, color: "var(--accent-blue)", display: "block", marginTop: "2px" }}>
                         {avgPulseBpm !== null ? `${avgPulseBpm} bpm` : "—"}
                       </span>
                     </div>
@@ -525,9 +596,33 @@ export const ProgressScreen: React.FC = () => {
                       }}
                     >
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
-                        <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-primary)" }}>
-                          Pulse vs baseline
-                        </span>
+                        <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                          <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-primary)" }}>
+                            Pulse vs baseline
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setExplainingMetric("pulse")}
+                            aria-label="Explain Pulse Metric"
+                            title="How pulse is measured vs baseline"
+                            className="hover-subtle focus-ring"
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              width: "13px",
+                              height: "13px",
+                              borderRadius: "50%",
+                              backgroundColor: "transparent",
+                              border: "none",
+                              color: "var(--text-tertiary)",
+                              cursor: "pointer",
+                              padding: 0,
+                            }}
+                          >
+                            <Info size={10} />
+                          </button>
+                        </div>
                         <span style={{ fontSize: "10.5px", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)" }}>
                           Rest: {baselinePulse != null ? `${baselinePulse} bpm` : "Not set"}
                         </span>
@@ -565,9 +660,33 @@ export const ProgressScreen: React.FC = () => {
                       }}
                     >
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
-                        <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-primary)" }}>
-                          HRV vs baseline (≥60s)
-                        </span>
+                        <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                          <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-primary)" }}>
+                            HRV vs baseline (≥60s)
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setExplainingMetric("hrv")}
+                            aria-label="Explain HRV Metric"
+                            title="How HRV is measured and calculated"
+                            className="hover-subtle focus-ring"
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              width: "13px",
+                              height: "13px",
+                              borderRadius: "50%",
+                              backgroundColor: "transparent",
+                              border: "none",
+                              color: "var(--text-tertiary)",
+                              cursor: "pointer",
+                              padding: 0,
+                            }}
+                          >
+                            <Info size={10} />
+                          </button>
+                        </div>
                         <span style={{ fontSize: "10.5px", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)" }}>
                           Rest: {baselineHrv != null ? `${baselineHrv} ms` : "Not set"}
                         </span>
@@ -750,6 +869,28 @@ export const ProgressScreen: React.FC = () => {
                         <span style={{ fontSize: "13.5px", fontWeight: 600, color: "var(--text-primary)" }}>
                           {skill.name}
                         </span>
+                        <button
+                          type="button"
+                          onClick={() => setExplainingMetric(getMetricTypeFromSkillName(skill.name))}
+                          aria-label={`Explain ${skill.name}`}
+                          title={`Learn how ${skill.name} is measured and scored`}
+                          className="hover-subtle focus-ring"
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            width: "15px",
+                            height: "15px",
+                            borderRadius: "50%",
+                            backgroundColor: "transparent",
+                            border: "none",
+                            color: "var(--text-tertiary)",
+                            cursor: "pointer",
+                            padding: 0,
+                          }}
+                        >
+                          <Info size={11} />
+                        </button>
                         <span
                           style={{
                             fontSize: "10.5px",
@@ -936,6 +1077,12 @@ export const ProgressScreen: React.FC = () => {
       <ComposureExplainerModal
         isOpen={showExplainer}
         onClose={() => setShowExplainer(false)}
+      />
+
+      <MetricExplainerModal
+        isOpen={explainingMetric !== null}
+        metricType={explainingMetric}
+        onClose={() => setExplainingMetric(null)}
       />
     </div>
   );

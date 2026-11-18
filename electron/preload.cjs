@@ -119,6 +119,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     },
     getSettings: () => ipcRenderer.invoke("storage:get-settings"),
     setSetting: (key, value) => ipcRenderer.invoke("storage:set-setting", { key, value }),
+    enforceRetention: (days) => ipcRenderer.invoke("storage:enforce-retention", days),
+    clearVideoCache: () => ipcRenderer.invoke("storage:clear-video-cache"),
     clearAllData: () => ipcRenderer.invoke("storage:clear-all"),
     checkFreeSpace: () => ipcRenderer.invoke("storage:check-space"),
     getStreakDates: () => ipcRenderer.invoke("storage:get-streak-dates"),

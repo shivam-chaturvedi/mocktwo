@@ -28,6 +28,19 @@ import {
 import { WELLNESS_DISCLAIMER } from "../services/biometrics";
 import { serviceRegistry } from "../services/api";
 import { ComposureExplainerModal } from "../components/common/ComposureExplainerModal";
+import {
+  MetricExplainerModal,
+  type MetricType,
+} from "../components/common/MetricExplainerModal";
+
+function getMetricTypeFromSkillName(name: string): MetricType {
+  const lower = name.toLowerCase();
+  if (lower.includes("recovery")) return "recovery";
+  if (lower.includes("pulse")) return "pulse";
+  if (lower.includes("autonomic")) return "autonomic_balance";
+  if (lower.includes("expression")) return "expression_calm";
+  return "composure";
+}
 
 export const RecordingsScreen: React.FC = () => {
   const {
@@ -57,6 +70,7 @@ export const RecordingsScreen: React.FC = () => {
   const [inspectorTab, setInspectorTab] = useState<"coaching" | "analytics">("coaching");
   const [noteInput, setNoteInput] = useState("");
   const [showExplainer, setShowExplainer] = useState(false);
+  const [explainingMetric, setExplainingMetric] = useState<MetricType | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [hasVideoError, setHasVideoError] = useState(false);
 
@@ -988,7 +1002,10 @@ export const RecordingsScreen: React.FC = () => {
                             </div>
                             <button
                               type="button"
-                              onClick={() => setShowExplainer(true)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setShowExplainer(true);
+                              }}
                               aria-label="Learn how composure score is calculated and what Steady means"
                               title="What is composure score and how is it calculated?"
                               className="mac-btn focus-ring"
@@ -1127,9 +1144,36 @@ export const RecordingsScreen: React.FC = () => {
                             }}
                           >
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                              <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-primary)" }}>
-                                {skill.name}
-                              </span>
+                              <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                                <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-primary)" }}>
+                                  {skill.name}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setExplainingMetric(getMetricTypeFromSkillName(skill.name));
+                                  }}
+                                  aria-label={`Explain ${skill.name}`}
+                                  title={`Learn how ${skill.name} is measured and calculated`}
+                                  className="hover-subtle focus-ring"
+                                  style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    width: "14px",
+                                    height: "14px",
+                                    borderRadius: "50%",
+                                    backgroundColor: "transparent",
+                                    border: "none",
+                                    color: "var(--text-tertiary)",
+                                    cursor: "pointer",
+                                    padding: 0,
+                                  }}
+                                >
+                                  <Info size={10} />
+                                </button>
+                              </div>
                               <span className="tabular-nums" style={{ fontSize: "12px", fontWeight: 700, color: skill.score >= 80 ? "var(--accent-green)" : "var(--accent-orange)" }}>
                                 {skill.score > 0 ? `${skill.score}%` : "—"}
                               </span>
@@ -1335,7 +1379,31 @@ export const RecordingsScreen: React.FC = () => {
                         {/* Pulse */}
                         <div style={{ padding: "10px", borderRadius: "var(--radius-sm)", backgroundColor: "var(--bg-elevated)", border: "1px solid var(--separator)" }}>
                           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                            <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>Pulse (Avg / Peak)</span>
+                            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                              <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>Pulse (Avg / Peak)</span>
+                              <button
+                                type="button"
+                                onClick={() => setExplainingMetric("pulse")}
+                                aria-label="Explain Pulse"
+                                title="How pulse is measured and calculated"
+                                className="hover-subtle focus-ring"
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  width: "14px",
+                                  height: "14px",
+                                  borderRadius: "50%",
+                                  backgroundColor: "transparent",
+                                  border: "none",
+                                  color: "var(--text-tertiary)",
+                                  cursor: "pointer",
+                                  padding: 0,
+                                }}
+                              >
+                                <Info size={11} />
+                              </button>
+                            </div>
                             {renderStateBadge(biometrics?.pulse?.state || "measured")}
                           </div>
                           <div className="tabular-nums" style={{ fontSize: "16px", fontWeight: 700, color: "var(--text-primary)", marginTop: "2px" }}>
@@ -1349,7 +1417,31 @@ export const RecordingsScreen: React.FC = () => {
                         {/* HRV (RMSSD, Only 60s reached) */}
                         <div style={{ padding: "10px", borderRadius: "var(--radius-sm)", backgroundColor: "var(--bg-elevated)", border: "1px solid var(--separator)" }}>
                           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                            <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>HRV (RMSSD)</span>
+                            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                              <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>HRV (RMSSD)</span>
+                              <button
+                                type="button"
+                                onClick={() => setExplainingMetric("hrv")}
+                                aria-label="Explain HRV RMSSD"
+                                title="How Heart Rate Variability is measured"
+                                className="hover-subtle focus-ring"
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  width: "14px",
+                                  height: "14px",
+                                  borderRadius: "50%",
+                                  backgroundColor: "transparent",
+                                  border: "none",
+                                  color: "var(--text-tertiary)",
+                                  cursor: "pointer",
+                                  padding: 0,
+                                }}
+                              >
+                                <Info size={11} />
+                              </button>
+                            </div>
                             {renderStateBadge(biometrics?.hrv?.state || "notEnoughTime", biometrics?.hrv?.confidence)}
                           </div>
                           <div className="tabular-nums" style={{ fontSize: "16px", fontWeight: 700, color: "var(--text-primary)", marginTop: "2px" }}>
@@ -1365,7 +1457,31 @@ export const RecordingsScreen: React.FC = () => {
                         {/* Baevsky Index */}
                         <div style={{ padding: "10px", borderRadius: "var(--radius-sm)", backgroundColor: "var(--bg-elevated)", border: "1px solid var(--separator)" }}>
                           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                            <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>Baevsky Index</span>
+                            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                              <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>Baevsky Index</span>
+                              <button
+                                type="button"
+                                onClick={() => setExplainingMetric("baevsky")}
+                                aria-label="Explain Baevsky Stress Index"
+                                title="How Baevsky Index is calculated"
+                                className="hover-subtle focus-ring"
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  width: "14px",
+                                  height: "14px",
+                                  borderRadius: "50%",
+                                  backgroundColor: "transparent",
+                                  border: "none",
+                                  color: "var(--text-tertiary)",
+                                  cursor: "pointer",
+                                  padding: 0,
+                                }}
+                              >
+                                <Info size={11} />
+                              </button>
+                            </div>
                             {renderStateBadge(biometrics?.hrv?.state || "notEnoughTime")}
                           </div>
                           <div className="tabular-nums" style={{ fontSize: "16px", fontWeight: 700, color: "var(--accent-blue)", marginTop: "2px" }}>
@@ -1379,7 +1495,31 @@ export const RecordingsScreen: React.FC = () => {
                         {/* Recovery approx */}
                         <div style={{ padding: "10px", borderRadius: "var(--radius-sm)", backgroundColor: "var(--bg-elevated)", border: "1px solid var(--separator)" }}>
                           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                            <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>Recovery (approx.)</span>
+                            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                              <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>Recovery (approx.)</span>
+                              <button
+                                type="button"
+                                onClick={() => setExplainingMetric("recovery")}
+                                aria-label="Explain Autonomic Recovery"
+                                title="How recovery latency is measured"
+                                className="hover-subtle focus-ring"
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  width: "14px",
+                                  height: "14px",
+                                  borderRadius: "50%",
+                                  backgroundColor: "transparent",
+                                  border: "none",
+                                  color: "var(--text-tertiary)",
+                                  cursor: "pointer",
+                                  padding: 0,
+                                }}
+                              >
+                                <Info size={11} />
+                              </button>
+                            </div>
                             {renderStateBadge((biometrics?.recoverySecondsApprox ?? (activeRecording as any).recoverySeconds) != null ? "measured" : "unavailable")}
                           </div>
                           <div className="tabular-nums" style={{ fontSize: "16px", fontWeight: 700, color: (biometrics?.recoverySecondsApprox ?? (activeRecording as any).recoverySeconds) != null ? "var(--accent-green)" : "var(--text-tertiary)", marginTop: "2px" }}>
@@ -1401,7 +1541,31 @@ export const RecordingsScreen: React.FC = () => {
                       </div>
                       <div style={{ padding: "12px", borderRadius: "var(--radius-sm)", backgroundColor: "var(--bg-elevated)", border: "1px solid var(--separator)" }}>
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                          <span style={{ fontSize: "12px", color: "var(--text-primary)", fontWeight: 600 }}>Breathing Rate</span>
+                          <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                            <span style={{ fontSize: "12px", color: "var(--text-primary)", fontWeight: 600 }}>Breathing Rate</span>
+                            <button
+                              type="button"
+                              onClick={() => setExplainingMetric("breathing")}
+                              aria-label="Explain Breathing Rate"
+                              title="How breathing rate is measured in quiet segments"
+                              className="hover-subtle focus-ring"
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                width: "14px",
+                                height: "14px",
+                                borderRadius: "50%",
+                                backgroundColor: "transparent",
+                                border: "none",
+                                color: "var(--text-tertiary)",
+                                cursor: "pointer",
+                                padding: 0,
+                              }}
+                            >
+                              <Info size={11} />
+                            </button>
+                          </div>
                           {renderStateBadge(biometrics?.breathing?.state || "notMeasurableWhileSpeaking", biometrics?.breathing?.confidence)}
                         </div>
                         <div className="tabular-nums" style={{ fontSize: "18px", fontWeight: 700, color: "var(--text-primary)", marginTop: "4px" }}>
@@ -1420,39 +1584,124 @@ export const RecordingsScreen: React.FC = () => {
                       </div>
                       <div style={{ padding: "12px", borderRadius: "var(--radius-sm)", backgroundColor: "var(--bg-elevated)", border: "1px solid var(--separator)" }}>
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
-                          <span style={{ fontSize: "12px", color: "var(--text-primary)", fontWeight: 600 }}>Expression Mix Over Time</span>
-                          {renderStateBadge(biometrics?.face?.state || "measured")}
+                          <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                            <span style={{ fontSize: "12px", color: "var(--text-primary)", fontWeight: 600 }}>Expression Mix Over Time</span>
+                            <button
+                              type="button"
+                              onClick={() => setExplainingMetric("expression_calm")}
+                              aria-label="Explain Expression Mix"
+                              title="How facial expressions and micro-tensions are analyzed"
+                              className="hover-subtle focus-ring"
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                width: "14px",
+                                height: "14px",
+                                borderRadius: "50%",
+                                backgroundColor: "transparent",
+                                border: "none",
+                                color: "var(--text-tertiary)",
+                                cursor: "pointer",
+                                padding: 0,
+                              }}
+                            >
+                              <Info size={11} />
+                            </button>
+                          </div>
+                          {renderStateBadge(biometrics?.face?.state || "unavailable")}
                         </div>
 
                         {/* Stacked expression distribution bar */}
                         {biometrics?.face?.expressionAverages && (
-                          <div>
-                            <div style={{ height: "10px", width: "100%", borderRadius: "var(--radius-full)", overflow: "hidden", display: "flex" }}>
-                              <div style={{ width: `${biometrics.face.expressionAverages.neutral * 100}%`, backgroundColor: "var(--accent-blue)" }} title="Neutral" />
-                              <div style={{ width: `${biometrics.face.expressionAverages.fear * 100}%`, backgroundColor: "var(--accent-orange)" }} title="Fear" />
-                              <div style={{ width: `${biometrics.face.expressionAverages.contempt * 100}%`, backgroundColor: "var(--accent-purple)" }} title="Contempt" />
-                              <div style={{ width: `${biometrics.face.expressionAverages.surprise * 100}%`, backgroundColor: "var(--accent-teal)" }} title="Surprise" />
-                              <div style={{ width: `${biometrics.face.expressionAverages.happy * 100}%`, backgroundColor: "var(--accent-green)" }} title="Happy" />
-                              <div style={{ width: `${(biometrics.face.expressionAverages.sad + biometrics.face.expressionAverages.angry + biometrics.face.expressionAverages.disgust) * 100}%`, backgroundColor: "var(--accent-red)" }} title="Tension" />
-                            </div>
-                            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", color: "var(--text-tertiary)", marginTop: "4px" }}>
-                              <span>Neutral: {Math.round(biometrics.face.expressionAverages.neutral * 100)}%</span>
-                              <span>Fear: {Math.round(biometrics.face.expressionAverages.fear * 100)}%</span>
-                              <span>Surprise: {Math.round(biometrics.face.expressionAverages.surprise * 100)}%</span>
-                              <span>Other: {Math.round((1 - biometrics.face.expressionAverages.neutral - biometrics.face.expressionAverages.fear - biometrics.face.expressionAverages.surprise) * 100)}%</span>
-                            </div>
-                          </div>
+                          (() => {
+                            const avg = biometrics.face.expressionAverages;
+                            const total = avg.neutral + avg.fear + avg.contempt + avg.surprise + avg.happy + avg.sad + avg.angry + avg.disgust;
+                            if (total <= 0) {
+                              return (
+                                <div style={{ padding: "6px 0", fontSize: "11px", color: "var(--text-tertiary)", fontStyle: "italic" }}>
+                                  Facial landmark telemetry unmeasured (requires studio-grade direct lighting).
+                                </div>
+                              );
+                            }
+                            return (
+                              <div>
+                                <div style={{ height: "10px", width: "100%", borderRadius: "var(--radius-full)", overflow: "hidden", display: "flex" }}>
+                                  <div style={{ width: `${avg.neutral * 100}%`, backgroundColor: "var(--accent-blue)" }} title="Neutral" />
+                                  <div style={{ width: `${avg.fear * 100}%`, backgroundColor: "var(--accent-orange)" }} title="Fear" />
+                                  <div style={{ width: `${avg.contempt * 100}%`, backgroundColor: "var(--accent-purple)" }} title="Contempt" />
+                                  <div style={{ width: `${avg.surprise * 100}%`, backgroundColor: "var(--accent-teal)" }} title="Surprise" />
+                                  <div style={{ width: `${avg.happy * 100}%`, backgroundColor: "var(--accent-green)" }} title="Happy" />
+                                  <div style={{ width: `${(avg.sad + avg.angry + avg.disgust) * 100}%`, backgroundColor: "var(--accent-red)" }} title="Tension" />
+                                </div>
+                                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", color: "var(--text-tertiary)", marginTop: "4px" }}>
+                                  <span>Neutral: {Math.round(avg.neutral * 100)}%</span>
+                                  <span>Fear: {Math.round(avg.fear * 100)}%</span>
+                                  <span>Surprise: {Math.round(avg.surprise * 100)}%</span>
+                                  <span>Other: {Math.max(0, Math.round((1 - avg.neutral - avg.fear - avg.surprise) * 100))}%</span>
+                                </div>
+                              </div>
+                            );
+                          })()
                         )}
 
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginTop: "12px", paddingTop: "10px", borderTop: "1px solid var(--separator)" }}>
                           <div>
-                            <div style={{ fontSize: "10.5px", color: "var(--text-tertiary)" }}>Blink Frequency</div>
+                            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                              <span style={{ fontSize: "10.5px", color: "var(--text-tertiary)" }}>Blink Frequency</span>
+                              <button
+                                type="button"
+                                onClick={() => setExplainingMetric("blinks")}
+                                aria-label="Explain Blink Frequency"
+                                title="How blink frequency reflects cognitive load"
+                                className="hover-subtle focus-ring"
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  width: "14px",
+                                  height: "14px",
+                                  borderRadius: "50%",
+                                  backgroundColor: "transparent",
+                                  border: "none",
+                                  color: "var(--text-tertiary)",
+                                  cursor: "pointer",
+                                  padding: 0,
+                                }}
+                              >
+                                <Info size={11} />
+                              </button>
+                            </div>
                             <div className="tabular-nums" style={{ fontSize: "14px", fontWeight: 650, color: (biometrics?.face?.blinkRatePerMin && biometrics.face.blinkRatePerMin > 0) ? "var(--text-primary)" : "var(--text-tertiary)", marginTop: "1px" }}>
                               {biometrics?.face?.blinkRatePerMin && biometrics.face.blinkRatePerMin > 0 ? `${biometrics.face.blinkRatePerMin} blinks/min` : "—"}
                             </div>
                           </div>
                           <div>
-                            <div style={{ fontSize: "10.5px", color: "var(--text-tertiary)" }}>Speaking Share</div>
+                            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                              <span style={{ fontSize: "10.5px", color: "var(--text-tertiary)" }}>Speaking Share</span>
+                              <button
+                                type="button"
+                                onClick={() => setExplainingMetric("speaking")}
+                                aria-label="Explain Speaking Share"
+                                title="How conversational speaking balance is calculated"
+                                className="hover-subtle focus-ring"
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  width: "14px",
+                                  height: "14px",
+                                  borderRadius: "50%",
+                                  backgroundColor: "transparent",
+                                  border: "none",
+                                  color: "var(--text-tertiary)",
+                                  cursor: "pointer",
+                                  padding: 0,
+                                }}
+                              >
+                                <Info size={11} />
+                              </button>
+                            </div>
                             <div className="tabular-nums" style={{ fontSize: "14px", fontWeight: 650, color: realSpeakingSharePct != null ? "var(--text-primary)" : "var(--text-tertiary)", marginTop: "1px" }}>
                               {realSpeakingSharePct != null ? `${realSpeakingSharePct}%` : "—"}
                             </div>
@@ -1482,6 +1731,18 @@ export const RecordingsScreen: React.FC = () => {
             </div>
           )}
         </div>
+
+        {/* Explainer Modals for Detail / Debrief View */}
+        <ComposureExplainerModal
+          isOpen={showExplainer}
+          onClose={() => setShowExplainer(false)}
+        />
+
+        <MetricExplainerModal
+          isOpen={explainingMetric !== null}
+          metricType={explainingMetric}
+          onClose={() => setExplainingMetric(null)}
+        />
       </div>
     );
   }
@@ -1714,6 +1975,12 @@ export const RecordingsScreen: React.FC = () => {
       <ComposureExplainerModal
         isOpen={showExplainer}
         onClose={() => setShowExplainer(false)}
+      />
+
+      <MetricExplainerModal
+        isOpen={explainingMetric !== null}
+        metricType={explainingMetric}
+        onClose={() => setExplainingMetric(null)}
       />
     </div>
   );

@@ -1,21 +1,67 @@
-import React, { useEffect, Suspense } from "react";
+import React, { useEffect, useState, Suspense } from "react";
 import { AppProvider, useApp } from "./context";
 import { AppLayout } from "./components/layout/AppLayout";
 import { ErrorBoundary } from "./components/common/ErrorBoundary";
 
+// Primary tabs are eagerly imported for instant, zero-flicker tab switching
+import { TodayScreen } from "./screens/TodayScreen";
+import { ScenariosScreen } from "./screens/ScenariosScreen";
+import { RecordingsScreen } from "./screens/RecordingsScreen";
+import { ProgressScreen } from "./screens/ProgressScreen";
+
+// Heavy/modal screens remain code-split
 const SignInScreen = React.lazy(() => import("./screens/SignInScreen").then((m) => ({ default: m.SignInScreen })));
-const TodayScreen = React.lazy(() => import("./screens/TodayScreen").then((m) => ({ default: m.TodayScreen })));
-const ScenariosScreen = React.lazy(() => import("./screens/ScenariosScreen").then((m) => ({ default: m.ScenariosScreen })));
-const RecordingsScreen = React.lazy(() => import("./screens/RecordingsScreen").then((m) => ({ default: m.RecordingsScreen })));
-const ProgressScreen = React.lazy(() => import("./screens/ProgressScreen").then((m) => ({ default: m.ProgressScreen })));
 const LiveSimulationScreen = React.lazy(() => import("./screens/LiveSimulationScreen").then((m) => ({ default: m.LiveSimulationScreen })));
 const ProcessingScreen = React.lazy(() => import("./screens/ProcessingScreen").then((m) => ({ default: m.ProcessingScreen })));
+
+/**
+ * Minimal delayed loader: only renders if loading takes > 500ms.
+ * Avoids any flash of loader or blank screen during fast transitions.
+ */
+const DelayedLoader: React.FC<{ delayMs?: number }> = ({ delayMs = 500 }) => {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setVisible(true), delayMs);
+    return () => clearTimeout(timer);
+  }, [delayMs]);
+
+  if (!visible) return null;
+
+  return (
+    <div
+      style={{
+        flex: 1,
+        width: "100%",
+        height: "100%",
+        minHeight: "300px",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "var(--bg-window)",
+      }}
+    >
+      <div
+        style={{
+          width: "22px",
+          height: "22px",
+          borderRadius: "50%",
+          border: "2px solid rgba(255, 255, 255, 0.12)",
+          borderTopColor: "var(--accent-blue, #0a84ff)",
+          animation: "spin 0.75s linear infinite",
+        }}
+        role="status"
+        aria-label="Loading"
+      />
+    </div>
+  );
+};
 
 const MainContent: React.FC = () => {
   const { currentScreen, isAuthenticated } = useApp();
 
   return (
-    <Suspense fallback={<div className="flex-1 bg-surface-base animate-pulse" />}>
+    <Suspense fallback={<DelayedLoader delayMs={500} />}>
       {!isAuthenticated || currentScreen === "sign-in" ? (
         <SignInScreen />
       ) : (

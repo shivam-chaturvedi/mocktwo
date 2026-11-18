@@ -262,59 +262,82 @@ export class SqliteRecordingService implements RecordingService {
           );
           const hasCleanPulse = cleanPulseSamples.length > 0;
 
-          sessionBiometrics = {
-            pulse: {
-              rate: raw.vitalsSamples
-                .filter((s: any) => s.pulse_bpm != null)
-                .map((s: any) => ({
-                  t: Math.round((s.timestamp_offset_ms || s.timestampOffsetMs || 0) / 1000),
-                  value: s.pulse_bpm > 110 ? "outOfRange" : s.pulse_bpm,
-                  confidence: s.confidence || 0,
-                  stable: Boolean(s.is_clean || s.isClean),
-                })),
-              avg: raw.avgPulse,
-              peak: raw.peakPulse,
-              baselineValue: activeBaselinePulse ?? undefined,
-              deltaVsBaseline: raw.avgPulse != null && activeBaselinePulse != null ? Math.round(raw.avgPulse - activeBaselinePulse) : undefined,
-              state: hasCleanPulse ? "measured" : "unavailable",
-              confidence: hasCleanPulse ? 90 : 0,
-              windowSeconds: 12,
-              rangeBpm: "40–110 bpm",
-              hasOutOfRange: raw.vitalsSamples.some((s: any) => (s.pulse_bpm || s.pulseBpm) > 110),
-            },
-            waveform: { samples: [], state: hasCleanPulse ? "measured" : "unavailable" },
-            hrv: {
-              trace: raw.vitalsSamples
-                .filter((s: any) => (s.hrv_rmssd != null || s.hrvRmssd != null))
-                .map((s: any) => ({
-                  t: Math.round((s.timestamp_offset_ms || s.timestampOffsetMs || 0) / 1000),
-                  value: s.hrv_rmssd ?? s.hrvRmssd,
-                })),
-              rmssd: raw.avgHrvRmssd,
-              state: raw.avgHrvRmssd ? "measured" : "notEnoughTime",
-              confidence: raw.avgHrvRmssd ? 85 : 0,
-              windowSeconds: 60,
-            },
-            breathing: {
-              rate: raw.vitalsSamples
-                .filter((s: any) => (s.breathing_rate != null || s.breathingRate != null))
-                .map((s: any) => ({
-                  t: Math.round((s.timestamp_offset_ms || s.timestampOffsetMs || 0) / 1000),
-                  value: s.breathing_rate ?? s.breathingRate,
-                })),
-              state: "unavailable",
-              confidence: 0,
-              windowSeconds: 30,
-              rangeBpm: "5–40 br/min",
-            },
-            eda: { trace: [], state: "unavailable", startSeconds: 35 },
-            face: {
-              trace: [],
-              expressionAverages: { neutral: 0, happy: 0, angry: 0, contempt: 0, disgust: 0, fear: 0, sad: 0, surprise: 0 },
-              blinkRatePerMin: 0,
-              speakingSharePct: 0,
-              state: "unavailable",
-            },
+            const breathingSamples = (raw.vitalsSamples || [])
+              .filter((s: any) => (s.breathing_rate != null || s.breathingRate != null))
+              .map((s: any) => ({
+                t: Math.round((s.timestamp_offset_ms || s.timestampOffsetMs || 0) / 1000),
+                value: Number(s.breathing_rate ?? s.breathingRate),
+              }));
+            const validBreathingVals = breathingSamples
+              .map((s: any) => s.value)
+              .filter((v: number) => typeof v === "number" && !isNaN(v) && v >= 5 && v <= 40);
+            const avgBreathing = validBreathingVals.length > 0
+              ? Math.round(validBreathingVals.reduce((a: number, b: number) => a + b, 0) / validBreathingVals.length)
+              : undefined;
+
+            const rawTranscript = raw.transcript || raw.transcriptSegments || [];
+            const userDurationSec = (Array.isArray(rawTranscript) ? rawTranscript : [])
+              .filter((u: any) => u.speaker === "user" || u.speaker === "Learner" || u.speaker === "You")
+              .reduce((acc: number, u: any) => {
+                if (u.endMs != null && u.startMs != null) {
+                  return acc + (u.endMs - u.startMs) / 1000;
+                }
+                const words = (u.text || "").trim().split(/\s+/).filter(Boolean).length;
+                return acc + Math.max(1, (words / 150) * 60);
+              }, 0);
+            const speakingPct = raw.durationSeconds > 0
+              ? Math.min(100, Math.round((userDurationSec / raw.durationSeconds) * 100))
+              : 0;
+
+            sessionBiometrics = {
+              pulse: {
+                rate: raw.vitalsSamples
+                  .filter((s: any) => s.pulse_bpm != null)
+                  .map((s: any) => ({
+                    t: Math.round((s.timestamp_offset_ms || s.timestampOffsetMs || 0) / 1000),
+                    value: s.pulse_bpm > 110 ? "outOfRange" : s.pulse_bpm,
+                    confidence: s.confidence || 0,
+                    stable: Boolean(s.is_clean || s.isClean),
+                  })),
+                avg: raw.avgPulse,
+                peak: raw.peakPulse,
+                baselineValue: activeBaselinePulse ?? undefined,
+                deltaVsBaseline: raw.avgPulse != null && activeBaselinePulse != null ? Math.round(raw.avgPulse - activeBaselinePulse) : undefined,
+                state: hasCleanPulse ? "measured" : "unavailable",
+                confidence: hasCleanPulse ? 90 : 0,
+                windowSeconds: 12,
+                rangeBpm: "40–110 bpm",
+                hasOutOfRange: raw.vitalsSamples.some((s: any) => (s.pulse_bpm || s.pulseBpm) > 110),
+              },
+              waveform: { samples: [], state: hasCleanPulse ? "measured" : "unavailable" },
+              hrv: {
+                trace: raw.vitalsSamples
+                  .filter((s: any) => (s.hrv_rmssd != null || s.hrvRmssd != null))
+                  .map((s: any) => ({
+                    t: Math.round((s.timestamp_offset_ms || s.timestampOffsetMs || 0) / 1000),
+                    value: s.hrv_rmssd ?? s.hrvRmssd,
+                  })),
+                rmssd: raw.avgHrvRmssd,
+                state: raw.avgHrvRmssd ? "measured" : "notEnoughTime",
+                confidence: raw.avgHrvRmssd ? 85 : 0,
+                windowSeconds: 60,
+              },
+              breathing: {
+                rate: breathingSamples,
+                quietRateBpm: avgBreathing,
+                state: avgBreathing ? "measured" : "notMeasurableWhileSpeaking",
+                confidence: avgBreathing ? 85 : 0,
+                windowSeconds: 30,
+                rangeBpm: "5–40 br/min",
+              },
+              eda: { trace: [], state: "unavailable", startSeconds: 35 },
+              face: {
+                trace: [],
+                expressionAverages: { neutral: 0, happy: 0, angry: 0, contempt: 0, disgust: 0, fear: 0, sad: 0, surprise: 0 },
+                blinkRatePerMin: 0,
+                speakingSharePct: speakingPct,
+                state: "unavailable",
+              },
             validationEvents: [],
             cleanMeasuredSeconds: raw.measuredSeconds || (hasCleanPulse ? Math.round(cleanPulseSamples.length * 0.5) : 0),
             totalDurationSeconds: raw.durationSeconds || 0,

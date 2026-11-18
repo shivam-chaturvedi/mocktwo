@@ -5,6 +5,7 @@
   --bg-content: #1e1e1e;
   --bg-elevated: #2a2a2c;
   --bg-control: #3a3a3c;
+  --bg-card: #1e1e20;
   --bg-hover: rgba(255, 255, 255, 0.06);
   --separator: rgba(255, 255, 255, 0.08);
 
@@ -55,6 +56,7 @@
   --bg-content: #ffffff;
   --bg-elevated: #f6f6f8;
   --bg-control: #e5e5ea;
+  --bg-card: #ffffff;
   --bg-hover: rgba(0, 0, 0, 0.05);
   --separator: rgba(0, 0, 0, 0.08);
 
