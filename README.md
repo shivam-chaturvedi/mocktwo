@@ -148,6 +148,7 @@ mocktwo enforces strict data boundary separation across three distinct media pat
    git clone https://github.com/shivam-chaturvedi/mocktwo.git
    cd mocktwo
    npm install
+   cp .env.example .env
    ```
 
 2. Configure environment credentials in `.env`:
