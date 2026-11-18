@@ -78,15 +78,23 @@ Peak stress moments (purple timeline markers) are detected whenever instantaneou
 
 ## 4. Privacy & Security Architecture
 
-1. **100% On-Device Physiological Processing**:
-   - Optical facial frames are processed in-memory by the SmartSpectra native SDK.
-   - Raw video frames from your camera are **never transmitted to external servers**, saved to unencrypted temp directories, or included in telemetry payloads.
-2. **Strict Electron Security Model**:
+mocktwo enforces strict data boundary separation across three distinct media paths:
+
+1. **On-Device Physiological rPPG Pipeline (SmartSpectra)**:
+   - Optical facial frames are processed strictly in local RAM by the SmartSpectra native C-API (`libsmartspectra_capi.dylib`).
+   - SDK telemetry is explicitly disabled (`enableTelemetry: false`). Raw rPPG video frames are **never transmitted to external servers**, saved to temp directories, or uploaded anywhere.
+2. **Interactive AI Rehearsal Stream (Tavus CVI / Daily WebRTC)**:
+   - During live conversational rehearsals, user camera video and microphone audio are streamed directly to Daily/Tavus over encrypted WebRTC so the interactive AI persona can listen and converse in real time.
+   - Tavus receives **zero physiological telemetry** (no pulse, HRV, or composure scores are ever sent to Daily or Tavus).
+3. **Local Session Recording Pipeline**:
+   - When session recording is active, an internal Canvas Stage Compositor combines the AI video, user picture-in-picture, live captions, and mixed two-way audio into a 720p WebM file saved directly to local storage (`~/Library/Application Support/mocktwo/recordings/`).
+   - Recordings are never uploaded to any cloud storage and can be permanently deleted by the user at any time.
+4. **Strict Electron Security Model**:
    - `nodeIntegration: false` and `contextIsolation: true` enforced on all renderer windows.
    - Narrowly scoped IPC bridge with input validation and sender verification.
    - Restrictive Content Security Policy (CSP).
    - Video replay is served over a custom protocol (`mocktwo-asset://`) with strict path sanitation preventing directory traversal.
-3. **Secret Isolation**:
+5. **Secret Isolation**:
    - Sensitive credentials (`TAVUS_API_KEY`, `SMARTSPECTRA_API_KEY`) reside exclusively in the main process and are injected via `.env`.
    - Keys, tokens, and room URLs are redacted from logs and never exposed to the frontend renderer.
 
@@ -137,8 +145,8 @@ Peak stress moments (purple timeline markers) are detected whenever instantaneou
 ### Installation
 1. Clone the repository and install dependencies:
    ```bash
-   git clone <repo-url>
-   cd hotel-coach
+   git clone https://github.com/shivam-chaturvedi/mocktwo.git
+   cd mocktwo
    npm install
    ```
 

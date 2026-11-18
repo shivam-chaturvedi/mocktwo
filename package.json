@@ -42,8 +42,8 @@
         "zip"
       ],
       "extendInfo": {
-        "NSCameraUsageDescription": "mocktwo uses your camera to measure optical blood volume pulse and facial composure signals during rehearsal simulations. Video is analyzed locally in real time and is never recorded, stored, or transmitted.",
-        "NSMicrophoneUsageDescription": "mocktwo uses your microphone for real-time speech and tone analysis during rehearsal simulations. Audio is processed locally on your device."
+        "NSCameraUsageDescription": "mocktwo uses your camera to measure optical blood volume pulse locally in real time using Presage SmartSpectra, and to stream video to interactive AI personas during live rehearsal calls. Physiological video is analyzed in local memory.",
+        "NSMicrophoneUsageDescription": "mocktwo uses your microphone for real-time speech during live AI rehearsals and for local conversational speech pacing analysis."
       },
       "extraResources": [
         {
