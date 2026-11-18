@@ -87,3 +87,43 @@ test("CameraManager: Hard releases source track and all registered consumer clon
     }
   }
 });
+
+test("CameraManager: Zero live video tracks after session end teardown", async () => {
+  let trackStopped = false;
+  const mockTrack = {
+    kind: "video",
+    readyState: "live",
+    stop: () => {
+      trackStopped = true;
+      (mockTrack as any).readyState = "ended";
+    },
+    getSettings: () => ({ deviceId: "cam-session-end" }),
+  } as unknown as MediaStreamTrack;
+
+  const originalDescriptor = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  Object.defineProperty(globalThis, "navigator", {
+    value: {
+      mediaDevices: {
+        getUserMedia: async () => ({
+          getVideoTracks: () => [mockTrack],
+        }),
+      },
+    },
+    configurable: true,
+    writable: true,
+  });
+
+  try {
+    await cameraManager.acquire("cam-session-end");
+    assert.strictEqual(cameraManager.getLiveTrackCount(), 1);
+
+    // Simulate session end teardown
+    cameraManager.release();
+    assert.strictEqual(trackStopped, true, "Camera hardware track must be stopped upon session end");
+    assert.strictEqual(cameraManager.getLiveTrackCount(), 0, "Must be zero live video tracks remaining after session end");
+  } finally {
+    if (originalDescriptor) {
+      Object.defineProperty(globalThis, "navigator", originalDescriptor);
+    }
+  }
+});
