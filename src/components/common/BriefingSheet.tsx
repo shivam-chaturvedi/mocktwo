@@ -6,6 +6,7 @@ import { Badge } from "./Badge";
 import { AudioVisualizer } from "./AudioVisualizer";
 import { PersonaPicker } from "./PersonaPicker";
 import { LazyAvatarImage } from "./LazyAvatarImage";
+import { CameraOffWarningModal } from "./CameraOffWarningModal";
 import { useMediaDevices } from "../../hooks/useMediaDevices";
 import { formatContextSetting, renderScenarioText, type Persona } from "../../types";
 import { WELLNESS_DISCLAIMER } from "../../services/biometrics";
@@ -46,6 +47,7 @@ export const BriefingSheet: React.FC = () => {
   const [isStarting, setIsStarting] = useState(false);
   const [isCrossfading, setIsCrossfading] = useState(false);
   const [showBaselineGateModal, setShowBaselineGateModal] = useState(false);
+  const [showCameraOffModal, setShowCameraOffModal] = useState(false);
   const crossfadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -74,7 +76,8 @@ export const BriefingSheet: React.FC = () => {
     permissionError,
     isLoading: isStreamLoading,
     toggleMute,
-    toggleVideo,
+    turnVideoOff,
+    turnVideoOn,
     stopAllTracks,
     setPermissionError,
   } = useMediaDevices({
@@ -84,6 +87,19 @@ export const BriefingSheet: React.FC = () => {
     onCameraChange: handleCameraChange,
     onMicrophoneChange: handleMicrophoneChange,
   });
+
+  const handleToggleVideo = () => {
+    if (!cameraOff) {
+      setShowCameraOffModal(true);
+    } else {
+      void turnVideoOn();
+    }
+  };
+
+  const confirmTurnCameraOff = () => {
+    setShowCameraOffModal(false);
+    turnVideoOff();
+  };
 
   // Attach live stream to mirror video element and ensure autoplay
   useEffect(() => {
@@ -558,10 +574,26 @@ export const BriefingSheet: React.FC = () => {
                 }}
               >
                 {cameraOff ? (
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px" }}>
-                    <Video size={24} style={{ color: "var(--text-tertiary)" }} />
-                    <span style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>
-                      Camera is paused
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
+                    <div
+                      style={{
+                        width: "44px",
+                        height: "44px",
+                        borderRadius: "50%",
+                        backgroundColor: "rgba(255, 69, 58, 0.12)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: "var(--accent-red)",
+                      }}
+                    >
+                      <VideoOff size={22} />
+                    </div>
+                    <span style={{ fontSize: "12.5px", fontWeight: 600, color: "var(--text-secondary)" }}>
+                      Camera is turned off
+                    </span>
+                    <span style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>
+                      Hardware sensor released · Audio-only mode
                     </span>
                   </div>
                 ) : isStreamLoading ? (
@@ -756,7 +788,7 @@ export const BriefingSheet: React.FC = () => {
                   variant={cameraOff ? "outline" : "secondary"}
                   size="sm"
                   icon={cameraOff ? <VideoOff size={13} style={{ color: "#ef4444" }} /> : <Video size={13} />}
-                  onClick={toggleVideo}
+                  onClick={handleToggleVideo}
                   style={{ flex: 1, fontSize: "11.5px", color: cameraOff ? "#ef4444" : undefined }}
                 >
                   {cameraOff ? "Video On" : "Video Off"}
@@ -978,6 +1010,13 @@ export const BriefingSheet: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Video-Off Confirmation Warning Modal */}
+      <CameraOffWarningModal
+        isOpen={showCameraOffModal}
+        onKeepOn={() => setShowCameraOffModal(false)}
+        onTurnOffAnyway={confirmTurnCameraOff}
+      />
     </div>
   );
 };
