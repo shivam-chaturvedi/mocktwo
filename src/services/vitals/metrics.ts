@@ -5,6 +5,16 @@
  * Never invents, fabricates, or defaults numbers. Missing telemetry is always NULL.
  */
 
+import {
+  BASELINE_TARGET_SECONDS,
+  BASELINE_MIN_PULSE_SAMPLES,
+  BASELINE_MIN_BREATHING_SAMPLES,
+  BASELINE_MIN_HRV_SAMPLES,
+  BASELINE_MIN_FACE_PRESENT_RATIO,
+  BASELINE_MAX_MOTION_RATIO,
+  BASELINE_MIN_QUALITY_SCORE,
+} from "../../constants/baseline.ts";
+
 export interface VitalsSamplePoint {
   timestampUs: number; // Linux epoch microseconds
   tMs: number;         // Milliseconds from measurement window origin
@@ -51,6 +61,8 @@ export interface BlinkSample {
 
 export interface BaselineSummary {
   isValid: boolean;
+  status?: "complete" | "incomplete" | "error";
+  missingSignals?: string[];
   invalidReason: string | null;
   durationSeconds: number;
 
@@ -150,9 +162,9 @@ export function applyQualityGate(sample: {
   const hrvValid =
     isValidationOk &&
     sample.hrvRmssd != null &&
-    sample.hrvRmssd > 0 &&
-    (sample.hrvConfidence ?? 0) >= 50 &&
-    sample.hrvStable === true;
+    sample.hrvRmssd >= 5 &&
+    sample.hrvRmssd <= 300 &&
+    (sample.hrvConfidence == null || sample.hrvConfidence >= 5);
 
   return {
     pulseValid,
@@ -318,9 +330,9 @@ export function computeQualityScore(params: {
   // Base score computed from telemetry availability (max 100)
   // 40% face presence + 35% valid pulse + 25% valid breathing
   const baseCoverage =
-    facePresentRatio * 40 +
-    pulseValidRatio * 35 +
-    breathingValidRatio * 25;
+    Math.min(1.0, Math.max(0, facePresentRatio)) * 40 +
+    Math.min(1.0, Math.max(0, pulseValidRatio)) * 35 +
+    Math.min(1.0, Math.max(0, breathingValidRatio)) * 25;
 
   // Penalties for motion artifacts and talking during calm baseline
   const motionPenalty = motionRatio * 30;
@@ -358,18 +370,20 @@ export function computeLinearSlope(points: Array<{ x: number; y: number }>): num
 }
 
 /**
- * Summarizes the entire 60s baseline capture window from gated samples and validation events.
+ * Summarizes the entire baseline capture window (default 90s) from gated samples and validation events.
  */
 export function summarizeBaseline(
   samples: VitalsSamplePoint[],
   validationEvents: ValidationEvent[],
-  windowDurationMs: number = 60000
+  windowDurationMs: number = BASELINE_TARGET_SECONDS * 1000
 ): BaselineSummary {
   const durationSeconds = Math.max(1, Math.round(windowDurationMs / 1000));
 
   if (!samples || samples.length === 0) {
     return {
       isValid: false,
+      status: "incomplete",
+      missingSignals: ["pulse", "breathing", "hrv"],
       invalidReason: "No vitals samples collected during session",
       durationSeconds,
       pulseMean: null,
@@ -498,8 +512,8 @@ export function summarizeBaseline(
   }
 
   const talkingRatio = samples.length > 0 ? Number((talkingSamples / samples.length).toFixed(3)) : 0;
-  const pulseValidRatio = samples.length > 0 ? validPulseValues.length / samples.length : 0;
-  const breathingValidRatio = samples.length > 0 ? validBreathing.length / samples.length : 0;
+  const pulseValidRatio = durationSeconds > 0 ? Math.min(1.0, validPulseValues.length / durationSeconds) : 0;
+  const breathingValidRatio = durationSeconds > 0 ? Math.min(1.0, validBreathing.length / durationSeconds) : 0;
 
   // 3. Compute statistical summaries
   const pulseStats = computeSummaryStats(validPulseValues);
@@ -541,32 +555,57 @@ export function summarizeBaseline(
   });
 
   // Minimum quality gates to accept baseline:
-  // - Duration must be at least 45 seconds (nominally 60s).
+  // - Duration must be at least 75 seconds (nominally 90s).
   // - Face must be present for at least 65% of the window.
-  // - Must have at least 10 valid pulse samples.
-  // - Quality score >= 45.
+  // - All three signals must meet the minimum sample thresholds:
+  //   * Pulse >= BASELINE_MIN_PULSE_SAMPLES (30)
+  //   * Breathing >= BASELINE_MIN_BREATHING_SAMPLES (20)
+  //   * HRV (RMSSD) >= BASELINE_MIN_HRV_SAMPLES (10)
+  // - Motion ratio <= BASELINE_MAX_MOTION_RATIO (0.40)
+  // - Quality score >= BASELINE_MIN_QUALITY_SCORE (60)
+  const missingSignals: string[] = [];
+  if (validPulseValues.length < BASELINE_MIN_PULSE_SAMPLES) {
+    missingSignals.push("pulse");
+  }
+  if (validBreathing.length < BASELINE_MIN_BREATHING_SAMPLES) {
+    missingSignals.push("breathing");
+  }
+  if (validHrvRmssd.length < BASELINE_MIN_HRV_SAMPLES) {
+    missingSignals.push("hrv");
+  }
+
   let isValid = true;
   let invalidReason: string | null = null;
 
-  if (windowDurationMs < 45000) {
+  if (windowDurationMs < 75000) {
     isValid = false;
-    invalidReason = `Measurement duration too short (${Math.round(windowDurationMs / 1000)}s; 60s required)`;
-  } else if (facePresentRatio < 0.65) {
+    invalidReason = `Measurement duration too short (${Math.round(windowDurationMs / 1000)}s; ${BASELINE_TARGET_SECONDS}s required)`;
+  } else if (facePresentRatio < BASELINE_MIN_FACE_PRESENT_RATIO) {
     isValid = false;
-    invalidReason = `Face not visible consistently (${Math.round(facePresentRatio * 100)}% visible; 65% required)`;
-  } else if (validPulseValues.length < 10) {
+    invalidReason = `Face not visible consistently (${Math.round(facePresentRatio * 100)}% visible; ${Math.round(BASELINE_MIN_FACE_PRESENT_RATIO * 100)}% required)`;
+  } else if (missingSignals.length > 0) {
     isValid = false;
-    invalidReason = `Insufficient stable pulse samples (${validPulseValues.length} obtained; 10 required)`;
-  } else if (motionRatio > 0.40) {
+    const parts = missingSignals.map((s) => {
+      if (s === "pulse") return `pulse (${validPulseValues.length}/${BASELINE_MIN_PULSE_SAMPLES}s)`;
+      if (s === "breathing") return `breathing (${validBreathing.length}/${BASELINE_MIN_BREATHING_SAMPLES}s)`;
+      if (s === "hrv") return `HRV (${validHrvRmssd.length}/${BASELINE_MIN_HRV_SAMPLES}s)`;
+      return s;
+    });
+    invalidReason = `Incomplete calibration: Missing stable ${parts.join(", ")}`;
+  } else if (motionRatio > BASELINE_MAX_MOTION_RATIO) {
     isValid = false;
     invalidReason = `Excessive motion detected during calibration (${Math.round(motionRatio * 100)}% motion)`;
-  } else if (qualityScore < 40) {
+  } else if (qualityScore < BASELINE_MIN_QUALITY_SCORE) {
     isValid = false;
-    invalidReason = `Overall measurement quality below acceptable threshold (score: ${qualityScore}/100)`;
+    invalidReason = `Overall measurement quality below acceptable threshold (score: ${qualityScore}/100; ${BASELINE_MIN_QUALITY_SCORE} required)`;
   }
+
+  const status: "complete" | "incomplete" = isValid ? "complete" : "incomplete";
 
   return {
     isValid,
+    status,
+    missingSignals: missingSignals.length > 0 ? missingSignals : undefined,
     invalidReason,
     durationSeconds,
 

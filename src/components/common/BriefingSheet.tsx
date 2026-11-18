@@ -849,7 +849,7 @@ export const BriefingSheet: React.FC = () => {
                         padding: 0,
                       }}
                     >
-                      Calibrate (60s)
+                      Calibrate (90s)
                     </button>
                   )}
                 </div>

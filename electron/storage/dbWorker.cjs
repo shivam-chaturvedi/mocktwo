@@ -147,6 +147,80 @@ function rowToPersona(r) {
   };
 }
 
+function rowToBaseline(b) {
+  if (!b) return null;
+  let missingSignals = undefined;
+  if (b.missing_signals) {
+    try {
+      missingSignals = JSON.parse(b.missing_signals);
+    } catch {
+      missingSignals = b.missing_signals.split(",").map((s) => s.trim());
+    }
+  }
+
+  return {
+    id: b.id,
+    status: b.status,
+    invalidReason: b.invalid_reason || null,
+    missingSignals,
+    targetSeconds: b.target_seconds ?? 90,
+    actualSeconds: b.actual_seconds ?? (b.duration_seconds || 90),
+    isActive: Boolean(b.is_active),
+    qualityScore: b.quality_score ?? null,
+    // Pulse
+    pulseMean: b.pulse_mean ?? b.resting_pulse ?? null,
+    pulseMedian: b.pulse_median ?? null,
+    pulseMin: b.pulse_min ?? null,
+    pulseMax: b.pulse_max ?? null,
+    pulseSd: b.pulse_sd ?? null,
+    pulseConfidence: b.pulse_confidence ?? null,
+    pulseSampleCount: b.pulse_sample_count ?? 0,
+    // HRV
+    hrvRmssd: b.hrv_rmssd ?? b.resting_hrv_rmssd ?? null,
+    hrvSdnn: b.hrv_sdnn ?? null,
+    hrvMeanNn: b.hrv_mean_nn ?? null,
+    hrvBaevsky: b.hrv_baevsky ?? b.resting_baevsky ?? null,
+    hrvConfidence: b.hrv_confidence ?? null,
+    hrvSampleCount: b.hrv_sample_count ?? 0,
+    // Breathing
+    breathingMean: b.breathing_mean ?? b.resting_breathing_rate ?? null,
+    breathingSd: b.breathing_sd ?? null,
+    breathingConfidence: b.breathing_confidence ?? null,
+    breathingSampleCount: b.breathing_sample_count ?? 0,
+    // Blinking & Expressions
+    blinkCount: b.blink_count ?? 0,
+    blinkRatePerMin: b.blink_rate_per_min ?? 0,
+    expressionMap: b.expression_map ? JSON.parse(b.expression_map) : {},
+    dominantExpression: b.dominant_expression || null,
+    // EDA
+    edaMean: b.eda_mean ?? null,
+    edaSd: b.eda_sd ?? null,
+    edaSlope: b.eda_slope ?? null,
+    // Quality & Provenance
+    facePresentRatio: b.face_present_ratio ?? 0,
+    talkingRatio: b.talking_ratio ?? 0,
+    motionRatio: b.motion_ratio ?? 0,
+    validationHistogram: b.validation_histogram ? JSON.parse(b.validation_histogram) : {},
+    cameraLabel: b.camera_label || null,
+    cameraResolution: b.camera_resolution || null,
+    cameraFps: b.camera_fps ?? null,
+    localDate: b.local_date || null,
+    timezone: b.timezone || null,
+    startedAt: b.started_at || b.measured_at,
+    endedAt: b.ended_at || null,
+    durationSeconds: b.duration_seconds || 90,
+    measuredAt: b.measured_at,
+    sdkVersion: b.sdk_version || null,
+    requestedMetrics: b.requested_metrics ? JSON.parse(b.requested_metrics) : null,
+    // Backward-compatibility aliases
+    restingPulse: b.pulse_mean ?? b.resting_pulse ?? null,
+    restingHrvRmssd: b.hrv_rmssd ?? b.resting_hrv_rmssd ?? null,
+    restingBreathingRate: b.breathing_mean ?? b.resting_breathing_rate ?? null,
+    restingBaevsky: b.hrv_baevsky ?? b.resting_baevsky ?? null,
+    isCalibrated: Boolean(b.is_active && b.status === "valid"),
+  };
+}
+
 function runMigrations() {
   const tableExists = (tbl) => {
     const row = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name = ?").get(tbl);
@@ -976,6 +1050,46 @@ function runMigrations() {
     currentVersion = 9;
   }
 
+  // Migration V10: Add baselines.target_seconds, actual_seconds, missing_signals & invalidate pulse-only baselines
+  if (currentVersion < 10) {
+    try {
+      const backupPath = `${dbPath}.backup-v9-${Date.now()}`;
+      if (typeof db.backup === "function") {
+        db.backup(backupPath).catch((err) => console.error("Failed to backup db before v10 migration:", err));
+      }
+    } catch (err) {
+      console.error("Failed to backup db before v10 migration:", err);
+    }
+
+    const migrateV10 = db.transaction(() => {
+      const bCols = db.prepare("PRAGMA table_info(baselines)").all().map((c) => c.name);
+      if (!bCols.includes("target_seconds")) {
+        db.exec("ALTER TABLE baselines ADD COLUMN target_seconds INTEGER DEFAULT 90;");
+      }
+      if (!bCols.includes("actual_seconds")) {
+        db.exec("ALTER TABLE baselines ADD COLUMN actual_seconds INTEGER;");
+      }
+      if (!bCols.includes("missing_signals")) {
+        db.exec("ALTER TABLE baselines ADD COLUMN missing_signals TEXT;");
+      }
+
+      // Invalidate any existing baselines where breathing or HRV was never captured
+      db.exec(`
+        UPDATE baselines
+        SET status = 'incomplete', is_active = 0, invalid_reason = 'Incomplete calibration: Missing stable breathing or HRV signals'
+        WHERE is_active = 1 AND (
+          breathing_sample_count IS NULL OR breathing_sample_count = 0 OR
+          hrv_sample_count IS NULL OR hrv_sample_count = 0
+        );
+      `);
+
+      db.prepare("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)").run(10, new Date().toISOString());
+    });
+
+    migrateV10();
+    currentVersion = 10;
+  }
+
   // Ensure non-partial unique indexes exist on builtin_key for ON CONFLICT target compatibility
   try {
     const scenarioIdx = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'idx_scenarios_builtin_key'").get();
@@ -994,6 +1108,47 @@ function runMigrations() {
     }
   } catch (err) {
     console.warn("[dbWorker] Error reconciling builtin_key unique indexes:", err.message);
+  }
+
+  // Reconcile complete baselines: if samples contain valid HRV that was under-counted by strict gate, reconcile and activate
+  try {
+    const recoverable = db.prepare(`
+      SELECT b.id, AVG(s.hrv_rmssd) as avg_rmssd, COUNT(s.id) as cnt
+      FROM baselines b
+      JOIN baseline_samples s ON s.baseline_id = b.id
+      WHERE (b.status = 'incomplete' OR b.is_active = 0)
+        AND s.hrv_rmssd IS NOT NULL AND s.hrv_rmssd >= 5
+        AND b.pulse_mean IS NOT NULL
+        AND b.breathing_mean IS NOT NULL
+      GROUP BY b.id
+      ORDER BY b.created_at DESC
+      LIMIT 1
+    `).get();
+
+    if (recoverable && recoverable.cnt >= 2) {
+      const activeExists = db.prepare("SELECT id FROM baselines WHERE is_active = 1 AND status = 'valid'").get();
+      if (!activeExists) {
+        db.prepare(`
+          UPDATE baselines
+          SET status = 'valid',
+              is_active = 1,
+              is_calibrated = 1,
+              invalid_reason = null,
+              missing_signals = null,
+              hrv_rmssd = ?,
+              resting_hrv_rmssd = ?,
+              hrv_sample_count = ?
+          WHERE id = ?
+        `).run(
+          Number(recoverable.avg_rmssd.toFixed(1)),
+          Number(recoverable.avg_rmssd.toFixed(1)),
+          recoverable.cnt,
+          recoverable.id
+        );
+      }
+    }
+  } catch (err) {
+    console.warn("[dbWorker] Error in baseline startup reconciliation:", err.message);
   }
 }
 
@@ -2086,68 +2241,7 @@ parentPort.on("message", ({ id, type, payload }) => {
       case "baselines:get-active": {
         // Query single active valid baseline (legacy rows are excluded)
         const b = db.prepare("SELECT * FROM baselines WHERE is_active = 1 AND status = 'valid' ORDER BY measured_at DESC LIMIT 1").get();
-        if (!b) {
-          result = null;
-        } else {
-          result = {
-            id: b.id,
-            status: b.status,
-            invalidReason: b.invalid_reason || null,
-            isActive: Boolean(b.is_active),
-            qualityScore: b.quality_score ?? null,
-            // Pulse
-            pulseMean: b.pulse_mean ?? b.resting_pulse ?? null,
-            pulseMedian: b.pulse_median ?? null,
-            pulseMin: b.pulse_min ?? null,
-            pulseMax: b.pulse_max ?? null,
-            pulseSd: b.pulse_sd ?? null,
-            pulseConfidence: b.pulse_confidence ?? null,
-            pulseSampleCount: b.pulse_sample_count ?? 0,
-            // HRV
-            hrvRmssd: b.hrv_rmssd ?? b.resting_hrv_rmssd ?? null,
-            hrvSdnn: b.hrv_sdnn ?? null,
-            hrvMeanNn: b.hrv_mean_nn ?? null,
-            hrvBaevsky: b.hrv_baevsky ?? b.resting_baevsky ?? null,
-            hrvConfidence: b.hrv_confidence ?? null,
-            hrvSampleCount: b.hrv_sample_count ?? 0,
-            // Breathing
-            breathingMean: b.breathing_mean ?? b.resting_breathing_rate ?? null,
-            breathingSd: b.breathing_sd ?? null,
-            breathingConfidence: b.breathing_confidence ?? null,
-            breathingSampleCount: b.breathing_sample_count ?? 0,
-            // Blinking & Expressions
-            blinkCount: b.blink_count ?? 0,
-            blinkRatePerMin: b.blink_rate_per_min ?? 0,
-            expressionMap: b.expression_map ? JSON.parse(b.expression_map) : {},
-            dominantExpression: b.dominant_expression || null,
-            // EDA
-            edaMean: b.eda_mean ?? null,
-            edaSd: b.eda_sd ?? null,
-            edaSlope: b.eda_slope ?? null,
-            // Quality & Provenance
-            facePresentRatio: b.face_present_ratio ?? 0,
-            talkingRatio: b.talking_ratio ?? 0,
-            motionRatio: b.motion_ratio ?? 0,
-            validationHistogram: b.validation_histogram ? JSON.parse(b.validation_histogram) : {},
-            cameraLabel: b.camera_label || null,
-            cameraResolution: b.camera_resolution || null,
-            cameraFps: b.camera_fps ?? null,
-            localDate: b.local_date || null,
-            timezone: b.timezone || null,
-            startedAt: b.started_at || b.measured_at,
-            endedAt: b.ended_at || null,
-            durationSeconds: b.duration_seconds || 60,
-            measuredAt: b.measured_at,
-            sdkVersion: b.sdk_version || null,
-            requestedMetrics: b.requested_metrics ? JSON.parse(b.requested_metrics) : null,
-            // Backward-compatibility aliases
-            restingPulse: b.pulse_mean ?? b.resting_pulse ?? null,
-            restingHrvRmssd: b.hrv_rmssd ?? b.resting_hrv_rmssd ?? null,
-            restingBreathingRate: b.breathing_mean ?? b.resting_breathing_rate ?? null,
-            restingBaevsky: b.hrv_baevsky ?? b.resting_baevsky ?? null,
-            isCalibrated: Boolean(b.is_active && b.status === "valid"),
-          };
-        }
+        result = rowToBaseline(b);
         break;
       }
 
@@ -2161,8 +2255,11 @@ parentPort.on("message", ({ id, type, payload }) => {
         const baseId = payloadObj.id || `baseline-${Date.now()}-${crypto.randomUUID()}`;
 
         const isValid = summary.isValid !== undefined ? Boolean(summary.isValid) : Boolean(payloadObj.isCalibrated ?? true);
-        const status = isValid ? "valid" : "invalid";
+        const status = isValid ? "valid" : (summary.status === "incomplete" ? "incomplete" : "invalid");
         const invalidReason = summary.invalidReason || payloadObj.invalidReason || null;
+        const missingSignals = summary.missingSignals || payloadObj.missingSignals || null;
+        const targetSeconds = payloadObj.targetSeconds ?? summary.targetSeconds ?? 90;
+        const actualSeconds = payloadObj.actualSeconds ?? summary.actualSeconds ?? summary.durationSeconds ?? 90;
 
         let shouldBeActive = 0;
 
@@ -2187,7 +2284,8 @@ parentPort.on("message", ({ id, type, payload }) => {
 
           db.prepare(`
             INSERT INTO baselines (
-              id, status, invalid_reason, is_active, quality_score,
+              id, status, invalid_reason, missing_signals, is_active, quality_score,
+              target_seconds, actual_seconds,
               pulse_mean, pulse_median, pulse_min, pulse_max, pulse_sd, pulse_confidence, pulse_sample_count,
               hrv_rmssd, hrv_sdnn, hrv_mean_nn, hrv_baevsky, hrv_confidence, hrv_sample_count,
               breathing_mean, breathing_sd, breathing_confidence, breathing_sample_count,
@@ -2200,7 +2298,8 @@ parentPort.on("message", ({ id, type, payload }) => {
               resting_pulse, resting_hrv_rmssd, resting_breathing_rate, resting_baevsky,
               is_calibrated, created_at
             ) VALUES (
-              ?, ?, ?, ?, ?,
+              ?, ?, ?, ?, ?, ?,
+              ?, ?,
               ?, ?, ?, ?, ?, ?, ?,
               ?, ?, ?, ?, ?, ?,
               ?, ?, ?, ?,
@@ -2216,6 +2315,9 @@ parentPort.on("message", ({ id, type, payload }) => {
             ON CONFLICT(id) DO UPDATE SET
               status = excluded.status,
               invalid_reason = excluded.invalid_reason,
+              missing_signals = excluded.missing_signals,
+              target_seconds = excluded.target_seconds,
+              actual_seconds = excluded.actual_seconds,
               is_active = excluded.is_active,
               quality_score = excluded.quality_score,
               pulse_mean = excluded.pulse_mean,
@@ -2226,8 +2328,11 @@ parentPort.on("message", ({ id, type, payload }) => {
             baseId,
             status,
             invalidReason,
+            missingSignals ? JSON.stringify(missingSignals) : null,
             shouldBeActive,
             summary.qualityScore ?? null,
+            targetSeconds,
+            actualSeconds,
             summary.pulseMean ?? null,
             summary.pulseMedian ?? null,
             summary.pulseMin ?? null,
@@ -2263,7 +2368,7 @@ parentPort.on("message", ({ id, type, payload }) => {
             provenance.timezone || null,
             provenance.startedAt || now,
             provenance.endedAt || now,
-            summary.durationSeconds || 60,
+            actualSeconds,
             now,
             provenance.sdkVersion || "3.5.0",
             provenance.requestedMetrics ? JSON.stringify(provenance.requestedMetrics) : null,
@@ -2313,14 +2418,8 @@ parentPort.on("message", ({ id, type, payload }) => {
           }
         })();
 
-        result = {
-          id: baseId,
-          status,
-          invalidReason,
-          isActive: Boolean(shouldBeActive),
-          isCalibrated: isValid,
-          qualityScore: summary.qualityScore ?? null,
-        };
+        const savedRow = db.prepare("SELECT * FROM baselines WHERE id = ?").get(baseId);
+        result = rowToBaseline(savedRow);
         break;
       }
 

@@ -20,9 +20,24 @@ function isPackagedApp() {
   return Boolean(app && app.isPackaged && __dirname.includes("app.asar"));
 }
 
-// Load environment variables with dotenv in dev mode only
+// Load environment variables with dotenv (dev mode loads project root; packaged apps check userData or resourcesPath)
 function loadEnvironment(options = {}) {
   if (isPackagedApp()) {
+    try {
+      const dotenv = require("dotenv");
+      const candidates = [
+        path.join(app.getPath("userData"), ".env"),
+        path.join(process.resourcesPath, ".env"),
+        path.join(app.getAppPath(), ".env"),
+        path.join(__dirname, "../.env"),
+      ];
+      for (const p of candidates) {
+        if (fs.existsSync(p)) {
+          dotenv.config({ path: p, override: options.override !== false });
+          break;
+        }
+      }
+    } catch {}
     return;
   }
   try {
@@ -698,6 +713,28 @@ function createWindow() {
     }
   });
 
+  // Handle Escape key to smoothly exit native full screen mode
+  mainWindow.webContents.on("before-input-event", (event, input) => {
+    if (input.type === "keyDown" && input.key === "Escape") {
+      if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isFullScreen()) {
+        mainWindow.setFullScreen(false);
+        event.preventDefault();
+      }
+    }
+  });
+
+  // Broadcast fullscreen state changes to renderer
+  mainWindow.on("enter-full-screen", () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("fullscreen-change", true);
+    }
+  });
+  mainWindow.on("leave-full-screen", () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("fullscreen-change", false);
+    }
+  });
+
   // Crash Resilience
   mainWindow.webContents.on("render-process-gone", (event, details) => {
     writeLogEntry("fatal", "renderer:render-process-gone", "Renderer process gone", { details });
@@ -1056,6 +1093,10 @@ ipcMain.on("window-action", (event, action) => {
   if (!mainWindow || typeof action !== "string") return;
   if (action === "toggle-fullscreen") {
     mainWindow.setFullScreen(!mainWindow.isFullScreen());
+  } else if (action === "exit-fullscreen") {
+    if (mainWindow.isFullScreen()) {
+      mainWindow.setFullScreen(false);
+    }
   }
 });
 
@@ -1435,7 +1476,11 @@ ipcMain.handle("presage:probe", async (event) => {
 ipcMain.handle("storage:save-baseline", async (event, baseline) => {
   try {
     if (!isValidSender(event) || !storageManager) return null;
-    return await storageManager.execute("baseline:save", baseline);
+    const saved = await storageManager.execute("baseline:save", baseline);
+    if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents && !mainWindow.webContents.isDestroyed()) {
+      mainWindow.webContents.send("baseline:changed", saved);
+    }
+    return saved;
   } catch (err) {
     writeLogEntry("warn", "ipc:storage:save-baseline", err.message);
     return null;
@@ -1445,7 +1490,11 @@ ipcMain.handle("storage:save-baseline", async (event, baseline) => {
 ipcMain.handle("storage:clear-baseline", async (event) => {
   try {
     if (!isValidSender(event) || !storageManager) return false;
-    return await storageManager.execute("baseline:clear");
+    const result = await storageManager.execute("baseline:clear");
+    if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents && !mainWindow.webContents.isDestroyed()) {
+      mainWindow.webContents.send("baseline:changed", null);
+    }
+    return result;
   } catch (err) {
     writeLogEntry("warn", "ipc:storage:clear-baseline", err.message);
     return false;

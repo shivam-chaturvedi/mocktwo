@@ -3,6 +3,7 @@ export interface ElectronAPI {
   onMenuAction: (callback: (action: string) => void) => () => void;
   onAppWillClose?: (callback: () => void) => () => void;
   sendWindowAction: (action: string) => void;
+  onFullscreenChange?: (callback: (isFullscreen: boolean) => void) => () => void;
   openSystemSettings: (pane: "camera" | "microphone") => Promise<boolean>;
   logError: (payload: Record<string, unknown>) => void;
   revealLogs: () => Promise<string>;
@@ -78,6 +79,7 @@ export interface ElectronAPI {
     getActiveBaseline: () => Promise<any>;
     saveBaseline: (b: any) => Promise<any>;
     clearBaseline: () => Promise<boolean>;
+    onBaselineChange?: (callback: (baseline: any) => void) => () => void;
     getSettings: () => Promise<Record<string, any>>;
     setSetting: (key: string, value: any) => Promise<boolean>;
     clearAllData: () => Promise<boolean>;

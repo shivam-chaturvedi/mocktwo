@@ -202,7 +202,7 @@ export function computeSessionInsights(input: SessionInsightsInput): SessionInsi
   const derivedPeakPulse = peakPulse ?? (pulses.length > 0 ? Math.max(...pulses) : null);
   const derivedMinPulse = pulses.length > 0 ? Math.min(...pulses) : null;
   const derivedMeanPulse = avgPulse ?? (pulses.length > 0 ? Math.round(pulses.reduce((a, b) => a + b, 0) / pulses.length) : null);
-  const pulseRiseBpm = derivedPeakPulse !== null && baselinePulse !== null ? Math.max(0, derivedPeakPulse - baselinePulse) : null;
+  const pulseRiseBpm = derivedPeakPulse !== null && baselinePulse !== null ? Math.max(0, Math.round(derivedPeakPulse - baselinePulse)) : null;
 
   // HRV & Breathing
   const hrvSamples = cleanSamples.filter((s) => typeof s.hrvRmssd === "number").map((s) => s.hrvRmssd as number);
@@ -268,7 +268,7 @@ export function computeSessionInsights(input: SessionInsightsInput): SessionInsi
 
         const windowPeak =
           windowSamples.length > 0 ? Math.max(...windowSamples.map((s) => s.pulseBpm as number)) : null;
-        const windowRise = windowPeak !== null ? windowPeak - baselinePulse : 0;
+        const windowRise = windowPeak !== null ? Math.round(windowPeak - baselinePulse) : 0;
 
         if (windowRise >= 4) {
           pressureMoments.push({

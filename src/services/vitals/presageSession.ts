@@ -14,7 +14,7 @@ import {
   SmartSpectraSDK,
   cardioMetrics,
   faceMetrics,
-  MetricType,
+  breathingMetrics,
 } from "@smartspectra/node-sdk/renderer";
 import { decodeMetrics } from "@smartspectra/node-sdk/messages";
 import type { VitalsSamplePoint } from "./metrics";
@@ -55,6 +55,7 @@ interface ActiveCallbacks {
 let activeCallbacks: ActiveCallbacks = {};
 let latestValidationCode: number | null = null;
 let timeOriginUs: number | null = null;
+let lastEmittedSecondBucket: number = -1;
 const processedTimestamps = new Set<number>();
 
 function enqueueOperation<T>(op: () => Promise<T>): Promise<T> {
@@ -87,12 +88,11 @@ function ensureSharedSdk(apiKey: string, enableTelemetry = false, requestedMetri
   }
 
   currentApiKey = apiKey;
-  // Request core cardio, breathing rate, and non-heavy facial metrics (blink/talking).
-  // Note: We use MetricType.BREATHING_RATE directly rather than breathingMetrics ([0, 1, 2])
-  // because metrics 0 and 1 (chest/abdomen traces) require chest framing, whereas Hotel Coach
-  // measures facial rPPG respiratory rate and instructs the user to frame their face.
+  // Request full official breathingMetrics bundle ([0: CHEST_BREATHING, 1: ABDOMEN_BREATHING, 2: BREATHING_RATE]),
+  // cardioMetrics ([15: PULSE_RATE, 16: ARTERIAL_PRESSURE_TRACE, 17: HRV]), and facial features.
+  // Upper chest movement metrics (0 & 1) are required by the native SmartSpectra graph to compute a stable breathing rate.
   const defaultMetrics = [
-    MetricType.BREATHING_RATE,
+    ...breathingMetrics,
     ...cardioMetrics,
     faceMetrics[1], // BLINKING: 12
     faceMetrics[2], // TALKING: 13
@@ -144,105 +144,62 @@ function ensureSharedSdk(apiKey: string, enableTelemetry = false, requestedMetri
       const talkingArray = decoded.face?.talking || [];
       const expressionArray = decoded.face?.expression || [];
 
-      // Collect all distinct timestamps across all arrays
-      const batchTimestamps = new Set<number>();
-      for (const p of pulseArray) if (p.timestamp != null) batchTimestamps.add(Number(p.timestamp));
-      for (const h of hrvArray) if (h.timestamp != null) batchTimestamps.add(Number(h.timestamp));
-      for (const b of breathingArray) if (b.timestamp != null) batchTimestamps.add(Number(b.timestamp));
-      for (const e of edaArray) if (e.timestamp != null) batchTimestamps.add(Number(e.timestamp));
-      for (const bl of blinkArray) if (bl.timestamp != null) batchTimestamps.add(Number(bl.timestamp));
-      for (const t of talkingArray) if (t.timestamp != null) batchTimestamps.add(Number(t.timestamp));
-      for (const ex of expressionArray) if (ex.timestamp != null) batchTimestamps.add(Number(ex.timestamp));
+      // Extract the latest reading from this batch for each metric stream
+      const p = pulseArray.length > 0 ? pulseArray[pulseArray.length - 1] : null;
+      const h = hrvArray.length > 0 ? hrvArray[hrvArray.length - 1] : null;
+      const b = breathingArray.length > 0 ? breathingArray[breathingArray.length - 1] : null;
+      const eda = edaArray.length > 0 ? edaArray[edaArray.length - 1] : null;
+      const bl = blinkArray.length > 0 ? blinkArray[blinkArray.length - 1] : null;
+      const tk = talkingArray.length > 0 ? talkingArray[talkingArray.length - 1] : null;
+      const ex = expressionArray.length > 0 ? expressionArray[expressionArray.length - 1] : null;
 
-      if (batchTimestamps.size === 0) {
-        batchTimestamps.add(timestampUs);
+      // Only proceed if this packet actually has fresh data
+      if (!p && !h && !b && !eda && !bl && !tk && !ex) {
+        return;
       }
 
-      // Index arrays by timestamp for exact O(1) matching
-      const pulseByTs = new Map<number, any>();
-      for (const p of pulseArray) if (p.timestamp != null) pulseByTs.set(Number(p.timestamp), p);
+      const tMs = Math.max(0, Math.round((timestampUs - (timeOriginUs || timestampUs)) / 1000));
+      const currentSecondBucket = Math.floor(tMs / 1000);
 
-      const hrvByTs = new Map<number, any>();
-      for (const h of hrvArray) if (h.timestamp != null) hrvByTs.set(Number(h.timestamp), h);
-
-      const breathingByTs = new Map<number, any>();
-      for (const b of breathingArray) if (b.timestamp != null) breathingByTs.set(Number(b.timestamp), b);
-
-      const edaByTs = new Map<number, any>();
-      for (const e of edaArray) if (e.timestamp != null) edaByTs.set(Number(e.timestamp), e);
-
-      const blinkByTs = new Map<number, any>();
-      for (const bl of blinkArray) if (bl.timestamp != null) blinkByTs.set(Number(bl.timestamp), bl);
-
-      const talkingByTs = new Map<number, any>();
-      for (const t of talkingArray) if (t.timestamp != null) talkingByTs.set(Number(t.timestamp), t);
-
-      const expressionByTs = new Map<number, any>();
-      for (const ex of expressionArray) if (ex.timestamp != null) expressionByTs.set(Number(ex.timestamp), ex);
-
-      const sortedTs = Array.from(batchTimestamps).sort((a, b) => a - b);
-
-      for (const ts of sortedTs) {
-        if (processedTimestamps.has(ts)) continue;
-        processedTimestamps.add(ts);
-
-        // Keep set size bounded
-        if (processedTimestamps.size > 10000) {
-          const arr = Array.from(processedTimestamps);
-          for (let i = 0; i < 5000; i++) {
-            processedTimestamps.delete(arr[i]);
-          }
-        }
-
-        const p = pulseByTs.get(ts) || null;
-        const h = hrvByTs.get(ts) || null;
-        const b = breathingByTs.get(ts) || null;
-        const eda = edaByTs.get(ts) || null;
-        const bl = blinkByTs.get(ts) || null;
-        const tk = talkingByTs.get(ts) || null;
-        const ex = expressionByTs.get(ts) || null;
-
-        // DATA CORRECTNESS: Only emit a sample if this timestamp actually has fresh data.
-        // Never fall back to the last array element to prevent repeating stale values.
-        if (!p && !h && !b && !eda && !bl && !tk && !ex) {
-          continue;
-        }
-
-        let expressionScores: Record<string, number> | null = null;
-        if (ex && ex.scores && Array.isArray(ex.scores)) {
-          expressionScores = {};
-          for (const s of ex.scores) {
-            const key = String(s.type);
-            expressionScores[key] = Number(s.confidence ?? 0);
-          }
-        }
-
-        const tMs = Math.max(0, Math.round((ts - (timeOriginUs || ts)) / 1000));
-
-        const samplePoint: VitalsSamplePoint = {
-          timestampUs: ts,
-          tMs,
-          pulse: p?.value != null ? Number(p.value.toFixed(1)) : null,
-          pulseConfidence: p?.confidence != null ? Number(p.confidence) : null,
-          pulseStable: Boolean(p?.stable),
-          breathingRate: b?.value != null ? Number(b.value.toFixed(1)) : null,
-          breathingConfidence: b?.confidence != null ? Number(b.confidence) : null,
-          breathingStable: Boolean(b?.stable),
-          hrvRmssd: h?.rmssd != null ? Number(h.rmssd.toFixed(1)) : null,
-          hrvSdnn: h?.sdnn != null ? Number(h.sdnn.toFixed(1)) : null,
-          hrvMeanNn: h?.meanNn != null ? Number(h.meanNn.toFixed(1)) : null,
-          hrvBaevsky: h?.baevsky != null ? Number(h.baevsky.toFixed(1)) : null,
-          hrvConfidence: h?.confidence != null ? Number(h.confidence) : null,
-          hrvStable: Boolean(h?.stable),
-          eda: eda?.value != null ? Number(eda.value.toFixed(2)) : null,
-          blinkDetected: bl?.detected != null ? Boolean(bl.detected) : false,
-          talkingDetected: tk?.detected != null ? Boolean(tk.detected) : false,
-          expressions: expressionScores,
-          validationCode: latestValidationCode,
-        };
-
-        activeCallbacks.onSample(samplePoint);
+      // Throttling: high-frequency facial frames (30fps) are normalized to 1Hz buckets unless a fresh core vital arrives
+      const hasCoreReading = Boolean(p || h || b);
+      if (!hasCoreReading && currentSecondBucket === lastEmittedSecondBucket) {
+        return;
       }
+      lastEmittedSecondBucket = currentSecondBucket;
+
+      let expressionScores: Record<string, number> | null = null;
+      if (ex && ex.scores && Array.isArray(ex.scores)) {
+        expressionScores = {};
+        for (const s of ex.scores) {
+          const key = String(s.type);
+          expressionScores[key] = Number(s.confidence ?? 0);
+        }
+      }
+
+      const samplePoint: VitalsSamplePoint = {
+        timestampUs,
+        tMs,
+        pulse: p?.value != null ? Number(p.value.toFixed(1)) : null,
+        pulseConfidence: p?.confidence != null ? Number(p.confidence) : null,
+        pulseStable: Boolean(p?.stable),
+        breathingRate: b?.value != null ? Number(b.value.toFixed(1)) : null,
+        breathingConfidence: b?.confidence != null ? Number(b.confidence) : null,
+        breathingStable: Boolean(b?.stable),
+        hrvRmssd: h?.rmssd != null ? Number(h.rmssd.toFixed(1)) : null,
+        hrvSdnn: h?.sdnn != null ? Number(h.sdnn.toFixed(1)) : null,
+        hrvMeanNn: h?.meanNn != null ? Number(h.meanNn.toFixed(1)) : null,
+        hrvBaevsky: h?.baevsky != null ? Number(h.baevsky.toFixed(1)) : null,
+        hrvConfidence: h?.confidence != null ? Number(h.confidence) : null,
+        hrvStable: Boolean(h?.stable),
+        eda: eda?.value != null ? Number(eda.value.toFixed(2)) : null,
+        blinkDetected: bl?.detected != null ? Boolean(bl.detected) : false,
+        talkingDetected: tk?.detected != null ? Boolean(tk.detected) : false,
+        expressions: expressionScores,
+        validationCode: latestValidationCode,
+      };
+
+      activeCallbacks.onSample(samplePoint);
     } catch (err) {
       console.error("[presageSession] Error decoding Metrics protobuf:", err);
     }
@@ -299,6 +256,7 @@ export function createVitalsSession(config: VitalsSessionConfig): VitalsSession 
         };
         latestValidationCode = null;
         timeOriginUs = null;
+        lastEmittedSecondBucket = -1;
         processedTimestamps.clear();
 
         sdk.useMediaStream(stream);

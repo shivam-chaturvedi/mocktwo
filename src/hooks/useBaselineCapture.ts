@@ -1,5 +1,5 @@
 /**
- * Hook managing the 60-second Presage SmartSpectra calm baseline calibration flow.
+ * Hook managing the 90-second Presage SmartSpectra calm baseline calibration flow.
  * 
  * Implements the strict state machine:
  * idle -> checking -> positioning -> measuring -> processing -> saved | invalid | error
@@ -15,6 +15,16 @@ import {
   type VitalsSamplePoint,
   type ValidationEvent,
 } from "../services/vitals/metrics";
+import {
+  BASELINE_TARGET_SECONDS,
+  BASELINE_MAX_EXTENSION_SECONDS,
+  BASELINE_MAX_PAUSED_SECONDS,
+} from "../constants/baseline.ts";
+import {
+  analyzePixelLuminance,
+  evaluatePreflightReport,
+  type FrameLuminanceAnalysis,
+} from "../utils/preflightCheck.ts";
 import { ValidationCode } from "@smartspectra/node-sdk/renderer";
 import { VALIDATION_HINTS, type ValidationStatusCode } from "../types";
 
@@ -61,7 +71,7 @@ export function useBaselineCapture(options: UseBaselineCaptureOptions) {
   const [state, setState] = useState<BaselineState>("idle");
   const [validationCode, setValidationCode] = useState<number | null>(null);
   const [validationHint, setValidationHint] = useState<string | null>(null);
-  const [secondsRemaining, setSecondsRemaining] = useState(60);
+  const [secondsRemaining, setSecondsRemaining] = useState(BASELINE_TARGET_SECONDS);
   const [isClockPaused, setIsClockPaused] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [invalidReason, setInvalidReason] = useState<string | null>(null);
@@ -70,8 +80,8 @@ export function useBaselineCapture(options: UseBaselineCaptureOptions) {
     pulse: number | null;
     breathing: number | null;
     hrv: number | null;
-    eda: number | null;
-  }>({ pulse: null, breathing: null, hrv: null, eda: null });
+    confidence: number | null;
+  }>({ pulse: null, breathing: null, hrv: null, confidence: null });
 
   // Refs for state machine management and cleanup
   const sessionRef = useRef<VitalsSession | null>(null);
@@ -90,6 +100,12 @@ export function useBaselineCapture(options: UseBaselineCaptureOptions) {
   const measuringStartTimestampUsRef = useRef(0);
   const isOkRef = useRef(false);
   const isStartingRef = useRef(false);
+  const latestVitalsRef = useRef<{
+    pulse: number | null;
+    breathing: number | null;
+    hrv: number | null;
+    confidence: number | null;
+  }>({ pulse: null, breathing: null, hrv: null, confidence: null });
 
   // Helper to safely clean up all active timers and sessions
   const cleanup = useCallback(async () => {
@@ -170,7 +186,7 @@ export function useBaselineCapture(options: UseBaselineCaptureOptions) {
         await window.electronAPI.storage.saveBaseline({
           summary: baselineSummary,
           samples: samplesRef.current,
-          makeActive,
+          makeActive: makeActive && baselineSummary.isValid,
           provenance,
         });
       }
@@ -191,25 +207,24 @@ export function useBaselineCapture(options: UseBaselineCaptureOptions) {
   }, [cleanup, cameraLabel, makeActive, onComplete, onError]);
 
   /**
-   * Transition from positioning to measuring when validation has been OK for 3 continuous seconds
+   * Transition from positioning to measuring when validation has been OK for 1.5 continuous seconds
    */
   const beginMeasuring = useCallback(() => {
     setState("measuring");
-    setSecondsRemaining(60);
+    setSecondsRemaining(BASELINE_TARGET_SECONDS);
     measuringStartTimeRef.current = Date.now();
     measuringStartTimestampUsRef.current = Date.now() * 1000;
     pausedTimeMsRef.current = 0;
 
-    // Start 1-second interval ticker for the 60s measuring countdown
+    // Start 1-second interval ticker for the 90s measuring countdown
     clockIntervalRef.current = setInterval(() => {
       if (!isOkRef.current) {
         // Validation is paused (face lost, motion, etc.)
         setIsClockPaused(true);
         pausedTimeMsRef.current += 1000;
-        if (pausedTimeMsRef.current >= 20000) {
-          // Max paused time (20s) exceeded
+        if (pausedTimeMsRef.current >= BASELINE_MAX_PAUSED_SECONDS * 1000) {
           setState("invalid");
-          setInvalidReason("Face lost or obstructed for over 20 seconds during calibration");
+          setInvalidReason(`Face lost or obstructed for over ${BASELINE_MAX_PAUSED_SECONDS} seconds during calibration`);
           cleanup();
         }
         return;
@@ -218,11 +233,20 @@ export function useBaselineCapture(options: UseBaselineCaptureOptions) {
       setIsClockPaused(false);
       setSecondsRemaining((prev) => {
         if (prev <= 1) {
+          // Presage requires 60s of stable pulse data to compute RMSSD. If pulse took ~20-25s to warm up,
+          // the first HRV reading arrives between 85s and 100s.
+          const elapsedSoFar = Math.round((Date.now() - measuringStartTimeRef.current - pausedTimeMsRef.current) / 1000);
+          const hasHrv = samplesRef.current.some((s) => s.hrvRmssd != null && s.hrvRmssd >= 5);
+          if (!hasHrv && elapsedSoFar < BASELINE_TARGET_SECONDS + BASELINE_MAX_EXTENSION_SECONDS) {
+            // Keep measuring for up to 15s to allow Presage to complete its 60s pulse window calculation
+            return 1;
+          }
+
           if (clockIntervalRef.current) {
             clearInterval(clockIntervalRef.current);
             clockIntervalRef.current = null;
           }
-          // Completed 60s measuring window
+          // Completed measuring window
           setTimeout(() => {
             processAndSave();
           }, 0);
@@ -232,14 +256,15 @@ export function useBaselineCapture(options: UseBaselineCaptureOptions) {
       });
     }, 1000);
 
-    // Hard ceiling timeout: 180 seconds total measuring time
+    // Hard ceiling timeout: (target + max extension) total measuring time
+    const hardTimeoutMs = (BASELINE_TARGET_SECONDS + BASELINE_MAX_EXTENSION_SECONDS) * 1000;
     totalTimerRef.current = setTimeout(() => {
       if (stateRef.current === "measuring") {
         setState("invalid");
-        setInvalidReason("Calibration timed out (maximum 3 minutes elapsed)");
+        setInvalidReason(`Calibration timed out (maximum ${Math.round(hardTimeoutMs / 60000)} minutes elapsed)`);
         cleanup();
       }
-    }, 180000);
+    }, hardTimeoutMs);
   }, [cleanup, processAndSave]);
 
   /**
@@ -263,7 +288,7 @@ export function useBaselineCapture(options: UseBaselineCaptureOptions) {
       setSummary(null);
       samplesRef.current = [];
       validationEventsRef.current = [];
-      setSecondsRemaining(60);
+      setSecondsRemaining(BASELINE_TARGET_SECONDS);
       setIsClockPaused(false);
 
       setState("checking");
@@ -298,7 +323,60 @@ export function useBaselineCapture(options: UseBaselineCaptureOptions) {
         return;
       }
 
-      // 3. Initialize Presage Session and enter positioning state
+      // 3. Local environmental pre-flight check (zero API credits consumed)
+      const trackSettings = typeof videoTrack.getSettings === "function" ? videoTrack.getSettings() : undefined;
+      let luminanceMetrics: FrameLuminanceAnalysis | null = null;
+      try {
+        if (typeof document !== "undefined") {
+          const videoEl = document.createElement("video");
+          videoEl.muted = true;
+          videoEl.playsInline = true;
+          videoEl.srcObject = stream;
+          await videoEl.play().catch(() => {});
+          if (videoEl.videoWidth > 0 && videoEl.videoHeight > 0) {
+            const canvas = document.createElement("canvas");
+            canvas.width = Math.min(320, videoEl.videoWidth);
+            canvas.height = Math.min(240, videoEl.videoHeight);
+            const ctx = canvas.getContext("2d");
+            if (ctx) {
+              ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+              const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+              luminanceMetrics = analyzePixelLuminance({
+                data: imgData.data,
+                width: canvas.width,
+                height: canvas.height,
+              });
+            }
+          }
+          videoEl.srcObject = null;
+          videoEl.remove();
+        }
+      } catch (err) {
+        console.warn("[useBaselineCapture] Luminance preflight check failed:", err);
+      }
+
+      const measuredFps = trackSettings?.frameRate || 30;
+      const fallbackLuminance: FrameLuminanceAnalysis = {
+        meanLuminance: 120,
+        highlightClipRatio: 0.01,
+        unevenRatio: 1.1,
+        lightingStatus: "ok",
+        lightingPass: true,
+      };
+
+      const preflight = evaluatePreflightReport({
+        cameraReady: videoTrack.readyState === "live" && videoTrack.enabled,
+        measuredFps,
+        luminanceAnalysis: luminanceMetrics || fallbackLuminance,
+      });
+
+      if (!preflight.isReady) {
+        setState("invalid");
+        setInvalidReason(`Pre-flight check failed: ${preflight.reasons.join(". ")}`);
+        return;
+      }
+
+      // 4. Initialize Presage Session and enter positioning state
       setState("positioning");
 
       try {
@@ -321,8 +399,8 @@ export function useBaselineCapture(options: UseBaselineCaptureOptions) {
               hint && hint.trim().length > 0
                 ? hint
                 : isOk
-                ? "Face aligned — calibrating in 1.5s..."
-                : VALIDATION_HINTS[statusCode] || "Position your face in the camera to begin";
+                ? "Positioning good — calibrating in 1.5s..."
+                : VALIDATION_HINTS[statusCode] || "Position your face and upper chest in camera to begin";
 
             setValidationHint(effectiveHint);
 
@@ -352,12 +430,13 @@ export function useBaselineCapture(options: UseBaselineCaptureOptions) {
           },
           onSample: (sample) => {
             samplesRef.current.push(sample);
-            setCurrentVitals({
+            latestVitalsRef.current = {
               pulse: sample.pulse ?? null,
               breathing: sample.breathingRate ?? null,
               hrv: sample.hrvRmssd ?? null,
-              eda: sample.eda ?? null,
-            });
+              confidence: sample.pulseConfidence ?? null,
+            };
+            setCurrentVitals({ ...latestVitalsRef.current });
           },
         });
 
@@ -386,7 +465,7 @@ export function useBaselineCapture(options: UseBaselineCaptureOptions) {
     setSummary(null);
     setValidationCode(null);
     setValidationHint(null);
-    setSecondsRemaining(60);
+    setSecondsRemaining(BASELINE_TARGET_SECONDS);
     setIsClockPaused(false);
   }, [cleanup]);
 

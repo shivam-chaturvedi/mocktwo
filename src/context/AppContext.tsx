@@ -205,8 +205,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         console.warn("[AppContext] Failed to load baseline:", err);
       });
 
+    let cleanupBaselineListener: (() => void) | undefined;
+    if (window.electronAPI?.storage?.onBaselineChange) {
+      cleanupBaselineListener = window.electronAPI.storage.onBaselineChange((newBaseline) => {
+        setBaseline(newBaseline);
+      });
+    }
+
     return () => {
       if (typeof cleanupSeedListener === "function") cleanupSeedListener();
+      if (typeof cleanupBaselineListener === "function") cleanupBaselineListener();
     };
   }, []);
 
@@ -346,10 +354,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [showToast]);
 
   const runMiniBaseline = useCallback(async (_durationSeconds: number = 20) => {
-    if (!serviceRegistry.biometrics.isAvailable()) {
-      return { restingPulse: 68, expressions: { neutral: 0.9, happy: 0.05, surprise: 0.05 } };
-    }
-    return { restingPulse: 68, expressions: { neutral: 0.9, happy: 0.05, surprise: 0.05 } };
+    const active = await serviceRegistry.biometrics.getBaseline();
+    return {
+      restingPulse: active?.restingPulse ?? 70,
+      expressions: {},
+    };
   }, []);
 
   // Persona Management

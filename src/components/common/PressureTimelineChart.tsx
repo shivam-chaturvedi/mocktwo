@@ -134,7 +134,7 @@ const CustomTooltip = ({ active, payload }: any) => {
 export const PressureTimelineChart: React.FC<PressureTimelineChartProps> = ({
   biometrics,
   durationSeconds,
-  baselinePulse = 68,
+  baselinePulse,
   playbackTime = 0,
   onSeek,
   style,
@@ -380,13 +380,15 @@ export const PressureTimelineChart: React.FC<PressureTimelineChartProps> = ({
               />
             ))}
 
-            {/* Resting Baseline Horizontal Dashed Reference Line */}
-            <ReferenceLine
-              y={baselinePulse}
-              stroke="rgba(255, 255, 255, 0.25)"
-              strokeDasharray="3 3"
-              strokeWidth={1}
-            />
+            {/* Resting Baseline Horizontal Dashed Reference Line (only when user has calibrated a baseline) */}
+            {baselinePulse != null && (
+              <ReferenceLine
+                y={baselinePulse}
+                stroke="rgba(255, 255, 255, 0.25)"
+                strokeDasharray="3 3"
+                strokeWidth={1}
+              />
+            )}
 
             {/* Playhead Vertical Line */}
             {playbackTime > 0 && (
@@ -562,10 +564,12 @@ export const PressureTimelineChart: React.FC<PressureTimelineChartProps> = ({
         </div>
 
         {/* Resting Baseline Annotation */}
-        <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "var(--text-tertiary)" }}>
-          <span style={{ borderTop: "1px dashed var(--text-tertiary)", width: "12px" }} />
-          <span>Resting: {baselinePulse} bpm</span>
-        </div>
+        {baselinePulse != null && (
+          <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "var(--text-tertiary)" }}>
+            <span style={{ borderTop: "1px dashed var(--text-tertiary)", width: "12px" }} />
+            <span>Resting: {baselinePulse} bpm</span>
+          </div>
+        )}
       </div>
 
       {/* Footnote Disclaimer */}

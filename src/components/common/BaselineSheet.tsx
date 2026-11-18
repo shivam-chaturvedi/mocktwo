@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useApp } from "../../context";
 import { useBaselineCapture } from "../../hooks/useBaselineCapture";
+import { BASELINE_TARGET_SECONDS } from "../../constants/baseline.ts";
 import {
   Sun,
   Smile,
@@ -12,7 +13,6 @@ import {
   Shield,
   Activity,
   Wind,
-  Zap,
   UserX,
 } from "lucide-react";
 import type { UserBaseline } from "../../types";
@@ -321,16 +321,16 @@ export const BaselineSheetModal: React.FC = () => {
   // Sync elapsed seconds and announcements from capture hook
   useEffect(() => {
     if (step === "capturing") {
-      const elapsed = 60 - capture.secondsRemaining;
+      const elapsed = BASELINE_TARGET_SECONDS - capture.secondsRemaining;
       setSecondsElapsed(elapsed);
 
       if (capture.state === "positioning") {
-        setAnnouncement(capture.validationHint || "Position your face in the frame…");
+        setAnnouncement(capture.validationHint || "Position your face and upper chest in the frame…");
       } else if (elapsed === 12) {
         setAnnouncement("Calibrating optical pulse signal…");
-      } else if (elapsed === 30) {
+      } else if (elapsed === 35) {
         setAnnouncement("Calibrating respiratory waveform…");
-      } else if (elapsed === 50) {
+      } else if (elapsed === 70) {
         setAnnouncement("Assessing heart rate variability…");
       }
     }
@@ -339,7 +339,7 @@ export const BaselineSheetModal: React.FC = () => {
   // Handle capture completion and error transitions
   useEffect(() => {
     if (step === "capturing") {
-      if (capture.state === "saved" && capture.summary) {
+      if ((capture.state === "saved" || capture.state === "invalid") && capture.summary) {
         stopCamera();
         setResultMetrics({
           pulse: capture.summary.pulseMean,
@@ -404,26 +404,26 @@ export const BaselineSheetModal: React.FC = () => {
     closeBaselineSheet();
   };
 
-  // Save baseline to storage via BiometricsService (whenever resting pulse was captured)
+  // Save baseline to storage via BiometricsService (only when full 3-signal calibration is complete)
   const handleSave = async () => {
-    if (resultMetrics.pulse === null) {
+    if (resultMetrics.pulse === null || resultMetrics.breathing === null || resultMetrics.hrv === null) {
       closeBaselineSheet();
       return;
     }
 
     const newBaseline: UserBaseline = {
       restingPulse: resultMetrics.pulse,
-      restingBreathingRate: resultMetrics.breathing ?? null,
-      restingHrvRmssd: resultMetrics.hrv ?? null,
+      restingBreathingRate: resultMetrics.breathing,
+      restingHrvRmssd: resultMetrics.hrv,
       measuredAt: new Date().toISOString(),
       isCalibrated: true,
       isActive: true,
       status: "valid",
       qualityScore: resultMetrics.qualityScore,
       qualityRating: resultMetrics.quality,
-      durationSeconds: 60,
+      durationSeconds: BASELINE_TARGET_SECONDS,
       restingHR: resultMetrics.pulse,
-      restingHRV: resultMetrics.hrv ?? null,
+      restingHRV: resultMetrics.hrv,
     };
 
     await saveBaselineData(newBaseline);
@@ -450,13 +450,13 @@ export const BaselineSheetModal: React.FC = () => {
   // Milestone locked status - based purely on genuine SDK signal, never fake secondsElapsed fallbacks
   const isPulseLocked = capture.currentVitals.pulse !== null;
   const isBreathingLocked = capture.currentVitals.breathing !== null;
-  const isEdaLocked = capture.currentVitals.eda !== null;
+  const isSignalLocked = capture.currentVitals.confidence !== null && capture.currentVitals.confidence >= 50;
   const isHrvLocked = capture.currentVitals.hrv !== null;
 
-  // Calm copy rotating every ~10s
+  // Calm copy rotating every ~15s
   const calmCopyIndex = Math.min(
     CALM_MESSAGES.length - 1,
-    Math.floor((60 - capture.secondsRemaining) / 10)
+    Math.floor((BASELINE_TARGET_SECONDS - capture.secondsRemaining) / 15)
   );
   const currentCalmMessage = CALM_MESSAGES[calmCopyIndex];
 
@@ -465,10 +465,10 @@ export const BaselineSheetModal: React.FC = () => {
   const circumference = 2 * Math.PI * radius;
   // Progress animates smoothly only when measuring
   const progressRatio = capture.state === "measuring"
-    ? Math.min(1, Math.max(0, (60 - capture.secondsRemaining) / 60))
+    ? Math.min(1, Math.max(0, (BASELINE_TARGET_SECONDS - capture.secondsRemaining) / BASELINE_TARGET_SECONDS))
     : 0;
   const strokeOffset = circumference * (1 - progressRatio);
-  const remainingSeconds = capture.state === "measuring" ? capture.secondsRemaining : 60;
+  const remainingSeconds = capture.state === "measuring" ? capture.secondsRemaining : BASELINE_TARGET_SECONDS;
   const remainingText = capture.state === "positioning"
     ? (capture.validationHint || "Position face in frame…")
     : capture.isClockPaused
@@ -643,7 +643,7 @@ export const BaselineSheetModal: React.FC = () => {
                   marginBottom: "24px",
                 }}
               >
-                We measure your resting pulse, breathing and HRV for 60 seconds so pressure
+                We measure your resting pulse, breathing and HRV for 90 seconds so pressure
                 moments can be compared to your own normal.
               </p>
 
@@ -992,16 +992,16 @@ export const BaselineSheetModal: React.FC = () => {
                   }}
                 />
 
-                {/* Soft Face-Guide Oval */}
+                {/* Soft Face & Upper-Body Guide */}
                 <div
                   style={{
                     position: "absolute",
-                    top: "50%",
+                    top: "45%",
                     left: "50%",
                     transform: "translate(-50%, -50%)",
-                    width: "160px",
-                    height: "210px",
-                    borderRadius: "50%",
+                    width: "190px",
+                    height: "235px",
+                    borderRadius: "50% 50% 35% 35%",
                     border: "2px dashed rgba(255, 255, 255, 0.45)",
                     pointerEvents: "none",
                     boxShadow: "0 0 0 9999px rgba(0, 0, 0, 0.25)",
@@ -1046,7 +1046,7 @@ export const BaselineSheetModal: React.FC = () => {
                   color: "var(--text-secondary)",
                 }}
               >
-                <span>Position your face within the guide • Calibration will start shortly</span>
+                <span>Include your face and upper chest • Calibrating in 1.5s...</span>
               </div>
             </div>
           )}
@@ -1233,14 +1233,14 @@ export const BaselineSheetModal: React.FC = () => {
                     cursor: "pointer",
                   }}
                 >
-                  Try Again
+                  Retake baseline (90s)
                 </button>
               </div>
             </div>
           )}
 
           {/* =================================================================== */}
-          {/* STEP 4C: THE 60 SECONDS (Smooth Ambient Ring, Signal Milestones)    */}
+          {/* STEP 4C: THE 90 SECONDS (Smooth Ambient Ring, Signal Milestones)    */}
           {/* =================================================================== */}
           {step === "capturing" && capture.state !== "error" && capture.state !== "invalid" && (
             <div
@@ -1362,6 +1362,7 @@ export const BaselineSheetModal: React.FC = () => {
                       cy="180"
                       r={radius}
                       fill="none"
+                      
                       stroke="var(--separator)"
                       strokeWidth="4"
                     />
@@ -1539,35 +1540,35 @@ export const BaselineSheetModal: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Right Milestone Chips: Skin response & HRV */}
+                {/* Right Milestone Chips: Optical Signal & HRV */}
                 <div style={{ display: "flex", flexDirection: "column", gap: "12px", width: "170px" }}>
-                  {/* Skin response (~35s) */}
+                  {/* Optical Signal Quality Milestone */}
                   <div
                     style={{
                       padding: "10px 14px",
                       borderRadius: "var(--radius-md)",
-                      backgroundColor: isEdaLocked ? "rgba(255, 159, 10, 0.12)" : "var(--bg-control)",
-                      border: isEdaLocked ? "1px solid var(--accent-orange)" : "1px solid var(--separator)",
-                      opacity: isEdaLocked ? 1 : 0.65,
+                      backgroundColor: isSignalLocked ? "rgba(52, 199, 89, 0.12)" : "var(--bg-control)",
+                      border: isSignalLocked ? "1px solid var(--accent-green)" : "1px solid var(--separator)",
+                      opacity: isSignalLocked ? 1 : 0.65,
                       transition: "all 0.3s ease",
                     }}
                   >
                     <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                      <Zap size={13} style={{ color: isEdaLocked ? "var(--accent-orange)" : "var(--text-tertiary)" }} />
-                      <span style={{ fontSize: "11px", fontWeight: 650, color: isEdaLocked ? "var(--accent-orange)" : "var(--text-secondary)" }}>
-                        {isEdaLocked ? "Skin response found" : capture.state === "measuring" ? "Analyzing arousal…" : "Awaiting face…"}
+                      <Shield size={13} style={{ color: isSignalLocked ? "var(--accent-green)" : "var(--text-tertiary)" }} />
+                      <span style={{ fontSize: "11px", fontWeight: 650, color: isSignalLocked ? "var(--accent-green)" : "var(--text-secondary)" }}>
+                        {isSignalLocked ? "Signal quality: Good" : capture.state === "measuring" ? "Assessing signal…" : "Awaiting face…"}
                       </span>
                     </div>
                     <div
                       style={{
                         fontSize: "16px",
                         fontWeight: 700,
-                        color: isEdaLocked ? "var(--text-primary)" : "var(--text-tertiary)",
+                        color: isSignalLocked ? "var(--text-primary)" : "var(--text-tertiary)",
                         marginTop: "2px",
                         fontFamily: "var(--font-mono)",
                       }}
                     >
-                      {capture.currentVitals.eda !== null ? `${capture.currentVitals.eda.toFixed(1)}` : "—"}
+                      {capture.currentVitals.confidence !== null ? `${capture.currentVitals.confidence}%` : "—"}
                     </div>
                   </div>
 
@@ -1585,7 +1586,7 @@ export const BaselineSheetModal: React.FC = () => {
                     <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                       <Heart size={13} style={{ color: isHrvLocked ? "var(--accent-blue)" : "var(--text-tertiary)" }} />
                       <span style={{ fontSize: "11px", fontWeight: 650, color: isHrvLocked ? "var(--accent-blue)" : "var(--text-secondary)" }}>
-                        {isHrvLocked ? "HRV calculated" : capture.state === "measuring" ? "Awaiting 60s window…" : "Awaiting face…"}
+                        {isHrvLocked ? "HRV calculated" : capture.state === "measuring" ? "Awaiting 60s pulse window…" : "Awaiting face…"}
                       </span>
                     </div>
                     <div
@@ -1647,7 +1648,7 @@ export const BaselineSheetModal: React.FC = () => {
                       Cancel calibration?
                     </h4>
                     <p style={{ fontSize: "12px", color: "var(--text-secondary)", margin: "8px 0 16px 0" }}>
-                      Progress will be lost and you will need to restart the 60 second measurement.
+                      Progress will be lost and you will need to restart the 90 second measurement.
                     </p>
                     <div style={{ display: "flex", gap: "8px", justifyContent: "center" }}>
                       <button
@@ -1691,252 +1692,270 @@ export const BaselineSheetModal: React.FC = () => {
           {/* =================================================================== */}
           {/* STEP 5: RESULT (Reveals values, Quality, Save baseline action)      */}
           {/* =================================================================== */}
-          {step === "result" && (
-            <div
-              style={{
-                maxWidth: "540px",
-                width: "100%",
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                textAlign: "center",
-              }}
-            >
+          {step === "result" && (() => {
+            const isComplete = Boolean(
+              capture.summary?.isValid &&
+              resultMetrics.pulse !== null &&
+              resultMetrics.breathing !== null &&
+              resultMetrics.hrv !== null
+            );
+
+            return (
               <div
                 style={{
-                  width: "50px",
-                  height: "50px",
-                  borderRadius: "50%",
-                  backgroundColor: "rgba(50, 215, 75, 0.15)",
-                  border: "1px solid rgba(50, 215, 75, 0.3)",
-                  display: "grid",
-                  placeItems: "center",
-                  color: "var(--accent-green)",
-                  marginBottom: "16px",
-                }}
-              >
-                <Check size={24} />
-              </div>
-
-              <h2
-                style={{
-                  fontSize: "20px",
-                  fontWeight: 700,
-                  color: "var(--text-primary)",
-                  margin: 0,
-                  letterSpacing: "-0.015em",
-                }}
-              >
-                Calibration complete
-              </h2>
-
-              <p
-                style={{
-                  fontSize: "13px",
-                  color: "var(--text-secondary)",
-                  lineHeight: 1.45,
-                  marginTop: "6px",
-                  marginBottom: "24px",
-                }}
-              >
-                This is your normal. Future sessions are compared to it.
-              </p>
-
-              {/* 3 Large Resting Metric Cards */}
-              <div
-                style={{
+                  maxWidth: "540px",
                   width: "100%",
-                  display: "grid",
-                  gridTemplateColumns: "repeat(3, 1fr)",
-                  gap: "12px",
-                  marginBottom: "20px",
-                }}
-              >
-                <div
-                  style={{
-                    padding: "14px 12px",
-                    borderRadius: "var(--radius-md)",
-                    backgroundColor: "var(--bg-control)",
-                    border: "1px solid var(--separator)",
-                    textAlign: "center",
-                  }}
-                >
-                  <div style={{ fontSize: "11px", color: "var(--text-tertiary)", textTransform: "uppercase", fontWeight: 600 }}>
-                    Resting pulse
-                  </div>
-                  <div
-                    style={{
-                      fontSize: resultMetrics.pulse !== null ? "22px" : "15px",
-                      fontWeight: 700,
-                      color: "var(--text-primary)",
-                      marginTop: "4px",
-                      fontFamily: "var(--font-mono)",
-                    }}
-                  >
-                    {resultMetrics.pulse !== null ? (
-                      <>
-                        {resultMetrics.pulse} <span style={{ fontSize: "12px", fontWeight: 500, color: "var(--text-secondary)" }}>bpm</span>
-                      </>
-                    ) : (
-                      <span style={{ fontSize: "13px", fontWeight: 500, color: "var(--text-tertiary)" }}>No signal</span>
-                    )}
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    padding: "14px 12px",
-                    borderRadius: "var(--radius-md)",
-                    backgroundColor: "var(--bg-control)",
-                    border: "1px solid var(--separator)",
-                    textAlign: "center",
-                  }}
-                >
-                  <div style={{ fontSize: "11px", color: "var(--text-tertiary)", textTransform: "uppercase", fontWeight: 600 }}>
-                    Breathing
-                  </div>
-                  <div
-                    style={{
-                      fontSize: resultMetrics.breathing !== null ? "22px" : "15px",
-                      fontWeight: 700,
-                      color: "var(--text-primary)",
-                      marginTop: "4px",
-                      fontFamily: "var(--font-mono)",
-                    }}
-                  >
-                    {resultMetrics.breathing !== null ? (
-                      <>
-                        {resultMetrics.breathing} <span style={{ fontSize: "12px", fontWeight: 500, color: "var(--text-secondary)" }}>br/m</span>
-                      </>
-                    ) : (
-                      <span style={{ fontSize: "13px", fontWeight: 500, color: "var(--text-tertiary)" }}>No signal</span>
-                    )}
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    padding: "14px 12px",
-                    borderRadius: "var(--radius-md)",
-                    backgroundColor: "var(--bg-control)",
-                    border: "1px solid var(--separator)",
-                    textAlign: "center",
-                  }}
-                >
-                  <div style={{ fontSize: "11px", color: "var(--text-tertiary)", textTransform: "uppercase", fontWeight: 600 }}>
-                    HRV
-                  </div>
-                  <div
-                    style={{
-                      fontSize: resultMetrics.hrv !== null ? "22px" : "15px",
-                      fontWeight: 700,
-                      color: "var(--text-primary)",
-                      marginTop: "4px",
-                      fontFamily: "var(--font-mono)",
-                    }}
-                  >
-                    {resultMetrics.hrv !== null ? (
-                      <>
-                        {resultMetrics.hrv} <span style={{ fontSize: "12px", fontWeight: 500, color: "var(--text-secondary)" }}>ms</span>
-                      </>
-                    ) : (
-                      <span style={{ fontSize: "13px", fontWeight: 500, color: "var(--text-tertiary)" }}>Not measured</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Quality Indicator Badge */}
-              <div
-                style={{
-                  display: "inline-flex",
+                  display: "flex",
+                  flexDirection: "column",
                   alignItems: "center",
-                  gap: "6px",
-                  fontSize: "12px",
-                  color: "var(--text-secondary)",
-                  marginBottom: "24px",
+                  textAlign: "center",
                 }}
               >
-                <span>Signal quality:</span>
-                <span
+                <div
                   style={{
-                    fontWeight: 600,
-                    color: resultMetrics.quality === "Good" ? "var(--accent-green)" : "var(--accent-orange)",
+                    width: "50px",
+                    height: "50px",
+                    borderRadius: "50%",
+                    backgroundColor: isComplete ? "rgba(50, 215, 75, 0.15)" : "rgba(255, 159, 10, 0.15)",
+                    border: isComplete ? "1px solid rgba(50, 215, 75, 0.3)" : "1px solid rgba(255, 159, 10, 0.3)",
+                    display: "grid",
+                    placeItems: "center",
+                    color: isComplete ? "var(--accent-green)" : "var(--accent-orange)",
+                    marginBottom: "16px",
                   }}
                 >
-                  {resultMetrics.quality}
-                </span>
-              </div>
+                  {isComplete ? <Check size={24} /> : <AlertCircle size={24} />}
+                </div>
 
-              {/* Mandatory Wellness Disclaimer */}
-              <p
-                style={{
-                  fontSize: "11px",
-                  color: "var(--text-tertiary)",
-                  lineHeight: 1.4,
-                  maxWidth: "420px",
-                  margin: "0 0 20px 0",
-                }}
-              >
-                SmartSpectra metrics are for general wellness and conversational composure training only, and not for medical diagnosis or treatment.
-              </p>
-
-              {/* Actions */}
-              <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-                <button
-                  onClick={handleStartCamera}
-                  className="mac-btn focus-ring"
+                <h2
                   style={{
-                    padding: "8px 18px",
-                    borderRadius: "var(--radius-sm)",
-                    backgroundColor: "var(--bg-control)",
-                    border: "1px solid var(--separator)",
+                    fontSize: "20px",
+                    fontWeight: 700,
                     color: "var(--text-primary)",
-                    fontSize: "12.5px",
-                    fontWeight: 500,
-                    cursor: "pointer",
+                    margin: 0,
+                    letterSpacing: "-0.015em",
                   }}
                 >
-                  Retake baseline
-                </button>
-                {resultMetrics.pulse !== null ? (
-                  <button
-                    onClick={handleSave}
-                    className="mac-btn focus-ring"
+                  {isComplete ? "Calibration complete" : "Calibration incomplete"}
+                </h2>
+
+                <p
+                  style={{
+                    fontSize: "13px",
+                    color: "var(--text-secondary)",
+                    lineHeight: 1.45,
+                    marginTop: "6px",
+                    marginBottom: "24px",
+                    maxWidth: "460px",
+                  }}
+                >
+                  {isComplete
+                    ? "This is your normal. Future sessions are compared to it."
+                    : capture.summary?.invalidReason ||
+                      "A complete baseline requires stable readings for pulse, breathing, and HRV. Keep your shoulders relaxed and visible in the camera."}
+                </p>
+
+                {/* 3 Large Resting Metric Cards */}
+                <div
+                  style={{
+                    width: "100%",
+                    display: "grid",
+                    gridTemplateColumns: "repeat(3, 1fr)",
+                    gap: "12px",
+                    marginBottom: "20px",
+                  }}
+                >
+                  <div
                     style={{
-                      padding: "8px 24px",
-                      borderRadius: "var(--radius-sm)",
-                      backgroundColor: "var(--accent-blue)",
-                      color: "#ffffff",
-                      fontSize: "12.5px",
-                      fontWeight: 600,
-                      border: "none",
-                      cursor: "pointer",
-                      boxShadow: "0 1px 3px rgba(10, 132, 255, 0.4)",
+                      padding: "14px 12px",
+                      borderRadius: "var(--radius-md)",
+                      backgroundColor: "var(--bg-control)",
+                      border: "1px solid var(--separator)",
+                      textAlign: "center",
                     }}
                   >
-                    {resultMetrics.quality === "Poor" ? "Save baseline anyway" : "Save baseline"}
-                  </button>
-                ) : (
+                    <div style={{ fontSize: "11px", color: "var(--text-tertiary)", textTransform: "uppercase", fontWeight: 600 }}>
+                      Resting pulse
+                    </div>
+                    <div
+                      style={{
+                        fontSize: resultMetrics.pulse !== null ? "22px" : "15px",
+                        fontWeight: 700,
+                        color: "var(--text-primary)",
+                        marginTop: "4px",
+                        fontFamily: "var(--font-mono)",
+                      }}
+                    >
+                      {resultMetrics.pulse !== null ? (
+                        <>
+                          {resultMetrics.pulse} <span style={{ fontSize: "12px", fontWeight: 500, color: "var(--text-secondary)" }}>bpm</span>
+                        </>
+                      ) : (
+                        <span style={{ fontSize: "13px", fontWeight: 500, color: "var(--text-tertiary)" }}>No signal</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      padding: "14px 12px",
+                      borderRadius: "var(--radius-md)",
+                      backgroundColor: "var(--bg-control)",
+                      border: "1px solid var(--separator)",
+                      textAlign: "center",
+                    }}
+                  >
+                    <div style={{ fontSize: "11px", color: "var(--text-tertiary)", textTransform: "uppercase", fontWeight: 600 }}>
+                      Breathing
+                    </div>
+                    <div
+                      style={{
+                        fontSize: resultMetrics.breathing !== null ? "22px" : "15px",
+                        fontWeight: 700,
+                        color: "var(--text-primary)",
+                        marginTop: "4px",
+                        fontFamily: "var(--font-mono)",
+                      }}
+                    >
+                      {resultMetrics.breathing !== null ? (
+                        <>
+                          {resultMetrics.breathing} <span style={{ fontSize: "12px", fontWeight: 500, color: "var(--text-secondary)" }}>br/m</span>
+                        </>
+                      ) : (
+                        <span style={{ fontSize: "13px", fontWeight: 500, color: "var(--text-tertiary)" }}>No signal</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      padding: "14px 12px",
+                      borderRadius: "var(--radius-md)",
+                      backgroundColor: "var(--bg-control)",
+                      border: "1px solid var(--separator)",
+                      textAlign: "center",
+                    }}
+                  >
+                    <div style={{ fontSize: "11px", color: "var(--text-tertiary)", textTransform: "uppercase", fontWeight: 600 }}>
+                      HRV
+                    </div>
+                    <div
+                      style={{
+                        fontSize: resultMetrics.hrv !== null ? "22px" : "15px",
+                        fontWeight: 700,
+                        color: "var(--text-primary)",
+                        marginTop: "4px",
+                        fontFamily: "var(--font-mono)",
+                      }}
+                    >
+                      {resultMetrics.hrv !== null ? (
+                        <>
+                          {resultMetrics.hrv} <span style={{ fontSize: "12px", fontWeight: 500, color: "var(--text-secondary)" }}>ms</span>
+                        </>
+                      ) : (
+                        <span style={{ fontSize: "13px", fontWeight: 500, color: "var(--text-tertiary)" }}>Not measured</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quality Indicator Badge */}
+                <div
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    fontSize: "12px",
+                    color: "var(--text-secondary)",
+                    marginBottom: "24px",
+                  }}
+                >
+                  <span>Signal quality:</span>
+                  <span
+                    style={{
+                      fontWeight: 600,
+                      color:
+                        resultMetrics.quality === "Good"
+                          ? "var(--accent-green)"
+                          : resultMetrics.quality === "Fair"
+                          ? "var(--accent-orange)"
+                          : "var(--accent-red)",
+                    }}
+                  >
+                    {resultMetrics.quality}
+                  </span>
+                </div>
+
+                {/* Mandatory Wellness Disclaimer */}
+                <p
+                  style={{
+                    fontSize: "11px",
+                    color: "var(--text-tertiary)",
+                    lineHeight: 1.4,
+                    maxWidth: "420px",
+                    margin: "0 0 20px 0",
+                  }}
+                >
+                  SmartSpectra metrics are for general wellness and conversational composure training only, and not for medical diagnosis or treatment.
+                </p>
+
+                {/* Actions */}
+                <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
                   <button
-                    onClick={handleCancelClick}
+                    onClick={handleStartCamera}
                     className="mac-btn focus-ring"
                     style={{
                       padding: "8px 18px",
                       borderRadius: "var(--radius-sm)",
                       backgroundColor: "var(--bg-control)",
                       border: "1px solid var(--separator)",
-                      color: "var(--text-secondary)",
+                      color: "var(--text-primary)",
                       fontSize: "12.5px",
+                      fontWeight: 500,
                       cursor: "pointer",
                     }}
                   >
-                    Cancel
+                    Retake baseline (90s)
                   </button>
-                )}
+                  {isComplete ? (
+                    <button
+                      onClick={handleSave}
+                      className="mac-btn focus-ring"
+                      style={{
+                        padding: "8px 24px",
+                        borderRadius: "var(--radius-sm)",
+                        backgroundColor: "var(--accent-blue)",
+                        color: "#ffffff",
+                        fontSize: "12.5px",
+                        fontWeight: 600,
+                        border: "none",
+                        cursor: "pointer",
+                        boxShadow: "0 1px 3px rgba(10, 132, 255, 0.4)",
+                      }}
+                    >
+                      Save baseline
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleCancelClick}
+                      className="mac-btn focus-ring"
+                      style={{
+                        padding: "8px 18px",
+                        borderRadius: "var(--radius-sm)",
+                        backgroundColor: "var(--bg-control)",
+                        border: "1px solid var(--separator)",
+                        color: "var(--text-secondary)",
+                        fontSize: "12.5px",
+                        cursor: "pointer",
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
         </div>
       </div>
     </div>

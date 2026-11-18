@@ -29,6 +29,9 @@ function loadDotenv(app) {
     const dotenv = require("dotenv");
     const candidates = [];
     if (app) {
+      if (typeof app.getPath === "function") {
+        candidates.push(path.join(app.getPath("userData"), ".env"));
+      }
       if (typeof app.getAppPath === "function") {
         candidates.push(path.join(app.getAppPath(), ".env"));
       }

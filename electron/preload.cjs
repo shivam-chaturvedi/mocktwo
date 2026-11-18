@@ -33,9 +33,16 @@ contextBridge.exposeInMainWorld("electronAPI", {
   },
 
   sendWindowAction: (action) => {
-    if (typeof action === "string" && ["toggle-fullscreen"].includes(action)) {
+    if (typeof action === "string" && ["toggle-fullscreen", "exit-fullscreen"].includes(action)) {
       ipcRenderer.send("window-action", action);
     }
+  },
+
+  onFullscreenChange: (callback) => {
+    if (typeof callback !== "function") return () => {};
+    const handler = (_event, isFullscreen) => callback(isFullscreen);
+    ipcRenderer.on("fullscreen-change", handler);
+    return () => ipcRenderer.removeListener("fullscreen-change", handler);
   },
 
   openSystemSettings: (pane) => {
@@ -104,6 +111,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
     getActiveBaseline: () => ipcRenderer.invoke("storage:get-active-baseline"),
     saveBaseline: (b) => ipcRenderer.invoke("storage:save-baseline", b),
     clearBaseline: () => ipcRenderer.invoke("storage:clear-baseline"),
+    onBaselineChange: (callback) => {
+      if (typeof callback !== "function") return () => {};
+      const handler = (_event, baseline) => callback(baseline);
+      ipcRenderer.on("baseline:changed", handler);
+      return () => ipcRenderer.removeListener("baseline:changed", handler);
+    },
     getSettings: () => ipcRenderer.invoke("storage:get-settings"),
     setSetting: (key, value) => ipcRenderer.invoke("storage:set-setting", { key, value }),
     clearAllData: () => ipcRenderer.invoke("storage:clear-all"),

@@ -67,9 +67,9 @@ export const ProgressScreen: React.FC = () => {
 
   const currentTier = getComposureTier(avgComposure);
 
-  // Baseline data from user profile
-  const baselinePulse = baseline?.restingPulse || 68;
-  const baselineHrv = baseline?.restingHrvRmssd || 44;
+  // Baseline data from user profile (null if not yet calibrated)
+  const baselinePulse = baseline?.restingPulse ?? null;
+  const baselineHrv = baseline?.restingHrvRmssd ?? null;
 
   const totalPracticeMinutes = useMemo(() => {
     const totalSecs = completedRecordings.reduce((acc, r) => acc + (r.durationSeconds || 0), 0);
@@ -102,7 +102,7 @@ export const ProgressScreen: React.FC = () => {
       .reverse()
       .map((r, idx) => {
         const val = Math.round((r as any).avgPulse || r.sessionBiometrics?.pulse?.avg || 0);
-        const diff = val - baselinePulse;
+        const diff = baselinePulse != null ? val - baselinePulse : null;
         return {
           sessionIdx: idx + 1,
           val,
@@ -161,9 +161,9 @@ export const ProgressScreen: React.FC = () => {
       },
       {
         name: "Pulse control" as const,
-        score: avgPulseBpm !== null ? Math.max(40, Math.min(100, Math.round(100 - Math.max(0, avgPulseBpm - baselinePulse) * 3.0))) : avgScore,
+        score: avgPulseBpm !== null && baselinePulse !== null ? Math.max(40, Math.min(100, Math.round(100 - Math.max(0, avgPulseBpm - baselinePulse) * 3.0))) : avgScore,
         trend: trendText,
-        level: getLevel(avgPulseBpm !== null ? Math.max(40, Math.min(100, Math.round(100 - Math.max(0, avgPulseBpm - baselinePulse) * 3.0))) : avgScore),
+        level: getLevel(avgPulseBpm !== null && baselinePulse !== null ? Math.max(40, Math.min(100, Math.round(100 - Math.max(0, avgPulseBpm - baselinePulse) * 3.0))) : avgScore),
         plainNote: "Keeping your heart rate within your normal resting range when challenged.",
       },
       {
@@ -529,7 +529,7 @@ export const ProgressScreen: React.FC = () => {
                           Pulse vs baseline
                         </span>
                         <span style={{ fontSize: "10.5px", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)" }}>
-                          Rest: {baselinePulse} bpm
+                          Rest: {baselinePulse != null ? `${baselinePulse} bpm` : "Not set"}
                         </span>
                       </div>
                       {recentPulseSessions.length > 0 ? (
@@ -537,11 +537,11 @@ export const ProgressScreen: React.FC = () => {
                           {recentPulseSessions.map((item, idx) => (
                             <div key={idx} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: "2px" }}>
                               <div
-                                title={`${item.title}: ${item.val} bpm (${item.diff >= 0 ? `+${item.diff}` : item.diff} vs resting)`}
+                                title={`${item.title}: ${item.val} bpm (${item.diff != null ? (item.diff >= 0 ? `+${item.diff}` : item.diff) : "no baseline"} vs resting)`}
                                 style={{
                                   width: "100%",
                                   height: `${Math.max(8, Math.min(32, (item.val - 50) * 1.2))}px`,
-                                  backgroundColor: item.diff <= 5 ? "var(--accent-green)" : "var(--accent-blue)",
+                                  backgroundColor: item.diff != null && item.diff <= 5 ? "var(--accent-green)" : "var(--accent-blue)",
                                   borderRadius: "2px",
                                 }}
                               />
@@ -569,7 +569,7 @@ export const ProgressScreen: React.FC = () => {
                           HRV vs baseline (≥60s)
                         </span>
                         <span style={{ fontSize: "10.5px", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)" }}>
-                          Rest: {baselineHrv} ms
+                          Rest: {baselineHrv != null ? `${baselineHrv} ms` : "Not set"}
                         </span>
                       </div>
                       {recentHrvSessions.length > 0 ? (

@@ -319,6 +319,28 @@ export const RecordingsScreen: React.FC = () => {
     const signalsCount = biometrics?.signalsAvailableCount ?? (isTooShort ? 0 : 4);
     const isPartial = biometrics?.isPartialScore ?? (signalsCount < 5);
 
+    const realSpeakingSharePct = (() => {
+      if (biometrics?.face?.speakingSharePct && biometrics.face.speakingSharePct > 0) {
+        return biometrics.face.speakingSharePct;
+      }
+      const transcript = activeRecording.transcript || (activeRecording as any).transcriptSegments || [];
+      const totalSec = activeRecording.durationSeconds || 0;
+      if (totalSec <= 0 || !Array.isArray(transcript) || transcript.length === 0) return null;
+      let userSpeakMs = 0;
+      for (const turn of transcript) {
+        const spk = (turn.speaker || "").toLowerCase();
+        const isUser = spk === "user" || spk === "you";
+        if (isUser) {
+          const dur = typeof turn.endMs === "number" && typeof turn.startMs === "number" && turn.endMs > turn.startMs
+            ? turn.endMs - turn.startMs
+            : (turn.text || "").split(/\s+/).filter(Boolean).length * 300;
+          userSpeakMs += dur;
+        }
+      }
+      if (userSpeakMs <= 0) return null;
+      return Math.min(100, Math.max(1, Math.round((userSpeakMs / (totalSec * 1000)) * 100)));
+    })();
+
     return (
       <div
         style={{
@@ -1286,8 +1308,10 @@ export const RecordingsScreen: React.FC = () => {
                             <span style={{ fontSize: "10px", color: "var(--text-tertiary)", textTransform: "uppercase", display: "block", fontWeight: 600 }}>
                               Recovery
                             </span>
-                            <span style={{ fontSize: "13px", fontWeight: 650, color: "var(--accent-green)" }}>
-                              ~{biometrics?.recoverySecondsApprox || (activeRecording as any).recoverySeconds || 14}s
+                            <span style={{ fontSize: "13px", fontWeight: 650, color: (biometrics?.recoverySecondsApprox ?? (activeRecording as any).recoverySeconds) != null ? "var(--accent-green)" : "var(--text-tertiary)" }}>
+                              {(biometrics?.recoverySecondsApprox ?? (activeRecording as any).recoverySeconds) != null
+                                ? `~${biometrics?.recoverySecondsApprox ?? (activeRecording as any).recoverySeconds}s`
+                                : "—"}
                             </span>
                           </div>
                         </div>
@@ -1297,7 +1321,7 @@ export const RecordingsScreen: React.FC = () => {
                     <PressureTimelineChart
                       biometrics={activeRecording.sessionBiometrics}
                       durationSeconds={activeRecording.durationSeconds}
-                      baselinePulse={baseline?.restingPulse || 68}
+                      baselinePulse={baseline?.restingPulse ?? undefined}
                       playbackTime={playbackTime}
                       onSeek={handleSeek}
                     />
@@ -1332,7 +1356,9 @@ export const RecordingsScreen: React.FC = () => {
                             {biometrics?.hrv?.rmssd ? `${biometrics.hrv.rmssd} ms` : "—"}
                           </div>
                           <div style={{ fontSize: "10.5px", color: "var(--text-tertiary)", marginTop: "2px" }}>
-                            {biometrics?.hrv?.rmssd ? `Baseline: ${baseline?.restingHrvRmssd || 54} ms` : "Requires 60s steady read"}
+                            {biometrics?.hrv?.rmssd
+                              ? (baseline?.restingHrvRmssd ? `Baseline: ${baseline.restingHrvRmssd} ms` : "No baseline set")
+                              : "Requires 60s steady read"}
                           </div>
                         </div>
 
@@ -1354,10 +1380,12 @@ export const RecordingsScreen: React.FC = () => {
                         <div style={{ padding: "10px", borderRadius: "var(--radius-sm)", backgroundColor: "var(--bg-elevated)", border: "1px solid var(--separator)" }}>
                           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                             <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>Recovery (approx.)</span>
-                            {renderStateBadge("measured")}
+                            {renderStateBadge((biometrics?.recoverySecondsApprox ?? (activeRecording as any).recoverySeconds) != null ? "measured" : "unavailable")}
                           </div>
-                          <div className="tabular-nums" style={{ fontSize: "16px", fontWeight: 700, color: "var(--accent-green)", marginTop: "2px" }}>
-                            ~{biometrics?.recoverySecondsApprox || 14}s
+                          <div className="tabular-nums" style={{ fontSize: "16px", fontWeight: 700, color: (biometrics?.recoverySecondsApprox ?? (activeRecording as any).recoverySeconds) != null ? "var(--accent-green)" : "var(--text-tertiary)", marginTop: "2px" }}>
+                            {(biometrics?.recoverySecondsApprox ?? (activeRecording as any).recoverySeconds) != null
+                              ? `~${biometrics?.recoverySecondsApprox ?? (activeRecording as any).recoverySeconds}s`
+                              : "—"}
                           </div>
                           <div style={{ fontSize: "10.5px", color: "var(--text-tertiary)", marginTop: "2px" }}>
                             Resolution ~12s
@@ -1419,14 +1447,14 @@ export const RecordingsScreen: React.FC = () => {
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginTop: "12px", paddingTop: "10px", borderTop: "1px solid var(--separator)" }}>
                           <div>
                             <div style={{ fontSize: "10.5px", color: "var(--text-tertiary)" }}>Blink Frequency</div>
-                            <div className="tabular-nums" style={{ fontSize: "14px", fontWeight: 650, color: "var(--text-primary)", marginTop: "1px" }}>
-                              {biometrics?.face?.blinkRatePerMin || 18} blinks/min
+                            <div className="tabular-nums" style={{ fontSize: "14px", fontWeight: 650, color: (biometrics?.face?.blinkRatePerMin && biometrics.face.blinkRatePerMin > 0) ? "var(--text-primary)" : "var(--text-tertiary)", marginTop: "1px" }}>
+                              {biometrics?.face?.blinkRatePerMin && biometrics.face.blinkRatePerMin > 0 ? `${biometrics.face.blinkRatePerMin} blinks/min` : "—"}
                             </div>
                           </div>
                           <div>
                             <div style={{ fontSize: "10.5px", color: "var(--text-tertiary)" }}>Speaking Share</div>
-                            <div className="tabular-nums" style={{ fontSize: "14px", fontWeight: 650, color: "var(--text-primary)", marginTop: "1px" }}>
-                              {biometrics?.face?.speakingSharePct || 45}%
+                            <div className="tabular-nums" style={{ fontSize: "14px", fontWeight: 650, color: realSpeakingSharePct != null ? "var(--text-primary)" : "var(--text-tertiary)", marginTop: "1px" }}>
+                              {realSpeakingSharePct != null ? `${realSpeakingSharePct}%` : "—"}
                             </div>
                           </div>
                         </div>

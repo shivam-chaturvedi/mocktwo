@@ -1138,7 +1138,7 @@ export const TodayScreen: React.FC = () => {
                           Baseline Required
                         </div>
                         <div style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
-                          60 s calm baseline
+                          90 s calm baseline
                         </div>
                       </div>
                     </div>
@@ -1162,7 +1162,7 @@ export const TodayScreen: React.FC = () => {
                         cursor: "pointer",
                       }}
                     >
-                      Set calm baseline (60s)
+                      Set calm baseline (90s)
                     </button>
                   </div>
                 )

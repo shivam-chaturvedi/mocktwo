@@ -20,6 +20,7 @@ import {
   ListOrdered,
   Target,
   Maximize2,
+  Minimize2,
   Activity,
   AlertTriangle,
   RefreshCw,
@@ -757,16 +758,33 @@ export const LiveSimulationScreen: React.FC = () => {
     };
   }, []);
 
-  // Handle Escape to confirm end session
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const unsub = window.electronAPI?.onFullscreenChange?.((fullscreen) => {
+      setIsFullscreen(fullscreen);
+    });
+    return () => unsub?.();
+  }, []);
+
+  // Handle Escape key: exit full screen first if active; otherwise toggle end session modal
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        setShowEndModal(true);
+        if (isFullscreen) {
+          (window as unknown as { electronAPI?: { sendWindowAction?: (action: string) => void } }).electronAPI?.sendWindowAction?.("exit-fullscreen");
+          return;
+        }
+        if (showEndModal) {
+          setShowEndModal(false);
+        } else {
+          setShowEndModal(true);
+        }
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [showEndModal, isFullscreen]);
 
   const formatTime = (secs: number) => {
     const m = Math.floor(secs / 60);
@@ -909,15 +927,15 @@ export const LiveSimulationScreen: React.FC = () => {
 
           <button
             onClick={toggleFullscreen}
-            aria-label="Toggle Fullscreen"
-            title="Toggle Full Screen (⌃⌘F)"
+            aria-label={isFullscreen ? "Exit Fullscreen" : "Toggle Fullscreen"}
+            title={isFullscreen ? "Exit Full Screen (Esc / ⌃⌘F)" : "Enter Full Screen (⌃⌘F)"}
             style={{
               padding: "4px",
-              color: "var(--text-tertiary)",
+              color: isFullscreen ? "var(--accent-blue)" : "var(--text-tertiary)",
               borderRadius: "var(--radius-sm)"
             }}
           >
-            <Maximize2 size={14} />
+            {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
           </button>
         </div>
       </header>

@@ -266,8 +266,11 @@ export interface UserBaseline {
   lastCalibratedAt?: string;
   isCalibrated: boolean;
   isActive?: boolean;
-  status?: "valid" | "invalid" | "legacy";
+  status?: "valid" | "invalid" | "incomplete" | "legacy";
   invalidReason?: string | null;
+  missingSignals?: string[];
+  targetSeconds?: number;
+  actualSeconds?: number;
   qualityScore?: number | null;
   qualityRating?: "Good" | "Fair" | "Poor";
   sdkVersion?: string | null;
@@ -396,6 +399,8 @@ export interface TranscriptUtterance {
   speaker: "Persona" | "You" | "Guest";
   text: string;
   timestampSeconds: number;
+  startMs?: number;
+  endMs?: number;
   isWeakPhrase?: boolean;
   weakPhraseHint?: string;
 }

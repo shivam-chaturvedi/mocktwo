@@ -250,6 +250,10 @@ export class SqliteRecordingService implements RecordingService {
         const raw = await window.electronAPI.storage.getRecording(id);
         if (!raw) return null;
 
+        // Fetch user's genuine active baseline (if calibrated) for accurate telemetry deltas
+        const activeBaseline = await window.electronAPI?.storage?.getActiveBaseline?.().catch(() => null);
+        const activeBaselinePulse = activeBaseline?.restingPulse ?? activeBaseline?.resting_pulse ?? null;
+
         // Build sessionBiometrics if raw vitals samples exist
         let sessionBiometrics = raw.sessionBiometrics;
         if (!sessionBiometrics && Array.isArray(raw.vitalsSamples) && raw.vitalsSamples.length > 0) {
@@ -270,8 +274,8 @@ export class SqliteRecordingService implements RecordingService {
                 })),
               avg: raw.avgPulse,
               peak: raw.peakPulse,
-              baselineValue: 68,
-              deltaVsBaseline: raw.avgPulse ? raw.avgPulse - 68 : undefined,
+              baselineValue: activeBaselinePulse ?? undefined,
+              deltaVsBaseline: raw.avgPulse != null && activeBaselinePulse != null ? Math.round(raw.avgPulse - activeBaselinePulse) : undefined,
               state: hasCleanPulse ? "measured" : "unavailable",
               confidence: hasCleanPulse ? 90 : 0,
               windowSeconds: 12,
@@ -336,11 +340,19 @@ export class SqliteRecordingService implements RecordingService {
             isClean: Boolean(s.is_clean ?? s.isClean),
           }));
 
+          const baselineRef = activeBaselinePulse != null
+            ? {
+                restingPulse: activeBaselinePulse,
+                restingHrvRmssd: activeBaseline?.restingHrvRmssd ?? activeBaseline?.resting_hrv_rmssd ?? null,
+                restingBreathingRate: activeBaseline?.restingBreathingRate ?? activeBaseline?.resting_breathing_rate ?? null,
+              }
+            : null;
+
           pressureCoaching = generateCoaching({
             transcript: transcriptItems,
             vitalsSamples: telemetrySamples,
             durationSeconds: raw.durationSeconds || 0,
-            baseline: { restingPulse: 68 },
+            baseline: baselineRef,
             composureScore: raw.composureScore,
             avgPulse: raw.avgPulse,
             peakPulse: raw.peakPulse,
@@ -691,7 +703,11 @@ export class SqliteBiometricsService implements BiometricsService {
   async saveBaseline(baseline: UserBaseline): Promise<UserBaseline> {
     if (window.electronAPI?.storage) {
       try {
-        return await window.electronAPI.storage.saveBaseline(baseline);
+        const payload = {
+          ...baseline,
+          makeActive: baseline.isActive ?? (baseline.status === "valid"),
+        };
+        return await window.electronAPI.storage.saveBaseline(payload);
       } catch (err) {
         console.warn("[SqliteBaselineService] saveBaseline failed:", err);
       }
@@ -709,7 +725,7 @@ export class SqliteBiometricsService implements BiometricsService {
     }
   }
 
-  async calibrateBaseline(_durationSeconds: number = 60): Promise<UserBaseline> {
+  async calibrateBaseline(_durationSeconds: number = 90): Promise<UserBaseline> {
     const existing = await this.getBaseline();
     if (existing) return existing;
     throw new Error("No optical sensor baseline samples captured. Please run the calibration flow.");

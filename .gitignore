@@ -10,6 +10,7 @@ lerna-debug.log*
 # Test artifacts
 tmp_test_*
 
+
 # Environment files
 .env
 .env*.local
@@ -40,3 +41,6 @@ out
 
 .agent-decisions.md
 .agent-progress.md
+
+ss
+ss/*

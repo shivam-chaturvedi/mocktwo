@@ -56,14 +56,18 @@ test("vitalsMetrics: applyQualityGate correctly validates signal stability and c
     true
   );
 
-  // HRV gate (conf >= 50, stable = true, rmssd > 0)
+  // HRV gate (rmssd 5-300 ms, conf >= 5)
   assert.equal(
-    applyQualityGate({ hrvRmssd: 45, hrvConfidence: 48, hrvStable: true }).hrvValid,
-    false
+    applyQualityGate({ hrvRmssd: 2, hrvConfidence: 10 }).hrvValid,
+    false // below physiological minimum (5 ms)
   );
   assert.equal(
-    applyQualityGate({ hrvRmssd: 45, hrvConfidence: 55, hrvStable: true }).hrvValid,
-    true
+    applyQualityGate({ hrvRmssd: 450, hrvConfidence: 10 }).hrvValid,
+    false // above physiological maximum (300 ms)
+  );
+  assert.equal(
+    applyQualityGate({ hrvRmssd: 78.7, hrvConfidence: 10 }).hrvValid,
+    true // genuine SmartSpectra reading
   );
 });
 
@@ -173,15 +177,17 @@ test("vitalsMetrics: computeQualityScore enforces deterministic bounds", () => {
 
 test("vitalsMetrics: summarizeBaseline handles empty, short, and clean scenarios", () => {
   // Empty
-  const emptySummary = summarizeBaseline([], [], 60000);
+  const emptySummary = summarizeBaseline([], [], 90000);
   assert.equal(emptySummary.isValid, false);
+  assert.equal(emptySummary.status, "incomplete");
+  assert.deepEqual(emptySummary.missingSignals, ["pulse", "breathing", "hrv"]);
   assert.equal(emptySummary.pulseSampleCount, 0);
   assert.equal(emptySummary.pulseMean, null);
   assert.equal(emptySummary.qualityScore, 0);
   assert.ok(emptySummary.invalidReason?.includes("No vitals"));
 
-  // Too short (< 45s)
-  const shortSamples: VitalsSamplePoint[] = Array.from({ length: 30 }, (_, i) => ({
+  // Too short (< 75s)
+  const shortSamples: VitalsSamplePoint[] = Array.from({ length: 50 }, (_, i) => ({
     timestampUs: (i + 1) * 1_000_000,
     tMs: (i + 1) * 1000,
     pulse: 70,
@@ -191,12 +197,31 @@ test("vitalsMetrics: summarizeBaseline handles empty, short, and clean scenarios
     breathingConfidence: 60,
     breathingStable: true,
   }));
-  const shortSummary = summarizeBaseline(shortSamples, [{ timestampUs: 1_000_000, code: 0 }], 30000);
+  const shortSummary = summarizeBaseline(shortSamples, [{ timestampUs: 1_000_000, code: 0 }], 50000);
   assert.equal(shortSummary.isValid, false);
   assert.ok(shortSummary.invalidReason?.includes("too short"));
 
-  // Valid 60s calibration
-  const validSamples: VitalsSamplePoint[] = Array.from({ length: 60 }, (_, i) => ({
+  // Pulse-only calibration (e.g. 90s with no breathing or HRV)
+  const pulseOnlySamples: VitalsSamplePoint[] = Array.from({ length: 90 }, (_, i) => ({
+    timestampUs: (i + 1) * 1_000_000,
+    tMs: (i + 1) * 1000,
+    pulse: 72.7,
+    pulseConfidence: 85,
+    pulseStable: true,
+    validationCode: 0,
+  }));
+  const pulseOnlySummary = summarizeBaseline(
+    pulseOnlySamples,
+    [{ timestampUs: 1_000_000, code: 0 }, { timestampUs: 90_000_000, code: 0 }],
+    90000
+  );
+  assert.equal(pulseOnlySummary.isValid, false);
+  assert.equal(pulseOnlySummary.status, "incomplete");
+  assert.deepEqual(pulseOnlySummary.missingSignals, ["breathing", "hrv"]);
+  assert.ok(pulseOnlySummary.invalidReason?.includes("Incomplete calibration"));
+
+  // Valid 90s calibration with all 3 signals (Pulse, Breathing, and HRV)
+  const validSamples: VitalsSamplePoint[] = Array.from({ length: 90 }, (_, i) => ({
     timestampUs: (i + 1) * 1_000_000,
     tMs: (i + 1) * 1000,
     pulse: 65 + (i % 5),
@@ -205,25 +230,26 @@ test("vitalsMetrics: summarizeBaseline handles empty, short, and clean scenarios
     breathingRate: 14 + (i % 2),
     breathingConfidence: 80,
     breathingStable: true,
-    hrvRmssd: i >= 40 ? 55 : null, // HRV emerges after warm-up
-    hrvConfidence: i >= 40 ? 75 : null,
-    hrvStable: i >= 40 ? true : false,
+    hrvRmssd: i >= 30 ? 55 : null, // HRV emerges after warm-up, giving 60 samples
+    hrvConfidence: i >= 30 ? 75 : null,
+    hrvStable: i >= 30 ? true : false,
     validationCode: 0,
   }));
 
   const validationEvents: ValidationEvent[] = [
     { timestampUs: 1_000_000, code: 0 },
-    { timestampUs: 30_000_000, code: 0 },
-    { timestampUs: 60_000_000, code: 0 },
+    { timestampUs: 45_000_000, code: 0 },
+    { timestampUs: 90_000_000, code: 0 },
   ];
 
-  const validSummary = summarizeBaseline(validSamples, validationEvents, 60000);
+  const validSummary = summarizeBaseline(validSamples, validationEvents, 90000);
   assert.equal(validSummary.isValid, true);
+  assert.equal(validSummary.status, "complete");
   assert.equal(validSummary.invalidReason, null);
-  assert.equal(validSummary.pulseSampleCount, 60);
+  assert.equal(validSummary.pulseSampleCount, 90);
   assert.ok(validSummary.pulseMean !== null && validSummary.pulseMean >= 65);
   assert.ok(validSummary.breathingMean !== null && validSummary.breathingMean >= 14);
-  assert.equal(validSummary.hrvSampleCount, 20);
+  assert.equal(validSummary.hrvSampleCount, 60);
   assert.equal(validSummary.hrvRmssd, 55);
   assert.ok(validSummary.qualityScore >= 80);
 });
