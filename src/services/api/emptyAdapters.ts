@@ -23,6 +23,7 @@ import type {
   AppSettings,
   UserBaseline,
 } from "../../types";
+import { LEGACY_CAMERA, LEGACY_MIC, LEGACY_SPEAKER } from "../../constants/legacyDevices.ts";
 
 export class EmptyAuthService implements AuthService {
   private user: UserProfile | null = null;
@@ -430,9 +431,9 @@ export class EmptyBiometricsService implements BiometricsService {
 export class DefaultSettingsService implements SettingsService {
   private settings: AppSettings = {
     theme: "dark",
-    selectedCamera: "FaceTime HD Camera (Built-in)",
-    selectedMicrophone: "MacBook Studio Microphone (Built-in)",
-    selectedSpeaker: "Internal MacBook Speakers",
+    selectedCamera: "",
+    selectedMicrophone: "",
+    selectedSpeaker: "",
     autoStartAudio: true,
     hapticFeedback: true,
     reducedMotion: false,
@@ -445,11 +446,22 @@ export class DefaultSettingsService implements SettingsService {
   };
 
   async getSettings(): Promise<AppSettings> {
-    return { ...this.settings };
+    const sanitized = { ...this.settings };
+    const legacy = {
+      selectedCamera: LEGACY_CAMERA,
+      selectedMicrophone: LEGACY_MIC,
+      selectedSpeaker: LEGACY_SPEAKER,
+    } as const;
+    for (const k of Object.keys(legacy) as (keyof typeof legacy)[]) {
+      if (sanitized[k] === legacy[k]) {
+        sanitized[k] = "";
+      }
+    }
+    return sanitized;
   }
 
   async updateSettings(updates: Partial<AppSettings>): Promise<AppSettings> {
     this.settings = { ...this.settings, ...updates };
-    return { ...this.settings };
+    return this.getSettings();
   }
 }

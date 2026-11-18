@@ -11,7 +11,7 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   isLoading?: boolean;
 }
 
-export const Button: React.FC<ButtonProps> = ({
+export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(({
   children,
   variant = "primary",
   size = "md",
@@ -22,7 +22,7 @@ export const Button: React.FC<ButtonProps> = ({
   style,
   disabled,
   ...props
-}) => {
+}, ref) => {
   const getVariantStyles = (): React.CSSProperties => {
     switch (variant) {
       case "primary":
@@ -125,6 +125,7 @@ export const Button: React.FC<ButtonProps> = ({
 
   return (
     <button
+      ref={ref}
       style={baseStyles}
       disabled={disabled || isLoading}
       className={`mac-btn ${className}`}
@@ -151,4 +152,6 @@ export const Button: React.FC<ButtonProps> = ({
       )}
     </button>
   );
-};
+});
+
+Button.displayName = "Button";

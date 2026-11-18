@@ -1,13 +1,35 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
+// Presage SmartSpectra preload bridge (contextIsolation & sandbox compliant)
+try {
+  require("@smartspectra/node-sdk/preload");
+} catch {
+  try {
+    const path = require("path");
+    require(path.join(__dirname, "../node_modules/@smartspectra/node-sdk/js/preload/index.js"));
+  } catch (_e) {
+    // If already exposed by session.setPreloads, ignore
+  }
+}
+
 contextBridge.exposeInMainWorld("electronAPI", {
   platform: process.platform,
+
+  getPresageConfig: () => ipcRenderer.invoke("presage:get-config"),
+  probePresage: () => ipcRenderer.invoke("presage:probe"),
 
   onMenuAction: (callback) => {
     if (typeof callback !== "function") return () => {};
     const handler = (_event, action) => callback(action);
     ipcRenderer.on("menu-action", handler);
     return () => ipcRenderer.removeListener("menu-action", handler);
+  },
+
+  onAppWillClose: (callback) => {
+    if (typeof callback !== "function") return () => {};
+    const handler = () => callback();
+    ipcRenderer.on("app:will-close", handler);
+    return () => ipcRenderer.removeListener("app:will-close", handler);
   },
 
   sendWindowAction: (action) => {
@@ -50,6 +72,14 @@ contextBridge.exposeInMainWorld("electronAPI", {
   tavusListFaces: (options) => ipcRenderer.invoke("tavus:list-faces", options),
   tavusListVoices: (options) => ipcRenderer.invoke("tavus:list-voices", options),
 
+  // Tavus CVI Live Conversation
+  tavus: {
+    createConversation: (payload) => ipcRenderer.invoke("tavus:conversation:create", payload),
+    endConversation: (conversationId) => ipcRenderer.invoke("tavus:conversation:end", conversationId),
+  },
+  createConversation: (payload) => ipcRenderer.invoke("tavus:conversation:create", payload),
+  endConversation: (conversationId) => ipcRenderer.invoke("tavus:conversation:end", conversationId),
+
   // Storage API bridge (SQLite worker backed)
   storage: {
     getProfile: () => ipcRenderer.invoke("storage:get-profile"),
@@ -71,15 +101,27 @@ contextBridge.exposeInMainWorld("electronAPI", {
     deleteRecording: (id) => ipcRenderer.invoke("storage:delete-recording", id),
     addNote: (recordingId, note) => ipcRenderer.invoke("storage:add-note", { recordingId, note }),
     getBaseline: () => ipcRenderer.invoke("storage:get-baseline"),
+    getActiveBaseline: () => ipcRenderer.invoke("storage:get-active-baseline"),
     saveBaseline: (b) => ipcRenderer.invoke("storage:save-baseline", b),
     clearBaseline: () => ipcRenderer.invoke("storage:clear-baseline"),
     getSettings: () => ipcRenderer.invoke("storage:get-settings"),
     setSetting: (key, value) => ipcRenderer.invoke("storage:set-setting", { key, value }),
     clearAllData: () => ipcRenderer.invoke("storage:clear-all"),
     checkFreeSpace: () => ipcRenderer.invoke("storage:check-space"),
+    getStreakDates: () => ipcRenderer.invoke("storage:get-streak-dates"),
   },
 
-  // Audio Chunk Recorder bridge
+  // Unified MediaRecorder bridge (Sessions & Baselines)
+  recording: {
+    start: (payload) => ipcRenderer.invoke("recording:start", payload),
+    chunk: (payload) => ipcRenderer.invoke("recording:chunk", payload),
+    appendTranscript: (payload) => ipcRenderer.invoke("recording:append-transcript", payload),
+    appendVitals: (payload) => ipcRenderer.invoke("recording:append-vitals", payload),
+    finalize: (payload) => ipcRenderer.invoke("recording:finalize", payload),
+    abort: (payload) => ipcRenderer.invoke("recording:abort", payload),
+  },
+
+  // Audio Chunk Recorder bridge (legacy compatibility)
   audio: {
     startRecording: (id) => ipcRenderer.invoke("audio:start-recording", id),
     appendChunk: (id, chunk) => ipcRenderer.invoke("audio:append-chunk", { id, chunk }),

@@ -61,6 +61,31 @@ export const SettingsModal: React.FC = () => {
   const cameraPermission = usePermission("camera");
   const micPermission = usePermission("microphone");
 
+  const [realCameras, setRealCameras] = useState<{ id: string; label: string }[]>([]);
+  const [realMics, setRealMics] = useState<{ id: string; label: string }[]>([]);
+  const [realSpeakers, setRealSpeakers] = useState<{ id: string; label: string }[]>([]);
+
+  useEffect(() => {
+    if (!isSettingsOpen || activeTab !== "hardware" || !navigator.mediaDevices?.enumerateDevices) return;
+    navigator.mediaDevices
+      .enumerateDevices()
+      .then((devices) => {
+        const cams = devices
+          .filter((d) => d.kind === "videoinput")
+          .map((d, i) => ({ id: d.deviceId, label: d.label || `Camera ${i + 1}` }));
+        const mics = devices
+          .filter((d) => d.kind === "audioinput")
+          .map((d, i) => ({ id: d.deviceId, label: d.label || `Microphone ${i + 1}` }));
+        const spks = devices
+          .filter((d) => d.kind === "audiooutput")
+          .map((d, i) => ({ id: d.deviceId, label: d.label || `Speaker ${i + 1}` }));
+        if (cams.length > 0) setRealCameras(cams);
+        if (mics.length > 0) setRealMics(mics);
+        if (spks.length > 0) setRealSpeakers(spks);
+      })
+      .catch(() => {});
+  }, [isSettingsOpen, activeTab]);
+
   useEffect(() => {
     const handleOpenPrivacy = () => setActiveTab("privacy");
     window.addEventListener("mocktwo-open-privacy-tab", handleOpenPrivacy);
@@ -96,24 +121,6 @@ export const SettingsModal: React.FC = () => {
       setIsRecalibrating(false);
     }
   };
-
-  const cameraOptions = [
-    "FaceTime HD Camera (Built-in)",
-    "Studio Display Camera",
-    "External Webcam",
-  ];
-
-  const micOptions = [
-    "MacBook Studio Microphone (Built-in)",
-    "AirPods Pro",
-    "External USB Microphone",
-  ];
-
-  const speakerOptions = [
-    "Internal MacBook Speakers",
-    "AirPods Pro (Spatial Audio)",
-    "Studio Display Audio",
-  ];
 
   const tabs: { id: "general" | "hardware" | "privacy" | "notifications" | "recordings" | "account"; label: string; icon: React.ReactNode }[] = [
     { id: "general", label: "General", icon: <Sliders size={13} /> },
@@ -344,9 +351,13 @@ export const SettingsModal: React.FC = () => {
                       fontSize: "13px",
                     }}
                   >
-                    {cameraOptions.map((c) => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
+                    {realCameras.length > 0 ? (
+                      realCameras.map((c) => (
+                        <option key={c.id} value={c.id}>{c.label}</option>
+                      ))
+                    ) : (
+                      <option value="">Default Camera</option>
+                    )}
                   </select>
                 </div>
               )}
@@ -383,9 +394,13 @@ export const SettingsModal: React.FC = () => {
                         fontSize: "13px",
                       }}
                     >
-                      {micOptions.map((m) => (
-                        <option key={m} value={m}>{m}</option>
-                      ))}
+                      {realMics.length > 0 ? (
+                        realMics.map((m) => (
+                          <option key={m.id} value={m.id}>{m.label}</option>
+                        ))
+                      ) : (
+                        <option value="">Default Microphone</option>
+                      )}
                     </select>
                     <Button
                       variant="secondary"
@@ -419,9 +434,13 @@ export const SettingsModal: React.FC = () => {
                     fontSize: "13px",
                   }}
                 >
-                  {speakerOptions.map((s) => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
+                  {realSpeakers.length > 0 ? (
+                    realSpeakers.map((s) => (
+                      <option key={s.id} value={s.id}>{s.label}</option>
+                    ))
+                  ) : (
+                    <option value="">Default Speakers</option>
+                  )}
                 </select>
               </div>
 

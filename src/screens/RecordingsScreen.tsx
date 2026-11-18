@@ -18,6 +18,7 @@ import {
   Clock,
   FileText,
   Trash2,
+  Info,
 } from "lucide-react";
 import {
   getComposureTier,
@@ -25,6 +26,8 @@ import {
   type Recording,
 } from "../types";
 import { WELLNESS_DISCLAIMER } from "../services/biometrics";
+import { serviceRegistry } from "../services/api";
+import { ComposureExplainerModal } from "../components/common/ComposureExplainerModal";
 
 export const RecordingsScreen: React.FC = () => {
   const {
@@ -53,11 +56,35 @@ export const RecordingsScreen: React.FC = () => {
   const [isInspectorOpen, setIsInspectorOpen] = useState(true);
   const [inspectorTab, setInspectorTab] = useState<"coaching" | "analytics">("coaching");
   const [noteInput, setNoteInput] = useState("");
+  const [showExplainer, setShowExplainer] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [hasVideoError, setHasVideoError] = useState(false);
 
-  const playTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  const activeRecording = selectedRecording || (recordings.length > 0 ? recordings[0] : null);
+  const [fullRecording, setFullRecording] = useState<Recording | null>(null);
+  const baseRecording = selectedRecording || (recordings.length > 0 ? recordings[0] : null);
+  const activeRecordingId = baseRecording?.id;
+
+  useEffect(() => {
+    let isMounted = true;
+    if (!activeRecordingId) {
+      setFullRecording(null);
+      return;
+    }
+
+    serviceRegistry.recordings.getRecording(activeRecordingId).then((full: Recording | null) => {
+      if (isMounted && full) {
+        setFullRecording(full);
+      }
+    }).catch((err: unknown) => {
+      console.warn("[RecordingsScreen] Failed to fetch full recording detail:", err);
+    });
+
+    return () => { isMounted = false; };
+  }, [activeRecordingId]);
+
+  const activeRecording = (fullRecording && fullRecording.id === activeRecordingId) ? fullRecording : baseRecording;
 
   const lastRecordingIdRef = useRef<string | null>(activeRecording?.id || null);
   useEffect(() => {
@@ -76,31 +103,48 @@ export const RecordingsScreen: React.FC = () => {
 
   const handleCloseDebrief = () => {
     setIsPlaying(false);
+    if (videoRef.current) videoRef.current.pause();
     setPlaybackTime(0);
     closeDebriefMode();
   };
 
-  // Media Player Simulation Timer
   const activeRecordingDuration = activeRecording?.durationSeconds || 0;
-  const activeRecordingId = activeRecording?.id;
+
+  // Reset player when recording changes
   useEffect(() => {
-    if (isPlaying && activeRecordingId) {
-      playTimerRef.current = setInterval(() => {
-        setPlaybackTime((prev) => {
-          if (prev >= activeRecordingDuration) {
-            setIsPlaying(false);
-            return activeRecordingDuration;
-          }
-          return prev + 1;
-        });
-      }, 1000 / playbackSpeed);
-    } else {
-      if (playTimerRef.current) clearInterval(playTimerRef.current);
+    setIsPlaying(false);
+    setPlaybackTime(0);
+    setHasVideoError(false);
+    if (videoRef.current) {
+      videoRef.current.currentTime = 0;
+      videoRef.current.pause();
     }
-    return () => {
-      if (playTimerRef.current) clearInterval(playTimerRef.current);
-    };
-  }, [isPlaying, playbackSpeed, activeRecordingId, activeRecordingDuration]);
+  }, [activeRecordingId]);
+
+  // Synchronize play state with video element
+  useEffect(() => {
+    if (!videoRef.current) return;
+    if (isPlaying && videoRef.current.paused) {
+      videoRef.current.play().catch(() => {});
+    } else if (!isPlaying && !videoRef.current.paused) {
+      videoRef.current.pause();
+    }
+  }, [isPlaying]);
+
+  // Synchronize playback speed with video element
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.playbackRate = playbackSpeed;
+    }
+  }, [playbackSpeed]);
+
+  const handleSeek = (newTimeSec: number) => {
+    const clamped = Math.max(0, Math.min(activeRecordingDuration, newTimeSec));
+    setPlaybackTime(clamped);
+    if (videoRef.current) {
+      videoRef.current.currentTime = clamped;
+    }
+  };
 
   // Keyboard Shortcuts for Media Player
   useEffect(() => {
@@ -113,10 +157,10 @@ export const RecordingsScreen: React.FC = () => {
         setIsPlaying((prev) => !prev);
       } else if (e.key === "ArrowLeft" && activeRecording) {
         e.preventDefault();
-        setPlaybackTime((prev) => Math.max(0, prev - 5));
+        handleSeek(playbackTime - 5);
       } else if (e.key === "ArrowRight" && activeRecording) {
         e.preventDefault();
-        setPlaybackTime((prev) => Math.min(activeRecording.durationSeconds, prev + 5));
+        handleSeek(playbackTime + 5);
       } else if (e.metaKey && e.altKey && e.key === "0") {
         e.preventDefault();
         setIsInspectorOpen((prev) => !prev);
@@ -130,10 +174,6 @@ export const RecordingsScreen: React.FC = () => {
     const m = Math.floor(sec / 60);
     const s = Math.floor(sec % 60);
     return `${m}:${s < 10 ? "0" : ""}${s}`;
-  };
-
-  const handleSeek = (time: number) => {
-    setPlaybackTime(Math.min(activeRecording?.durationSeconds || 0, Math.max(0, time)));
   };
 
   const handleAddNote = (e: React.FormEvent) => {
@@ -515,9 +555,10 @@ export const RecordingsScreen: React.FC = () => {
               <div
                 style={{
                   width: "100%",
-                  height: "220px",
+                  aspectRatio: "16 / 9",
+                  maxHeight: "320px",
                   borderRadius: "var(--radius-lg)",
-                  backgroundColor: "var(--bg-window)",
+                  backgroundColor: "#000000",
                   border: "1px solid var(--separator)",
                   position: "relative",
                   overflow: "hidden",
@@ -527,19 +568,67 @@ export const RecordingsScreen: React.FC = () => {
                   boxShadow: "var(--shadow-card)",
                 }}
               >
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-                  <LazyAvatarImage
-                    src={activeRecording.personaAvatarUrl}
-                    name={personaName}
-                    size={68}
-                  />
-                  <div style={{ fontSize: "14px", fontWeight: 650, color: "var(--text-primary)", marginTop: "10px" }}>
-                    {personaName}
+                {activeRecording?.id && !hasVideoError ? (
+                  <>
+                    <video
+                      ref={videoRef}
+                      src={`mocktwo-asset://recordings/sessions/${activeRecording.id}/video.webm`}
+                      playsInline
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "contain",
+                      }}
+                      onTimeUpdate={() => {
+                        if (videoRef.current) {
+                          setPlaybackTime(Math.floor(videoRef.current.currentTime));
+                        }
+                      }}
+                      onEnded={() => setIsPlaying(false)}
+                      onPlay={() => setIsPlaying(true)}
+                      onPause={() => setIsPlaying(false)}
+                      onError={() => setHasVideoError(true)}
+                    />
+                    {/* Layout Format Badge */}
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: 10,
+                        left: 10,
+                        fontSize: "11px",
+                        fontWeight: 500,
+                        padding: "3px 8px",
+                        borderRadius: "10px",
+                        backgroundColor: "rgba(0, 0, 0, 0.7)",
+                        color: activeRecording.layout === "camera_only" ? "rgba(255, 255, 255, 0.65)" : "#30d158",
+                        border: "1px solid rgba(255, 255, 255, 0.15)",
+                        backdropFilter: "blur(6px)",
+                        pointerEvents: "none",
+                      }}
+                    >
+                      {activeRecording.layout === "camera_only" ? "Camera only (older recording)" : "Stage recording"}
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                    <LazyAvatarImage
+                      src={activeRecording.personaAvatarUrl}
+                      name={personaName}
+                      size={68}
+                    />
+                    <div style={{ fontSize: "14px", fontWeight: 650, color: "var(--text-primary)", marginTop: "10px" }}>
+                      {personaName}
+                    </div>
+                    <div style={{ fontSize: "11px", color: "var(--text-secondary)", marginTop: "2px" }}>
+                      {activeRecording?.videoPath
+                        ? activeRecording.layout === "camera_only"
+                          ? "Camera only (older recording)"
+                          : "Stage recorded"
+                        : "Audio-only session"}{" "}
+                      · {biometrics?.coverageRatio || `${activeRecording.durationSeconds}s`}
+                    </div>
                   </div>
-                  <div style={{ fontSize: "11px", color: "var(--text-secondary)", marginTop: "2px" }}>
-                    Camera pulse recorded · {biometrics?.coverageRatio || `${activeRecording.durationSeconds}s clean`}
-                  </div>
-                </div>
+                )}
 
                 {/* Big Center Play / Pause Overlay Button */}
                 <button
@@ -651,36 +740,60 @@ export const RecordingsScreen: React.FC = () => {
                 Session Dialogue Transcript
               </div>
 
-              {activeRecording.transcript.map((line) => {
-                const isActive = playbackTime >= line.timestampSeconds && playbackTime < line.timestampSeconds + 8;
-                const isUser = line.speaker === "You";
+              {activeRecording.transcript && activeRecording.transcript.length > 0 ? (
+                activeRecording.transcript.map((line, idx) => {
+                  const lineTime =
+                    typeof line.timestampSeconds === "number"
+                      ? line.timestampSeconds
+                      : typeof (line as any).startMs === "number"
+                      ? Math.floor((line as any).startMs / 1000)
+                      : 0;
+                  const isActive = playbackTime >= lineTime && playbackTime < lineTime + 6;
+                  const isUser =
+                    line.speaker === "You" ||
+                    String(line.speaker).toLowerCase() === "user";
 
-                return (
-                  <div
-                    key={line.id}
-                    onClick={() => handleSeek(line.timestampSeconds)}
-                    style={{
-                      padding: "8px 12px",
-                      borderRadius: "var(--radius-sm)",
-                      backgroundColor: isActive ? "rgba(10, 132, 255, 0.12)" : "var(--bg-elevated)",
-                      border: isActive ? "1px solid var(--accent-blue)" : "1px solid var(--separator)",
-                      cursor: "default",
-                    }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "2px" }}>
-                      <span style={{ fontSize: "11.5px", fontWeight: 650, color: isUser ? "var(--accent-blue)" : "var(--accent-orange)" }}>
-                        {isUser ? "You" : personaName}
-                      </span>
-                      <span style={{ fontSize: "10.5px", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)" }}>
-                        {formatSeconds(line.timestampSeconds)}
-                      </span>
+                  return (
+                    <div
+                      key={line.id || `line-${idx}`}
+                      onClick={() => handleSeek(lineTime)}
+                      className="focus-ring"
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          handleSeek(lineTime);
+                        }
+                      }}
+                      style={{
+                        padding: "8px 12px",
+                        borderRadius: "var(--radius-sm)",
+                        backgroundColor: isActive ? "rgba(10, 132, 255, 0.12)" : "var(--bg-elevated)",
+                        border: isActive ? "1px solid var(--accent-blue)" : "1px solid var(--separator)",
+                        cursor: "pointer",
+                        transition: "all 0.15s ease",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "2px" }}>
+                        <span style={{ fontSize: "11.5px", fontWeight: 650, color: isUser ? "var(--accent-blue)" : "var(--accent-orange)" }}>
+                          {isUser ? "You" : personaName}
+                        </span>
+                        <span style={{ fontSize: "10.5px", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)" }}>
+                          {formatSeconds(lineTime)}
+                        </span>
+                      </div>
+                      <p style={{ fontSize: "12.5px", color: "var(--text-primary)", lineHeight: 1.45, margin: 0 }}>
+                        {line.text}
+                      </p>
                     </div>
-                    <p style={{ fontSize: "12.5px", color: "var(--text-primary)", lineHeight: 1.45, margin: 0 }}>
-                      {line.text}
-                    </p>
-                  </div>
-                );
-              })}
+                  );
+                })
+              ) : (
+                <div style={{ padding: "20px 0", textAlign: "center", color: "var(--text-tertiary)", fontSize: "12.5px" }}>
+                  No transcript segments recorded for this session.
+                </div>
+              )}
 
               {/* Add Note Form */}
               <form onSubmit={handleAddNote} style={{ marginTop: "12px", display: "flex", gap: "8px" }}>
@@ -847,8 +960,32 @@ export const RecordingsScreen: React.FC = () => {
                               · {activeRecording.nervousnessLevel || "Mild"}
                             </span>
                           </div>
-                          <div style={{ fontSize: "14px", fontWeight: 650, color: "var(--text-primary)", marginTop: "2px" }}>
-                            mocktwo Composure Index
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "2px" }}>
+                            <div style={{ fontSize: "14px", fontWeight: 650, color: "var(--text-primary)" }}>
+                              mocktwo Composure Index
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setShowExplainer(true)}
+                              aria-label="Learn how composure score is calculated and what Steady means"
+                              title="What is composure score and how is it calculated?"
+                              className="mac-btn focus-ring"
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                width: "16px",
+                                height: "16px",
+                                padding: 0,
+                                borderRadius: "50%",
+                                border: "1px solid var(--separator)",
+                                backgroundColor: "rgba(255, 255, 255, 0.06)",
+                                color: "var(--text-secondary)",
+                                cursor: "pointer",
+                              }}
+                            >
+                              <Info size={10} />
+                            </button>
                           </div>
                           <div style={{ fontSize: "11px", color: "var(--text-tertiary)", marginTop: "2px" }}>
                             Based on {signalsCount} of 5 signals {isPartial ? "(Partial)" : ""}
@@ -896,6 +1033,13 @@ export const RecordingsScreen: React.FC = () => {
                             <div style={{ marginTop: "4px", padding: "4px 8px", borderRadius: "3px", backgroundColor: "var(--bg-control)", fontSize: "11px", color: "var(--accent-teal)" }}>
                               <strong>Reset suggestion:</strong> {moment.suggestion}
                             </div>
+                            {moment.evidence && moment.evidence.length > 0 && (
+                              <div style={{ marginTop: "4px", fontSize: "10px", color: "var(--text-tertiary)", lineHeight: 1.3 }}>
+                                {moment.evidence.map((ev, i) => (
+                                  <div key={i}>• {ev}</div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -915,6 +1059,13 @@ export const RecordingsScreen: React.FC = () => {
                             <div style={{ fontSize: "11px", color: "var(--text-secondary)", marginTop: "2px" }}>
                               {item.description}
                             </div>
+                            {item.evidence && item.evidence.length > 0 && (
+                              <div style={{ marginTop: "3px", fontSize: "10px", color: "var(--text-tertiary)" }}>
+                                {item.evidence.map((ev, i) => (
+                                  <div key={i}>• {ev}</div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         ))}
                         {coaching?.whereShowedStrain.map((item) => (
@@ -925,6 +1076,13 @@ export const RecordingsScreen: React.FC = () => {
                             <div style={{ fontSize: "11px", color: "var(--text-secondary)", marginTop: "2px" }}>
                               {item.description}
                             </div>
+                            {item.evidence && item.evidence.length > 0 && (
+                              <div style={{ marginTop: "3px", fontSize: "10px", color: "var(--text-tertiary)" }}>
+                                {item.evidence.map((ev, i) => (
+                                  <div key={i}>• {ev}</div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -972,6 +1130,13 @@ export const RecordingsScreen: React.FC = () => {
                           <div key={d.id} style={{ padding: "10px 12px", borderRadius: "var(--radius-sm)", backgroundColor: "var(--bg-elevated)", border: "1px solid var(--separator)" }}>
                             <div style={{ fontSize: "12px", fontWeight: 600, color: "var(--accent-blue)" }}>{d.title}</div>
                             <div style={{ fontSize: "11px", color: "var(--text-secondary)", marginTop: "2px", lineHeight: 1.35 }}>{d.description}</div>
+                            {d.evidence && d.evidence.length > 0 && (
+                              <div style={{ marginTop: "4px", fontSize: "10px", color: "var(--text-tertiary)" }}>
+                                {d.evidence.map((ev, i) => (
+                                  <div key={i}>• {ev}</div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -998,6 +1163,136 @@ export const RecordingsScreen: React.FC = () => {
                     />
                   ) : (
                     <>
+                      {/* Composure, Nervousness & Pressure Hero Card */}
+                      <div
+                        style={{
+                          padding: "16px",
+                          borderRadius: "var(--radius-lg)",
+                          backgroundColor: "var(--bg-elevated)",
+                          border: "1px solid var(--separator)",
+                          boxShadow: "var(--shadow-card)",
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+                          <ScoreRing score={score || 0} size={76} strokeWidth={5.5} />
+                          <div style={{ flex: 1 }}>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                <span
+                                  style={{
+                                    fontSize: "11px",
+                                    fontWeight: 700,
+                                    color:
+                                      tier === "Unshakeable"
+                                        ? "var(--accent-purple)"
+                                        : tier === "Composed"
+                                        ? "var(--accent-green)"
+                                        : "var(--accent-blue)",
+                                    textTransform: "uppercase",
+                                    letterSpacing: "0.04em",
+                                  }}
+                                >
+                                  {tier}
+                                </span>
+                                <span
+                                  style={{
+                                    fontSize: "11px",
+                                    padding: "2px 7px",
+                                    borderRadius: "var(--radius-xs)",
+                                    backgroundColor: "var(--bg-control)",
+                                    color:
+                                      activeRecording.nervousnessLevel === "Calm"
+                                        ? "var(--accent-green)"
+                                        : activeRecording.nervousnessLevel === "Mild"
+                                        ? "var(--accent-blue)"
+                                        : activeRecording.nervousnessLevel === "Moderate"
+                                        ? "var(--accent-orange)"
+                                        : "var(--accent-red)",
+                                    fontWeight: 650,
+                                  }}
+                                >
+                                  {activeRecording.nervousnessLevel || (score !== undefined ? (score >= 88 ? "Calm" : score >= 76 ? "Mild" : score >= 60 ? "Moderate" : "High") : "Mild")}
+                                </span>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => setShowExplainer(true)}
+                                aria-label="Learn how composure score, nervousness, and pressure are calculated"
+                                title="How do we calculate composure, nervousness, and pressure?"
+                                className="mac-btn focus-ring"
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  width: "18px",
+                                  height: "18px",
+                                  padding: 0,
+                                  borderRadius: "50%",
+                                  border: "1px solid var(--separator)",
+                                  backgroundColor: "rgba(255, 255, 255, 0.06)",
+                                  color: "var(--text-secondary)",
+                                  cursor: "pointer",
+                                }}
+                              >
+                                <Info size={11} />
+                              </button>
+                            </div>
+
+                            <div style={{ fontSize: "14px", fontWeight: 650, color: "var(--text-primary)", marginTop: "4px" }}>
+                              mocktwo Composure &amp; Nervousness Index
+                            </div>
+
+                            <div style={{ fontSize: "11px", color: "var(--text-tertiary)", marginTop: "2px" }}>
+                              Based on {signalsCount} of 5 biometric signals {isPartial ? "(Partial read)" : ""}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Nervousness and Pressure Breakdown Row */}
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: "1fr 1fr 1fr",
+                            gap: "8px",
+                            marginTop: "14px",
+                            paddingTop: "12px",
+                            borderTop: "1px solid var(--separator)",
+                          }}
+                        >
+                          <div style={{ padding: "8px 10px", borderRadius: "var(--radius-sm)", backgroundColor: "var(--bg-control)" }}>
+                            <span style={{ fontSize: "10px", color: "var(--text-tertiary)", textTransform: "uppercase", display: "block", fontWeight: 600 }}>
+                              Nervousness
+                            </span>
+                            <span style={{ fontSize: "13px", fontWeight: 650, color: "var(--text-primary)" }}>
+                              {activeRecording.nervousnessLevel || (score !== undefined ? (score >= 88 ? "Calm" : score >= 76 ? "Mild" : score >= 60 ? "Moderate" : "High") : "Mild")}
+                            </span>
+                          </div>
+
+                          <div style={{ padding: "8px 10px", borderRadius: "var(--radius-sm)", backgroundColor: "var(--bg-control)" }}>
+                            <span style={{ fontSize: "10px", color: "var(--text-tertiary)", textTransform: "uppercase", display: "block", fontWeight: 600 }}>
+                              Pressure Spike
+                            </span>
+                            <span style={{ fontSize: "13px", fontWeight: 650, color: "var(--accent-orange)" }}>
+                              {biometrics?.pulse?.deltaVsBaseline !== undefined
+                                ? `+${biometrics.pulse.deltaVsBaseline} bpm`
+                                : ((activeRecording as any).avgPulse && baseline?.restingPulse)
+                                ? `+${Math.max(0, (activeRecording as any).avgPulse - baseline.restingPulse)} bpm`
+                                : "Controlled"}
+                            </span>
+                          </div>
+
+                          <div style={{ padding: "8px 10px", borderRadius: "var(--radius-sm)", backgroundColor: "var(--bg-control)" }}>
+                            <span style={{ fontSize: "10px", color: "var(--text-tertiary)", textTransform: "uppercase", display: "block", fontWeight: 600 }}>
+                              Recovery
+                            </span>
+                            <span style={{ fontSize: "13px", fontWeight: 650, color: "var(--accent-green)" }}>
+                              ~{biometrics?.recoverySecondsApprox || (activeRecording as any).recoverySeconds || 14}s
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
                       {/* Top: Pressure Timeline (Pulse + EDA + Talking Bands + Out-of-Range Band) */}
                     <PressureTimelineChart
                       biometrics={activeRecording.sessionBiometrics}
@@ -1387,6 +1682,11 @@ export const RecordingsScreen: React.FC = () => {
           ) : null}
         </div>
       </div>
+
+      <ComposureExplainerModal
+        isOpen={showExplainer}
+        onClose={() => setShowExplainer(false)}
+      />
     </div>
   );
 };

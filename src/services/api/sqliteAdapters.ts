@@ -20,9 +20,9 @@ import type {
   UserProfile,
   AppSettings,
   UserBaseline,
-  PulseSample,
 } from "../../types";
-import { calculateComposureScore } from "../biometrics";
+import { LEGACY_CAMERA, LEGACY_MIC, LEGACY_SPEAKER } from "../../constants/legacyDevices.ts";
+import { generateCoaching } from "../../utils/coachingEngine.ts";
 
 export class SqliteProfileService implements ProfileService {
   async getProfile(): Promise<UserProfile | null> {
@@ -247,7 +247,114 @@ export class SqliteRecordingService implements RecordingService {
   async getRecording(id: string): Promise<Recording | null> {
     if (window.electronAPI?.storage) {
       try {
-        return await window.electronAPI.storage.getRecording(id);
+        const raw = await window.electronAPI.storage.getRecording(id);
+        if (!raw) return null;
+
+        // Build sessionBiometrics if raw vitals samples exist
+        let sessionBiometrics = raw.sessionBiometrics;
+        if (!sessionBiometrics && Array.isArray(raw.vitalsSamples) && raw.vitalsSamples.length > 0) {
+          const cleanPulseSamples = raw.vitalsSamples.filter(
+            (s: any) => (s.is_clean || s.isClean) && s.pulse_bpm != null && s.pulse_bpm >= 40 && s.pulse_bpm <= 110
+          );
+          const hasCleanPulse = cleanPulseSamples.length > 0;
+
+          sessionBiometrics = {
+            pulse: {
+              rate: raw.vitalsSamples
+                .filter((s: any) => s.pulse_bpm != null)
+                .map((s: any) => ({
+                  t: Math.round((s.timestamp_offset_ms || s.timestampOffsetMs || 0) / 1000),
+                  value: s.pulse_bpm > 110 ? "outOfRange" : s.pulse_bpm,
+                  confidence: s.confidence || 0,
+                  stable: Boolean(s.is_clean || s.isClean),
+                })),
+              avg: raw.avgPulse,
+              peak: raw.peakPulse,
+              baselineValue: 68,
+              deltaVsBaseline: raw.avgPulse ? raw.avgPulse - 68 : undefined,
+              state: hasCleanPulse ? "measured" : "unavailable",
+              confidence: hasCleanPulse ? 90 : 0,
+              windowSeconds: 12,
+              rangeBpm: "40–110 bpm",
+              hasOutOfRange: raw.vitalsSamples.some((s: any) => (s.pulse_bpm || s.pulseBpm) > 110),
+            },
+            waveform: { samples: [], state: hasCleanPulse ? "measured" : "unavailable" },
+            hrv: {
+              trace: raw.vitalsSamples
+                .filter((s: any) => (s.hrv_rmssd != null || s.hrvRmssd != null))
+                .map((s: any) => ({
+                  t: Math.round((s.timestamp_offset_ms || s.timestampOffsetMs || 0) / 1000),
+                  value: s.hrv_rmssd ?? s.hrvRmssd,
+                })),
+              rmssd: raw.avgHrvRmssd,
+              state: raw.avgHrvRmssd ? "measured" : "notEnoughTime",
+              confidence: raw.avgHrvRmssd ? 85 : 0,
+              windowSeconds: 60,
+            },
+            breathing: {
+              rate: raw.vitalsSamples
+                .filter((s: any) => (s.breathing_rate != null || s.breathingRate != null))
+                .map((s: any) => ({
+                  t: Math.round((s.timestamp_offset_ms || s.timestampOffsetMs || 0) / 1000),
+                  value: s.breathing_rate ?? s.breathingRate,
+                })),
+              state: "unavailable",
+              confidence: 0,
+              windowSeconds: 30,
+              rangeBpm: "5–40 br/min",
+            },
+            eda: { trace: [], state: "unavailable", startSeconds: 35 },
+            face: {
+              trace: [],
+              expressionAverages: { neutral: 0, happy: 0, angry: 0, contempt: 0, disgust: 0, fear: 0, sad: 0, surprise: 0 },
+              blinkRatePerMin: 0,
+              speakingSharePct: 0,
+              state: "unavailable",
+            },
+            validationEvents: [],
+            cleanMeasuredSeconds: raw.measuredSeconds || (hasCleanPulse ? Math.round(cleanPulseSamples.length * 0.5) : 0),
+            totalDurationSeconds: raw.durationSeconds || 0,
+            coverageRatio: raw.coverageRatio || `${raw.measuredSeconds || 0} of ${raw.durationSeconds || 0} s measured cleanly`,
+            readinessStatus: raw.readinessStatus || (raw.durationSeconds >= 60 ? "Full read" : "Too short"),
+            signalsAvailableCount: raw.signalsAvailableCount ?? (hasCleanPulse ? 3 : 0),
+            isPartialScore: Boolean(raw.isPartialScore),
+            nervousnessLevel: raw.nervousnessLevel || "Mild",
+            peakStressMoments: [],
+          };
+        }
+
+        // Generate coaching if not saved in DB
+        let pressureCoaching = raw.pressureCoaching;
+        const transcriptItems = raw.transcript || raw.transcriptSegments || [];
+        if (!pressureCoaching && (transcriptItems.length > 0 || (raw.vitalsSamples && raw.vitalsSamples.length > 0))) {
+          const telemetrySamples = (raw.vitalsSamples || []).map((s: any) => ({
+            timestampOffsetMs: s.timestamp_offset_ms || s.timestampOffsetMs || 0,
+            pulseBpm: s.pulse_bpm ?? s.pulseBpm ?? null,
+            hrvRmssd: s.hrv_rmssd ?? s.hrvRmssd ?? null,
+            breathingRate: s.breathing_rate ?? s.breathingRate ?? null,
+            confidence: s.confidence ?? null,
+            isClean: Boolean(s.is_clean ?? s.isClean),
+          }));
+
+          pressureCoaching = generateCoaching({
+            transcript: transcriptItems,
+            vitalsSamples: telemetrySamples,
+            durationSeconds: raw.durationSeconds || 0,
+            baseline: { restingPulse: 68 },
+            composureScore: raw.composureScore,
+            avgPulse: raw.avgPulse,
+            peakPulse: raw.peakPulse,
+            recoverySeconds: raw.recoverySeconds,
+            nervousnessLevel: raw.nervousnessLevel,
+          });
+        }
+
+        return {
+          ...raw,
+          sessionBiometrics,
+          pressureCoaching,
+          transcript: transcriptItems,
+        };
       } catch (err) {
         console.warn("[SqliteRecordingService] getRecording failed:", err);
       }
@@ -300,18 +407,16 @@ export class SqliteSessionService implements SessionService {
   private scenarioService: ScenarioService;
   private personaService: PersonaService;
   private recordingService: RecordingService;
-  private profileService: ProfileService;
 
   constructor(
     scenarioService: ScenarioService,
     personaService: PersonaService,
     recordingService: RecordingService,
-    profileService: ProfileService
+    _profileService: ProfileService
   ) {
     this.scenarioService = scenarioService;
     this.personaService = personaService;
     this.recordingService = recordingService;
-    this.profileService = profileService;
   }
 
   isAvailable(): boolean {
@@ -353,46 +458,14 @@ export class SqliteSessionService implements SessionService {
       ? await this.personaService.getPersona(sc.personaId)
       : null;
 
-    const durationSeconds = Math.max(15, Math.min(180, Math.round((Date.now() - sessionMeta.startedAt) / 1000)));
+    const durationSeconds = Math.max(0, Math.round((Date.now() - sessionMeta.startedAt) / 1000));
     const now = new Date();
     const isoDate = now.toISOString();
 
-    const pulseRise = 8 + (durationSeconds % 8);
-    const peakPulse = 72 + pulseRise;
-    const recoverySec = 12 + (durationSeconds % 12);
-    const compCalc = calculateComposureScore({
-      pulseRiseVsBaseline: pulseRise,
-      peakPulse,
-      recoverySecondsApprox: recoverySec,
-      hrvVsBaseline: -8,
-      edaArousalVsBaseline: 0.18,
-      expressionTensionShare: 0.12,
-      signalsAvailableCount: 5,
-    });
-
-    const recordingId = `rec-${Date.now()}`;
-    const scenarioTitle = sc?.title || "Rehearsal Session";
+    const recordingId = sessionId || `rec-${Date.now()}`;
+    const scenarioTitle = sc?.title || "Practice Session";
     const counterpartName = persona?.name || sc?.personaName || "Practice Partner";
-
-    const pulseSamples: PulseSample[] = [];
-    for (let s = 12; s <= durationSeconds; s += 2) {
-      const riseProgress = Math.sin((s / durationSeconds) * Math.PI);
-      const bpm = Math.round(68 + riseProgress * pulseRise);
-      pulseSamples.push({
-        t: s,
-        value: bpm,
-        confidence: 95,
-        stable: true,
-      });
-    }
-
-    const stressMoment = {
-      timestampSeconds: 32,
-      counterpartQuote: "What is the contingency plan if our timeline shifts?",
-      reaction: "Pulse rose +12 bpm above baseline",
-      userAction: "Paused and took a steady breath before articulating the contingency path",
-      suggestion: "Maintain steady breathing before acknowledging timeline shifts",
-    };
+    const status = durationSeconds >= 30 ? "completed" : "abandoned";
 
     const newRecording: Recording = {
       id: recordingId,
@@ -406,187 +479,81 @@ export class SqliteSessionService implements SessionService {
       dateGroup: "Today",
       durationSeconds,
       durationMinutes: Math.round((durationSeconds / 60) * 10) / 10,
-      composureScore: compCalc.score,
-      score: compCalc.score,
-      composureTier: compCalc.tier,
-      nervousnessLevel: compCalc.nervousness,
-      readinessStatus: "Full read",
-      status: "Completed",
-      mediaType: "audio-only",
-      transcript: [
-        {
-          id: `t-1`,
-          speaker: "Persona",
-          text: sc?.context || `We are reviewing the progress and next milestones for this project.`,
-          timestampSeconds: 2,
-        },
-        {
-          id: `t-2`,
-          speaker: "You",
-          text: `I understand completely. Let us walk through the key constraints and align on the proposed path forward.`,
-          timestampSeconds: 16,
-        },
-        {
-          id: `t-3`,
-          speaker: "Persona",
-          text: `What is the contingency plan if our timeline shifts by two weeks?`,
-          timestampSeconds: 32,
-        },
-        {
-          id: `t-4`,
-          speaker: "You",
-          text: `We have isolated the critical path and scheduled parallel tracks so any shift can be mitigated immediately without downstream impact.`,
-          timestampSeconds: 46,
-        },
-      ],
+      composureScore: undefined,
+      score: undefined,
+      composureTier: undefined,
+      nervousnessLevel: undefined,
+      readinessStatus: "Too short",
+      status: status === "completed" ? "Completed" : "Incomplete",
+      mediaType: "video",
+      videoPath: `sessions/${recordingId}/video.webm`,
+      transcript: [],
+      userNotes: [],
       sessionBiometrics: {
         pulse: {
-          rate: pulseSamples,
-          baselineValue: 68,
-          deltaVsBaseline: pulseRise,
-          peak: peakPulse,
-          state: "measured",
-          confidence: 95,
+          rate: [],
+          baselineValue: 70,
+          state: "unavailable",
+          confidence: 0,
           windowSeconds: 12,
           rangeBpm: "40–110 bpm",
           hasOutOfRange: false,
         },
         waveform: {
           samples: [],
-          state: "measured",
+          state: "unavailable",
         },
         hrv: {
           trace: [],
-          state: "measured",
-          confidence: 90,
+          state: "unavailable",
+          confidence: 0,
           windowSeconds: 60,
         },
         breathing: {
           rate: [],
-          quietRateBpm: 14,
-          state: "measured",
-          confidence: 85,
+          state: "unavailable",
+          confidence: 0,
           windowSeconds: 30,
           rangeBpm: "5–40 br/min",
         },
         eda: {
           trace: [],
-          state: "measured",
+          state: "unavailable",
           startSeconds: 35,
         },
         face: {
           trace: [],
           expressionAverages: {
-            neutral: 0.82,
-            happy: 0.12,
-            surprise: 0.04,
-            contempt: 0,
-            fear: 0.01,
-            sad: 0.01,
-            disgust: 0,
+            neutral: 0,
+            happy: 0,
             angry: 0,
+            contempt: 0,
+            disgust: 0,
+            fear: 0,
+            sad: 0,
+            surprise: 0,
           },
-          blinkRatePerMin: 16,
-          speakingSharePct: 48,
-          state: "measured",
+          blinkRatePerMin: 0,
+          speakingSharePct: 0,
+          state: "unavailable",
         },
         validationEvents: [],
-        cleanMeasuredSeconds: durationSeconds,
+        cleanMeasuredSeconds: 0,
         totalDurationSeconds: durationSeconds,
-        coverageRatio: `Coverage: ${durationSeconds} of ${durationSeconds} s measured cleanly`,
-        readinessStatus: "Full read",
-        composureScore: compCalc.score,
-        composureTier: compCalc.tier,
-        signalsAvailableCount: 5,
+        coverageRatio: `Coverage: 0 of ${durationSeconds} s measured cleanly`,
+        readinessStatus: "Too short",
+        signalsAvailableCount: 0,
         isPartialScore: false,
-        nervousnessLevel: compCalc.nervousness,
-        peakStressMoments: [stressMoment],
+        nervousnessLevel: "Calm",
+        peakStressMoments: [],
       },
-      pressureCoaching: {
-        summarySentence: `Held steady composure with effective physiological recovery when responding to timeline pressure.`,
-        composureTier: compCalc.tier,
-        pressureMoments: [stressMoment],
-        whereHeldSteady: [
-          {
-            id: "hs-1",
-            timestampSeconds: 16,
-            title: "Steady Initial Articulation",
-            description: "Responded smoothly with low autonomic fluctuation during the opening exchange.",
-          },
-        ],
-        whereShowedStrain: [
-          {
-            id: "ss-1",
-            timestampSeconds: 32,
-            title: "Temporary Pulse Acceleration",
-            description: "Brief pulse rise of +12 bpm upon timeline challenge, recovering within 14 seconds.",
-          },
-        ],
-        counterpartHandling: [
-          {
-            area: "Clarity under pressure",
-            assessment: "Acknowledged counterpart constraints directly and provided structured solutions.",
-            status: "strong",
-          },
-        ],
-        drills: [
-          {
-            id: "d-1",
-            title: "Tactical Pause Before Clarifying",
-            description: "Practice a 2-second diaphragmatic breath before responding to unexpected objections.",
-            type: "breathing",
-          },
-        ],
-        pressureSkills: [
-          {
-            id: "composure",
-            name: "Composure",
-            score: compCalc.score,
-            assessment: "High stability across critical exchanges.",
-          },
-          {
-            id: "recovery",
-            name: "Recovery",
-            score: 84,
-            assessment: "Rapid autonomic normalization following challenge.",
-          },
-          {
-            id: "pulse_control",
-            name: "Pulse control",
-            score: 82,
-            assessment: "Pulse remained contained throughout the session.",
-          },
-          {
-            id: "autonomic_balance",
-            name: "Autonomic balance",
-            score: 80,
-            assessment: "Consistent respiratory and vascular balance.",
-          },
-          {
-            id: "expression_calm",
-            name: "Expression calm",
-            score: 88,
-            assessment: "Composed facial neutrality during speaking turns.",
-          },
-        ],
-      },
-      userNotes: [],
     };
 
-    await this.recordingService.saveRecording(newRecording);
-
-    try {
-      const prof = await this.profileService.getProfile();
-      if (prof) {
-        await this.profileService.updateProfile({
-          completedSessionsCount: (prof.completedSessionsCount || 0) + 1,
-          streakDays: Math.max(1, prof.streakDays || 1),
-        });
-      }
-    } catch {
-      // ignore
+    // If the recording was already saved & finalized via recording:finalize IPC, preserve its real metrics
+    const existing = await this.recordingService.getRecording(recordingId);
+    if (!existing) {
+      await this.recordingService.saveRecording(newRecording);
     }
-
     return { recordingId };
   }
 }
@@ -742,42 +709,19 @@ export class SqliteBiometricsService implements BiometricsService {
     }
   }
 
-  async calibrateBaseline(durationSeconds: number = 60): Promise<UserBaseline> {
-    const sample: UserBaseline = {
-      restingPulse: 68,
-      restingBreathingRate: 14,
-      restingHrvRmssd: 54,
-      restingBaevsky: 82,
-      restingEdaArousal: 0.22,
-      restingExpressions: {
-        neutral: 0.88,
-        happy: 0.08,
-        surprise: 0.02,
-        contempt: 0.0,
-        fear: 0.01,
-        sad: 0.01,
-        disgust: 0.0,
-        angry: 0.0,
-      },
-      measuredAt: new Date().toISOString(),
-      isCalibrated: true,
-      qualityScore: 94,
-      qualityRating: "Good",
-      sdkVersion: "smartspectra-3.2.0-local",
-      durationSeconds,
-      restingHR: 68,
-      restingHRV: 54,
-    };
-    return this.saveBaseline(sample);
+  async calibrateBaseline(_durationSeconds: number = 60): Promise<UserBaseline> {
+    const existing = await this.getBaseline();
+    if (existing) return existing;
+    throw new Error("No optical sensor baseline samples captured. Please run the calibration flow.");
   }
 }
 
 export class SqliteSettingsService implements SettingsService {
   private defaultSettings: AppSettings = {
     theme: "dark",
-    selectedCamera: "FaceTime HD Camera (Built-in)",
-    selectedMicrophone: "MacBook Studio Microphone (Built-in)",
-    selectedSpeaker: "Internal MacBook Speakers",
+    selectedCamera: "",
+    selectedMicrophone: "",
+    selectedSpeaker: "",
     autoStartAudio: true,
     hapticFeedback: true,
     reducedMotion: false,
@@ -790,11 +734,22 @@ export class SqliteSettingsService implements SettingsService {
   };
 
   async getSettings(): Promise<AppSettings> {
-    if (window.electronAPI?.storage) {
+    if (typeof window !== "undefined" && window.electronAPI?.storage) {
       try {
         const stored = await window.electronAPI.storage.getSettings();
         if (stored && typeof stored === "object") {
-          return { ...this.defaultSettings, ...stored };
+          const sanitized = { ...this.defaultSettings, ...stored };
+          const legacy = {
+            selectedCamera: LEGACY_CAMERA,
+            selectedMicrophone: LEGACY_MIC,
+            selectedSpeaker: LEGACY_SPEAKER,
+          } as const;
+          for (const k of Object.keys(legacy) as (keyof typeof legacy)[]) {
+            if (sanitized[k] === legacy[k]) {
+              sanitized[k] = "";
+            }
+          }
+          return sanitized;
         }
       } catch {
         // fallback
@@ -804,7 +759,7 @@ export class SqliteSettingsService implements SettingsService {
   }
 
   async updateSettings(updates: Partial<AppSettings>): Promise<AppSettings> {
-    if (window.electronAPI?.storage) {
+    if (typeof window !== "undefined" && window.electronAPI?.storage) {
       for (const [key, val] of Object.entries(updates)) {
         await window.electronAPI.storage.setSetting(key, val);
       }

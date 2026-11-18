@@ -57,7 +57,7 @@ export interface AppContextType {
   
   // Live simulation session
   activeSessionId: string | null;
-  beginSimulation: (overridePersona?: Persona) => void;
+  beginSimulation: (overridePersona?: Persona, overrideDurationMinutes?: number) => void;
   finishSimulation: (durationSeconds: number) => void;
   completeProcessingSession: () => Promise<Recording | null>;
   
@@ -80,7 +80,8 @@ export interface AppContextType {
 
   // Quick Practice
   isQuickPracticeOpen: boolean;
-  openQuickPractice: () => void;
+  quickPracticeInitialCategory?: string;
+  openQuickPractice: (initialCategory?: string) => void;
   closeQuickPractice: () => void;
   triggerRandomPractice: () => void;
   triggerLastUsedPractice: () => void;

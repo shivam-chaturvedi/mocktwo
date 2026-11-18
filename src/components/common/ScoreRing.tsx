@@ -34,6 +34,10 @@ export const ScoreRing: React.FC<ScoreRingProps> = ({
 
   const strokeColor = color || defaultColor;
 
+  const innerDiameter = Math.max(10, size - strokeWidth * 2);
+  const numberFontSize = Math.max(11, Math.round(innerDiameter * 0.35));
+  const percentFontSize = Math.max(7.5, Math.round(numberFontSize * 0.62));
+
   useEffect(() => {
     if (!animate) return;
 
@@ -99,24 +103,37 @@ export const ScoreRing: React.FC<ScoreRingProps> = ({
       <div
         style={{
           position: "absolute",
+          inset: 0,
           display: "flex",
-          flexDirection: "column",
           alignItems: "center",
-          justifyContent: "center"
+          justifyContent: "center",
+          pointerEvents: "none",
         }}
       >
         <span
           className="tabular-nums"
           style={{
             fontFamily: "var(--font-sans)",
-            fontSize: size >= 100 ? "34px" : "22px",
+            fontSize: `${numberFontSize}px`,
             fontWeight: 700,
             lineHeight: 1,
-            color: "var(--text-primary)"
+            color: "var(--text-primary)",
+            display: "inline-flex",
+            alignItems: "baseline",
+            justifyContent: "center",
           }}
         >
           {displayedScore}
-          <span style={{ fontSize: size >= 100 ? "18px" : "13px", fontWeight: 400, marginLeft: "1px" }}>%</span>
+          <span
+            style={{
+              fontSize: `${percentFontSize}px`,
+              fontWeight: 500,
+              marginLeft: "1px",
+              opacity: 0.85,
+            }}
+          >
+            %
+          </span>
         </span>
       </div>
     </div>

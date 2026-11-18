@@ -6,6 +6,7 @@
  */
 
 import type { Recording } from "../types/index.ts";
+import { MIN_COMPLETED_SECONDS } from "../constants/session.ts";
 
 export const WEEK_START_DAY = 1; // 1 = Monday (0 = Sunday, 1 = Monday)
 
@@ -46,8 +47,8 @@ export function toLocalDateString(date: Date): string {
 export function isCompletedSession(recording: Pick<Recording, "status" | "durationSeconds">): boolean {
   if (!recording) return false;
   const status = (recording.status || "").toLowerCase();
-  if (status === "too short" || status === "incomplete") return false;
-  return status === "completed" && (recording.durationSeconds ?? 0) > 0;
+  if (status === "too short" || status === "incomplete" || status === "abandoned" || status === "interrupted" || status === "failed") return false;
+  return status === "completed" && (recording.durationSeconds ?? 0) >= MIN_COMPLETED_SECONDS;
 }
 
 /**

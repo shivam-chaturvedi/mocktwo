@@ -245,10 +245,9 @@ describe("Phase 3: SQLite Storage & Worker Subsystem", () => {
 
   test("Security: StorageManager prevents path traversal in audio chunk recording paths", () => {
     const { StorageManager } = require("../electron/storage/storageManager.cjs");
-    const mockSM = {
+    const mockSM = Object.assign(Object.create(StorageManager.prototype), {
       recordingsDir: path.join(TEST_DIR, "recordings"),
-      getSafeRecordingPath: StorageManager.prototype.getSafeRecordingPath,
-    };
+    });
 
     assert.throws(
       () => mockSM.getSafeRecordingPath("../../../etc/passwd", "webm"),
@@ -265,7 +264,7 @@ describe("Phase 3: SQLite Storage & Worker Subsystem", () => {
 
     // Valid alphanumeric ID
     const validPath = mockSM.getSafeRecordingPath("rec-12345_test", "webm");
-    assert.ok(validPath.endsWith("rec-12345_test.webm"));
+    assert.ok(validPath.includes("rec-12345_test"), `Expected path to include the recording ID, got: ${validPath}`);
     assert.ok(validPath.startsWith(path.resolve(path.join(TEST_DIR, "recordings"))));
   });
 

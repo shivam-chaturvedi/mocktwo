@@ -259,6 +259,40 @@ class TavusClient {
       throw err;
     }
   }
+
+  /**
+   * Create Conversation (CVI).
+   */
+  async createConversation(payload, options = {}) {
+    if (!payload || typeof payload !== "object") {
+      throw new TavusApiError("validation", "Conversation payload must be an object");
+    }
+    return this.request("POST", "/v2/conversations", payload, false, options);
+  }
+
+  /**
+   * Get Conversation status/details.
+   */
+  async getConversation(conversationId, options = {}) {
+    if (!conversationId) throw new TavusApiError("validation", "conversationId is required");
+    return this.request("GET", `/v2/conversations/${encodeURIComponent(conversationId)}`, null, true, options);
+  }
+
+  /**
+   * End Conversation.
+   * Routine cleanup: idempotent, safe to call if already ended or 404.
+   */
+  async endConversation(conversationId, options = {}) {
+    if (!conversationId) throw new TavusApiError("validation", "conversationId is required");
+    try {
+      return await this.request("POST", `/v2/conversations/${encodeURIComponent(conversationId)}/end`, null, false, options);
+    } catch (err) {
+      if (err.status === 404 || (err.details && String(err.details.error || "").toLowerCase().includes("ended"))) {
+        return { ended: true };
+      }
+      throw err;
+    }
+  }
 }
 
 module.exports = {

@@ -58,6 +58,18 @@ const FORBIDDEN_PATTERNS = [
     regex: /TIMEOUT_MS\s*=\s*15000\b/,
     name: "Hardcoded timeout (TIMEOUT_MS = 15000)",
   },
+  {
+    regex: /Job Interviews|Sales Pitches & Client Calls|Presentations & Demos|High-Stakes Negotiation|Customer Service & Escalations|Hospitality & Service/,
+    name: "Legacy non-canonical category strings (must use canonical InteractionTypes)",
+  },
+  {
+    regex: /explore options|SLA commitments|terms and SLA/i,
+    name: "Fabricated canned transcript strings (must never be present in application code)",
+  },
+  {
+    regex: /tactical pause|pre-response reset|acknowledge the core concern/i,
+    name: "Fabricated canned coaching strings (must never be present in application code)",
+  },
 ];
 
 function runCheck() {

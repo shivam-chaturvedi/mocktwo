@@ -8,6 +8,7 @@ import { EmptyState } from "../components/common/EmptyState";
 import { LazyAvatarImage } from "../components/common/LazyAvatarImage";
 import { computeWeekStats } from "../services/weekStats";
 import { serviceRegistry } from "../services/api";
+import { type QuickStartCategory, pickScenario } from "../utils/quickStart";
 import {
   Flame,
   ArrowRight,
@@ -26,19 +27,21 @@ import {
   MoreHorizontal,
   Activity,
   Check,
+  Info,
 } from "lucide-react";
+import { ComposureExplainerModal } from "../components/common/ComposureExplainerModal";
 
 type QuickStartVariant = "A" | "B" | "C" | "D";
 
 // Standard 7 category chips
-const BASE_CATEGORY_ITEMS: { label: string; icon: React.ReactNode; filter: string }[] = [
-  { label: "Interviews", icon: <Briefcase size={12.5} />, filter: "Job Interviews" },
-  { label: "Sales & Pitches", icon: <TrendingUp size={12.5} />, filter: "Sales Pitches & Client Calls" },
-  { label: "Presentations", icon: <Presentation size={12.5} />, filter: "Presentations & Demos" },
+const BASE_CATEGORY_ITEMS: { label: string; icon: React.ReactNode; filter: QuickStartCategory }[] = [
+  { label: "Interviews", icon: <Briefcase size={12.5} />, filter: "Interviews" },
+  { label: "Sales & Pitches", icon: <TrendingUp size={12.5} />, filter: "Sales & Pitches" },
+  { label: "Presentations", icon: <Presentation size={12.5} />, filter: "Presentations" },
   { label: "Difficult Talks", icon: <MessageCircleWarning size={12.5} />, filter: "Difficult Conversations" },
-  { label: "Negotiation", icon: <Handshake size={12.5} />, filter: "High-Stakes Negotiation" },
-  { label: "Customer Service", icon: <Headphones size={12.5} />, filter: "Customer Service & Escalations" },
-  { label: "Hospitality", icon: <HospitalityIcon size={12.5} />, filter: "Hospitality & Service" },
+  { label: "Negotiation", icon: <Handshake size={12.5} />, filter: "Negotiation" },
+  { label: "Customer Service", icon: <Headphones size={12.5} />, filter: "Customer Service" },
+  { label: "Hospitality", icon: <HospitalityIcon size={12.5} />, filter: "Hospitality" },
 ];
 
 export const TodayScreen: React.FC = () => {
@@ -56,6 +59,8 @@ export const TodayScreen: React.FC = () => {
     settings,
   } = useApp();
 
+  const [showComposureExplainer, setShowComposureExplainer] = useState(false);
+
   // Time-aware greeting
   const [{ greeting, formattedDate }] = useState(() => {
     const now = new Date();
@@ -70,22 +75,26 @@ export const TodayScreen: React.FC = () => {
   });
 
   const firstName = (user?.name || "Learner").split(" ")[0];
-  const sessionCount = recordings.length;
+  const validRecordings = useMemo(
+    () => recordings.filter((r) => !(r.status?.toLowerCase() === "interrupted" && r.durationSeconds === 0)),
+    [recordings]
+  );
+  const sessionCount = validRecordings.length;
   const isFirstRun = sessionCount === 0;
 
   // Suggested for you scenario
   const suggestedScenario = useMemo(() => {
     if (scenarios.length === 0) return null;
     if (sessionCount === 0) return scenarios[0];
-    const lastRec = recordings[0];
+    const lastRec = validRecordings[0];
     const diffCat = scenarios.find((s) => s.id !== lastRec?.scenarioId);
     return diffCat || scenarios[0];
-  }, [scenarios, sessionCount, recordings]);
+  }, [scenarios, sessionCount, validRecordings]);
 
   // Scored completed recordings for trend chart (last 7, oldest to newest)
   const scoredSessions: SessionTrendItem[] = useMemo(() => {
-    return recordings
-      .filter((r) => r.status === "Completed" && typeof r.composureScore === "number")
+    return validRecordings
+      .filter((r) => r.status?.toLowerCase() === "completed" && typeof r.composureScore === "number")
       .slice(0, 7)
       .reverse()
       .map((r) => ({
@@ -94,28 +103,36 @@ export const TodayScreen: React.FC = () => {
         title: r.scenarioTitle,
         date: r.relativeDate || "Recent",
       }));
-  }, [recordings]);
+  }, [validRecordings]);
 
   // Latest completed recording
   const latestCompleted = useMemo(() => {
-    return recordings.find((r) => r.status === "Completed" && typeof r.composureScore === "number") || null;
-  }, [recordings]);
+    return validRecordings.find((r) => r.status?.toLowerCase() === "completed" && typeof r.composureScore === "number") || null;
+  }, [validRecordings]);
 
-  const latestScore = latestCompleted?.composureScore ?? (sessionCount > 0 ? 86 : 0);
-  const latestTier = getComposureTier(latestScore);
+  const latestScore = typeof latestCompleted?.composureScore === "number" ? latestCompleted.composureScore : null;
+  const latestTier = latestScore !== null ? getComposureTier(latestScore) : "Building";
   const latestNervousness =
     latestCompleted?.nervousnessLevel ||
-    (latestScore >= 88 ? "Low nervousness" : latestScore >= 76 ? "Mild nervousness" : "Moderate stress");
+    (latestScore !== null
+      ? (latestScore >= 88 ? "Low nervousness" : latestScore >= 76 ? "Mild nervousness" : "Moderate stress")
+      : "No score recorded");
 
   // Trend vs baseline (+/- points) agreeing with the chart data source
   const baselineReferenceScore = baseline?.restingPulse ? 72 : 70;
-  const diffVsBaseline = latestScore > 0 ? latestScore - baselineReferenceScore : 0;
+  const diffVsBaseline = latestScore !== null ? latestScore - baselineReferenceScore : 0;
+
+  // Real 30-day average from scored sessions
+  const real30DayAvg = useMemo(() => {
+    if (scoredSessions.length === 0) return null;
+    return Math.round(scoredSessions.reduce((sum, s) => sum + s.score, 0) / scoredSessions.length);
+  }, [scoredSessions]);
 
   // Real week stats calculated from stored recordings
   const weeklyGoal = settings?.weeklyGoalSessions ?? 5;
   const weekStats = useMemo(() => {
-    return computeWeekStats(recordings, weeklyGoal);
-  }, [recordings, weeklyGoal]);
+    return computeWeekStats(validRecordings, weeklyGoal);
+  }, [validRecordings, weeklyGoal]);
 
   // -------------------------------------------------------------------------
   // FIX 1: QUICK START ADAPTIVE RESIZE OBSERVER (Variants A, B, C, D)
@@ -125,15 +142,18 @@ export const TodayScreen: React.FC = () => {
   const [maxDItems, setMaxDItems] = useState(5);
   const [isMorePopoverOpen, setIsMorePopoverOpen] = useState(false);
   const morePopoverRef = useRef<HTMLDivElement>(null);
+  const seenByCategory = useRef(new Map<QuickStartCategory, string[]>());
 
   const handleCategoryClick = useCallback(
-    (categoryName: string) => {
-      const sc = scenarios.find((s) => s.interactionType === categoryName) || scenarios[0];
-      if (sc) {
-        openBriefing(sc);
-      } else {
-        openQuickPractice();
+    (category: QuickStartCategory) => {
+      const currentSeen = seenByCategory.current.get(category) || [];
+      const picked = pickScenario(scenarios, category, currentSeen);
+      if (!picked) {
+        openQuickPractice(category);
+        return;
       }
+      seenByCategory.current.set(category, picked.nextSeen);
+      openBriefing(picked.scenario);
     },
     [scenarios, openBriefing, openQuickPractice]
   );
@@ -169,18 +189,33 @@ export const TodayScreen: React.FC = () => {
 
   // Compile all quick start chips based on whether sessions exist
   const allQuickChips = useMemo(() => {
-    const chips: { key: string; label: string; icon: React.ReactNode; onClick: () => void }[] = BASE_CATEGORY_ITEMS.map((c) => ({
+    const isReady = scenarios.length > 0;
+    const chips: {
+      key: string;
+      label: string;
+      icon: React.ReactNode;
+      onClick: () => void;
+      disabled?: boolean;
+    }[] = BASE_CATEGORY_ITEMS.map((c) => ({
       key: c.label,
       label: c.label,
       icon: c.icon,
-      onClick: () => handleCategoryClick(c.filter),
+      disabled: !isReady,
+      onClick: () => {
+        if (!isReady) return;
+        handleCategoryClick(c.filter);
+      },
     }));
 
     chips.push({
       key: "random",
       label: "Random",
       icon: <Shuffle size={12.5} style={{ color: "var(--accent-purple)" }} />,
-      onClick: handleRandomScenario,
+      disabled: !isReady,
+      onClick: () => {
+        if (!isReady) return;
+        handleRandomScenario();
+      },
     });
 
     if (sessionCount > 0) {
@@ -188,12 +223,16 @@ export const TodayScreen: React.FC = () => {
         key: "last-used",
         label: "Last used",
         icon: <History size={12.5} style={{ color: "var(--accent-green)" }} />,
-        onClick: handleLastUsedScenario,
+        disabled: !isReady,
+        onClick: () => {
+          if (!isReady) return;
+          handleLastUsedScenario();
+        },
       });
     }
 
     return chips;
-  }, [sessionCount, handleCategoryClick, handleRandomScenario, handleLastUsedScenario]);
+  }, [scenarios.length, sessionCount, handleCategoryClick, handleRandomScenario, handleLastUsedScenario]);
 
   useEffect(() => {
     const card = quickStartCardRef.current;
@@ -306,7 +345,7 @@ export const TodayScreen: React.FC = () => {
   };
 
   // Calculate free space in Recent Sessions body to determine if placeholder should render (>= 96px)
-  const displayedRecordings = useMemo(() => recordings.slice(0, 50), [recordings]);
+  const displayedRecordings = useMemo(() => validRecordings.slice(0, 50), [validRecordings]);
   const renderedRowsHeight = displayedRecordings.length * 60; // 56px row + 4px gap
   const freeSpaceInRecentBody = recentBodyHeight - renderedRowsHeight;
   const shouldShowRecentPlaceholder = sessionCount < 3 && freeSpaceInRecentBody >= 96;
@@ -370,7 +409,7 @@ export const TodayScreen: React.FC = () => {
                 marginBottom: 0,
               }}
             >
-              {!baseline?.isCalibrated
+              {!baseline?.isCalibrated || baseline?.status === "legacy"
                 ? "Calibrate your camera baseline to begin rehearsal."
                 : sessionCount < 3
                 ? "Ready for your next practice · Building stable composure habits."
@@ -468,7 +507,7 @@ export const TodayScreen: React.FC = () => {
                   >
                     Browse scenarios
                   </button>
-                  {!baseline?.isCalibrated && (
+                  {(!baseline?.isCalibrated || baseline?.status === "legacy") && (
                     <button
                       onClick={openBaselineSheet}
                       className="mac-btn focus-ring"
@@ -808,7 +847,7 @@ export const TodayScreen: React.FC = () => {
                       >
                         {isTooShort ? (
                           <span style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>Too short</span>
-                        ) : (
+                        ) : typeof score === "number" ? (
                           <div>
                             <span
                               className="tabular-nums"
@@ -831,6 +870,8 @@ export const TodayScreen: React.FC = () => {
                               {tier}
                             </div>
                           </div>
+                        ) : (
+                          <span style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>—</span>
                         )}
                       </div>
 
@@ -984,7 +1025,7 @@ export const TodayScreen: React.FC = () => {
             >
               {isFirstRun ? (
                 /* 0 Sessions: Guided Calm Baseline Prompt */
-                baseline?.isCalibrated ? (
+                (baseline?.isCalibrated && baseline?.status !== "legacy") ? (
                   <div style={{ display: "flex", flexDirection: "column", gap: "10px", padding: "2px 0" }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -1053,7 +1094,7 @@ export const TodayScreen: React.FC = () => {
                           Pulse
                         </div>
                         <div style={{ fontSize: "12px", fontWeight: 650, color: "var(--text-primary)", marginTop: "1px" }}>
-                          {baseline.restingPulse ? `${baseline.restingPulse} bpm` : "Not measured"}
+                          {(baseline.pulseMean ?? baseline.restingPulse) ? `${baseline.pulseMean ?? baseline.restingPulse} bpm` : "Not measured"}
                         </div>
                       </div>
                       <div>
@@ -1061,7 +1102,7 @@ export const TodayScreen: React.FC = () => {
                           Breathing
                         </div>
                         <div style={{ fontSize: "12px", fontWeight: 650, color: "var(--text-primary)", marginTop: "1px" }}>
-                          {baseline.restingBreathingRate ? `${baseline.restingBreathingRate} br/m` : "Not measured"}
+                          {(baseline.breathingMean ?? baseline.restingBreathingRate) ? `${baseline.breathingMean ?? baseline.restingBreathingRate} br/m` : "Not measured"}
                         </div>
                       </div>
                       <div>
@@ -1069,7 +1110,7 @@ export const TodayScreen: React.FC = () => {
                           HRV
                         </div>
                         <div style={{ fontSize: "12px", fontWeight: 650, color: "var(--text-primary)", marginTop: "1px" }}>
-                          {baseline.restingHrvRmssd ? `${baseline.restingHrvRmssd} ms` : "Not measured"}
+                          {(baseline.hrvRmssd ?? baseline.restingHrvRmssd) ? `${baseline.hrvRmssd ?? baseline.restingHrvRmssd} ms` : "Not measured"}
                         </div>
                       </div>
                     </div>
@@ -1138,47 +1179,82 @@ export const TodayScreen: React.FC = () => {
                         marginBottom: "3px",
                       }}
                     >
-                      <span
-                        style={{
-                          fontSize: "10px",
-                          fontWeight: 650,
-                          letterSpacing: "0.05em",
-                          textTransform: "uppercase",
-                          color: "var(--text-secondary)",
-                        }}
-                      >
-                        Composure Snapshot
-                      </span>
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        <span
+                          style={{
+                            fontSize: "10px",
+                            fontWeight: 650,
+                            letterSpacing: "0.05em",
+                            textTransform: "uppercase",
+                            color: "var(--text-secondary)",
+                          }}
+                        >
+                          Composure Snapshot
+                        </span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowComposureExplainer(true);
+                          }}
+                          aria-label="Learn how Composure Snapshot is calculated and what Steady means"
+                          title="What is Composure Snapshot and how is it calculated?"
+                          className="mac-btn focus-ring"
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            width: "15px",
+                            height: "15px",
+                            padding: 0,
+                            borderRadius: "50%",
+                            border: "1px solid var(--separator)",
+                            backgroundColor: "rgba(255, 255, 255, 0.06)",
+                            color: "var(--text-secondary)",
+                            cursor: "pointer",
+                          }}
+                        >
+                          <Info size={9.5} />
+                        </button>
+                      </div>
                       <span style={{ fontSize: "9.5px", color: "var(--text-tertiary)" }}>
-                        {recordings[0]?.relativeDate || "Recent"}
+                        {validRecordings[0]?.relativeDate || "Recent"}
                       </span>
                     </div>
 
                     <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                      <ScoreRing score={latestScore} size={46} strokeWidth={4} />
-                      <div>
-                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                          <span
-                            style={{
-                              fontSize: "11px",
-                              fontWeight: 700,
-                              color:
-                                latestTier === "Unshakeable"
-                                  ? "var(--accent-purple)"
-                                  : latestTier === "Composed"
-                                  ? "var(--accent-green)"
-                                  : "var(--accent-blue)",
-                              textTransform: "uppercase",
-                              letterSpacing: "0.04em",
-                            }}
-                          >
-                            {latestTier}
-                          </span>
+                      {latestScore !== null ? (
+                        <>
+                          <ScoreRing score={latestScore} size={46} strokeWidth={4} />
+                          <div>
+                            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                              <span
+                                style={{
+                                  fontSize: "11px",
+                                  fontWeight: 700,
+                                  color:
+                                    latestTier === "Unshakeable"
+                                      ? "var(--accent-purple)"
+                                      : latestTier === "Composed"
+                                      ? "var(--accent-green)"
+                                      : "var(--accent-blue)",
+                                  textTransform: "uppercase",
+                                  letterSpacing: "0.04em",
+                                }}
+                              >
+                                {latestTier}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: "10.5px", color: "var(--text-secondary)", marginTop: "1px" }}>
+                              {latestNervousness}
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <div style={{ fontSize: "11px", color: "var(--text-secondary)", lineHeight: 1.35 }}>
+                          Complete a session with camera on to establish your composure score.
                         </div>
-                        <div style={{ fontSize: "10.5px", color: "var(--text-secondary)", marginTop: "1px" }}>
-                          {latestNervousness}
-                        </div>
-                      </div>
+                      )}
                     </div>
                   </div>
 
@@ -1232,7 +1308,7 @@ export const TodayScreen: React.FC = () => {
                         30-Day Avg
                       </span>
                       <span className="tabular-nums" style={{ fontSize: "11.5px", fontWeight: 700, color: "var(--text-primary)" }}>
-                        {latestScore > 0 ? `${Math.round(latestScore)}%` : "—"}
+                        {real30DayAvg !== null ? `${real30DayAvg}%` : "—"}
                       </span>
                     </div>
                     <div>
@@ -1240,7 +1316,11 @@ export const TodayScreen: React.FC = () => {
                         Recovery
                       </span>
                       <span className="tabular-nums" style={{ fontSize: "11.5px", fontWeight: 700, color: "var(--text-primary)" }}>
-                        {latestScore > 0 ? "Normal" : "—"}
+                        {latestCompleted?.sessionBiometrics?.recoverySecondsApprox != null
+                          ? `${latestCompleted.sessionBiometrics.recoverySecondsApprox}s`
+                          : (latestCompleted as any)?.recoverySeconds != null
+                          ? `${(latestCompleted as any).recoverySeconds}s`
+                          : "—"}
                       </span>
                     </div>
                   </div>
@@ -1501,6 +1581,7 @@ export const TodayScreen: React.FC = () => {
                       <button
                         key={chip.key}
                         onClick={chip.onClick}
+                        disabled={chip.disabled}
                         className="mac-btn focus-ring"
                         style={{
                           height: "36px",
@@ -1514,7 +1595,8 @@ export const TodayScreen: React.FC = () => {
                           display: "flex",
                           alignItems: "center",
                           gap: "6px",
-                          cursor: "pointer",
+                          cursor: chip.disabled ? "not-allowed" : "pointer",
+                          opacity: chip.disabled ? 0.5 : 1,
                           textAlign: "left",
                           boxSizing: "border-box",
                           gridColumn: isOddLast ? "1 / -1" : undefined,
@@ -1547,6 +1629,7 @@ export const TodayScreen: React.FC = () => {
                       <button
                         key={chip.key}
                         onClick={chip.onClick}
+                        disabled={chip.disabled}
                         className="mac-btn focus-ring"
                         style={{
                           height: "30px",
@@ -1560,7 +1643,8 @@ export const TodayScreen: React.FC = () => {
                           display: "flex",
                           alignItems: "center",
                           gap: "5px",
-                          cursor: "pointer",
+                          cursor: chip.disabled ? "not-allowed" : "pointer",
+                          opacity: chip.disabled ? 0.5 : 1,
                           textAlign: "left",
                           boxSizing: "border-box",
                           gridColumn: isOddLast ? "1 / -1" : undefined,
@@ -1591,6 +1675,7 @@ export const TodayScreen: React.FC = () => {
                     <button
                       key={chip.key}
                       onClick={chip.onClick}
+                      disabled={chip.disabled}
                       className="mac-btn focus-ring"
                       style={{
                         height: "40px",
@@ -1603,7 +1688,8 @@ export const TodayScreen: React.FC = () => {
                         alignItems: "center",
                         justifyContent: "center",
                         gap: "2px",
-                        cursor: "pointer",
+                        cursor: chip.disabled ? "not-allowed" : "pointer",
+                        opacity: chip.disabled ? 0.5 : 1,
                         textAlign: "center",
                         boxSizing: "border-box",
                       }}
@@ -1642,6 +1728,7 @@ export const TodayScreen: React.FC = () => {
                     <button
                       key={chip.key}
                       onClick={chip.onClick}
+                      disabled={chip.disabled}
                       className="mac-btn focus-ring"
                       style={{
                         height: "30px",
@@ -1655,7 +1742,8 @@ export const TodayScreen: React.FC = () => {
                         display: "flex",
                         alignItems: "center",
                         gap: "5px",
-                        cursor: "pointer",
+                        cursor: chip.disabled ? "not-allowed" : "pointer",
+                        opacity: chip.disabled ? 0.5 : 1,
                         textAlign: "left",
                         boxSizing: "border-box",
                       }}
@@ -1752,6 +1840,10 @@ export const TodayScreen: React.FC = () => {
           </div>
         </div>
       </div>
+      <ComposureExplainerModal
+        isOpen={showComposureExplainer}
+        onClose={() => setShowComposureExplainer(false)}
+      />
     </div>
   );
 };

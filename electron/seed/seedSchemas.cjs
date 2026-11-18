@@ -20,9 +20,9 @@ const SeedPersonaItemSchema = z.object({
   pressureLevel: z.enum(["Moderate", "High", "Intense"]).default("Moderate"),
   temperamentTraits: z.array(z.string().max(40)).max(15).default([]),
   voice: z.string().max(60).default("Default"),
-  backstory: z.string().max(1200).default(""),
-  communicationNotes: z.string().max(1000).default(""),
-  greeting: z.string().max(160).default(""),
+  backstory: z.string().max(2000).default(""),
+  communicationNotes: z.string().max(2000).default(""),
+  greeting: z.string().max(300).default(""),
   monogram: z.string().max(8).optional(),
   face: z
     .object({
@@ -53,13 +53,13 @@ const SeedPersonasFileSchema = z
 const SeedScenarioItemSchema = z.object({
   builtinKey: z.string().regex(slugRegex, "builtinKey must be 3-100 lowercase alphanumeric chars with hyphens/underscores"),
   personaKey: z.string().regex(slugRegex, "personaKey must reference a valid persona builtinKey"),
-  title: z.string().trim().min(3, "Title must be >= 3 characters").max(100, "Title must be <= 100 characters"),
+  title: z.string().trim().min(3, "Title must be >= 3 characters").max(120, "Title must be <= 120 characters"),
   interactionType: z.enum(CATEGORIES),
   difficulty: z.enum(DIFFICULTIES),
-  context: z.string().trim().min(10, "Situation context must be >= 10 characters").max(2000, "Context must be <= 2000 characters"),
-  learningObjectives: z.array(z.string().trim().min(1).max(200)).min(1, "At least 1 learning objective required").max(5),
-  keyChallenges: z.array(z.string().trim().min(1).max(200)).max(5).default([]),
-  openingLine: z.string().trim().max(160).nullable().optional(),
+  context: z.string().trim().min(10, "Situation context must be >= 10 characters").max(3000, "Context must be <= 3000 characters"),
+  learningObjectives: z.array(z.string().trim().min(1).max(200)).min(1, "At least 1 learning objective required").max(8),
+  keyChallenges: z.array(z.string().trim().min(1).max(200)).max(8).default([]),
+  openingLine: z.string().trim().max(300).nullable().optional(),
 });
 
 const SeedScenariosFileSchema = z

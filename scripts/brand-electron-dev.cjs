@@ -122,10 +122,16 @@ try {
     }
   }
 
-  // 6. Ad-hoc codesign Electron.app so macOS Apple Silicon doesn't SIGKILL it for invalid signature
+  // 6. Ad-hoc codesign Electron.app with entitlements & hardened runtime
   try {
-    execFileSync('/usr/bin/codesign', ['--force', '--deep', '--sign', '-', appBundle]);
-    console.log('[brand-electron-dev] Re-signed Electron.app bundle with ad-hoc signature.');
+    const entitlementsPath = path.join(rootDir, 'build', 'entitlements.mac.plist');
+    const codesignArgs = ['--force', '--deep', '--sign', '-'];
+    if (fs.existsSync(entitlementsPath)) {
+      codesignArgs.push('--entitlements', entitlementsPath);
+    }
+    codesignArgs.push(appBundle);
+    execFileSync('/usr/bin/codesign', codesignArgs);
+    console.log('[brand-electron-dev] Re-signed Electron.app bundle with entitlements & ad-hoc signature.');
   } catch (e) {
     console.warn('[brand-electron-dev] codesign warning:', e.message);
   }

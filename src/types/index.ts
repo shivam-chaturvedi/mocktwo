@@ -8,7 +8,7 @@ export type Screen =
   | "simulation"
   | "processing";
 
-export const CATEGORIES = [
+export const INTERACTION_TYPES = [
   "Interviews",
   "Sales & Pitches",
   "Presentations",
@@ -25,7 +25,9 @@ export const CATEGORIES = [
   "Reservations",
 ] as const;
 
-export type InteractionType = (typeof CATEGORIES)[number];
+export const CATEGORIES = INTERACTION_TYPES;
+
+export type InteractionType = (typeof INTERACTION_TYPES)[number];
 
 export const DIFFICULTIES = ["Foundational", "Intermediate", "Advanced"] as const;
 
@@ -161,6 +163,7 @@ export interface PeakStressMoment {
   reaction: string; // SDK physiological signals only (pulse/arousal/expression)
   userAction: string; // What the body did / calm response
   suggestion: string; // Practical reset (breathing, pause, slower start)
+  evidence?: string[];
 }
 
 export interface SessionBiometrics {
@@ -250,22 +253,56 @@ export interface SessionBiometrics {
 }
 
 export interface UserBaseline {
-  restingPulse: number;
-  restingHrvRmssd: number;
-  restingBaevsky?: number;
-  restingBreathingRate: number;
-  restingEdaArousal?: number;
-  restingExpressions?: Record<ExpressionKey, number>;
+  id?: string;
+  restingPulse?: number | null;
+  restingHrvRmssd?: number | null;
+  restingBaevsky?: number | null;
+  restingBreathingRate?: number | null;
+  restingEdaArousal?: number | null;
+  restingExpressions?: Record<ExpressionKey, number> | Record<string, number> | null;
   measuredAt: string;
+  startedAt?: string | null;
+  endedAt?: string | null;
   lastCalibratedAt?: string;
   isCalibrated: boolean;
-  qualityScore?: number;
+  isActive?: boolean;
+  status?: "valid" | "invalid" | "legacy";
+  invalidReason?: string | null;
+  qualityScore?: number | null;
   qualityRating?: "Good" | "Fair" | "Poor";
-  sdkVersion?: string;
+  sdkVersion?: string | null;
   durationSeconds?: number;
+  // Provenance and statistical summary fields
+  pulseMean?: number | null;
+  pulseMedian?: number | null;
+  pulseMin?: number | null;
+  pulseMax?: number | null;
+  pulseSd?: number | null;
+  pulseConfidence?: number | null;
+  pulseSampleCount?: number;
+  hrvRmssd?: number | null;
+  hrvSdnn?: number | null;
+  hrvMeanNn?: number | null;
+  hrvBaevsky?: number | null;
+  hrvConfidence?: number | null;
+  hrvSampleCount?: number;
+  breathingMean?: number | null;
+  breathingSd?: number | null;
+  breathingConfidence?: number | null;
+  breathingSampleCount?: number;
+  blinkCount?: number;
+  blinkRatePerMin?: number;
+  expressionMap?: Record<string, number>;
+  dominantExpression?: string | null;
+  edaMean?: number | null;
+  edaSd?: number | null;
+  edaSlope?: number | null;
+  facePresentRatio?: number;
+  talkingRatio?: number;
+  motionRatio?: number;
   // Legacy aliases
-  restingHR?: number;
-  restingHRV?: number;
+  restingHR?: number | null;
+  restingHRV?: number | null;
 }
 
 export interface Persona {
@@ -382,6 +419,7 @@ export interface CoachingHeldSteadyItem {
   timestampSeconds: number;
   title: string;
   description: string;
+  evidence?: string[];
 }
 
 export interface CoachingStrainItem {
@@ -389,12 +427,14 @@ export interface CoachingStrainItem {
   timestampSeconds: number;
   title: string;
   description: string;
+  evidence?: string[];
 }
 
 export interface CounterpartHandlingItem {
   area: string;
   assessment: string;
   status: "strong" | "developing" | "strained";
+  evidence?: string[];
 }
 
 export interface PracticeDrill {
@@ -403,6 +443,7 @@ export interface PracticeDrill {
   description: string;
   type: "breathing" | "pause" | "reframing";
   scenarioSuggestionId?: string;
+  evidence?: string[];
 }
 
 // EXACT 5 PRESSURE SKILLS (Derived exclusively from SDK signals)
@@ -412,6 +453,7 @@ export interface PressureSkillItem {
   score: number;
   assessment: string;
   subtext?: string;
+  evidence?: string[];
 }
 
 export interface RecordingPressureCoaching {
@@ -446,8 +488,12 @@ export interface Recording {
   nervousnessLevel?: NervousnessLevel;
   readinessStatus?: SessionReadinessStatus;
   status: "Completed" | "Too short" | "Incomplete";
+  category?: string;
+  scenarioCategory?: string;
+  videoPath?: string;
   videoUrl?: string;
   mediaType?: "video" | "audio-only";
+  layout?: "stage_v1" | "camera_only";
   transcript: TranscriptUtterance[];
   sessionBiometrics?: SessionBiometrics;
   pressureCoaching?: RecordingPressureCoaching;

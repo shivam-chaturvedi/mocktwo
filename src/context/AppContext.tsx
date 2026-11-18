@@ -31,9 +31,9 @@ const DEFAULT_EMPTY_USER: UserProfile = {
 
 const DEFAULT_APP_SETTINGS: AppSettings = {
   theme: "dark",
-  selectedCamera: "FaceTime HD Camera (Built-in)",
-  selectedMicrophone: "MacBook Studio Microphone (Built-in)",
-  selectedSpeaker: "Internal MacBook Speakers",
+  selectedCamera: "",
+  selectedMicrophone: "",
+  selectedSpeaker: "",
   autoStartAudio: true,
   hapticFeedback: true,
   reducedMotion: false,
@@ -93,6 +93,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [isStudioOpen, setIsStudioOpen] = useState(false);
   const [studioInitialTab, setStudioInitialTab] = useState<"scenario" | "persona">("scenario");
   const [isQuickPracticeOpen, setIsQuickPracticeOpen] = useState(false);
+  const [quickPracticeInitialCategory, setQuickPracticeInitialCategory] = useState<string | undefined>(undefined);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isSignOutConfirmOpen, setIsSignOutConfirmOpen] = useState(false);
@@ -515,7 +516,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   );
 
   // Quick Practice
-  const openQuickPractice = useCallback(() => {
+  const openQuickPractice = useCallback((initialCategory?: string) => {
+    setQuickPracticeInitialCategory(initialCategory);
     setIsQuickPracticeOpen(true);
   }, []);
 
@@ -588,7 +590,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // Live Simulation
   const beginSimulation = useCallback(
-    async (overridePersona?: Persona) => {
+    async (overridePersona?: Persona, overrideDurationMinutes?: number) => {
       if (!serviceRegistry.session.isAvailable()) {
         showToast(serviceRegistry.session.getUnavailableReason());
         return;
@@ -597,6 +599,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (chosen) {
         setActiveSessionPersona(chosen);
       }
+      const finalDuration =
+        typeof overrideDurationMinutes === "number" &&
+        overrideDurationMinutes >= 1 &&
+        overrideDurationMinutes <= 10
+          ? overrideDurationMinutes
+          : 3;
+
+      setSelectedScenario((prev) => ({
+        ...prev,
+        durationMinutes: finalDuration,
+      }));
+
       setIsBriefingOpen(false);
       try {
         const { sessionId } = await serviceRegistry.session.startSession(
@@ -795,6 +809,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         closeStudio,
         saveStudioScenario,
         isQuickPracticeOpen,
+        quickPracticeInitialCategory,
         openQuickPractice,
         closeQuickPractice,
         triggerRandomPractice,

@@ -266,7 +266,7 @@ export const TitleBar: React.FC = () => {
 
         {/* Quick Practice Button */}
         <button
-          onClick={openQuickPractice}
+          onClick={() => openQuickPractice()}
           aria-label="Quick Practice"
           title="Quick Practice Picker (⌘⇧P)"
           className="hover-subtle focus-ring"

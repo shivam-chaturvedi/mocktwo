@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useApp } from "../../context";
+import { useBaselineCapture } from "../../hooks/useBaselineCapture";
 import {
   Sun,
   Smile,
@@ -12,6 +13,7 @@ import {
   Activity,
   Wind,
   Zap,
+  UserX,
 } from "lucide-react";
 import type { UserBaseline } from "../../types";
 
@@ -42,35 +44,64 @@ export const BaselineSheetModal: React.FC = () => {
   const [step, setStep] = useState<BaselineStep>("intro");
   const [countdown, setCountdown] = useState<number>(3);
   const [secondsElapsed, setSecondsElapsed] = useState<number>(0);
-  const [isFaceInFrame, setIsFaceInFrame] = useState<boolean>(true);
+  const [, setIsFaceInFrame] = useState<boolean>(true);
   const [isPaused, setIsPaused] = useState<boolean>(false);
-  const [totalPausedSeconds, setTotalPausedSeconds] = useState<number>(0);
-  const [restartMessage, setRestartMessage] = useState<string | null>(null);
   const [showCancelConfirm, setShowCancelConfirm] = useState<boolean>(false);
   const [announcement, setAnnouncement] = useState<string>("");
 
-  // Result metrics
+  // Active camera stream for preview and SDK session
+  const [activeStream, setActiveStream] = useState<MediaStream | null>(null);
+
+  // Result metrics - Real values or null, zero synthetic fallbacks
   const [resultMetrics, setResultMetrics] = useState<{
-    pulse: number;
-    breathing: number;
-    hrv: number;
+    pulse: number | null;
+    breathing: number | null;
+    hrv: number | null;
     quality: "Good" | "Fair" | "Poor";
+    qualityScore: number;
   }>({
-    pulse: 68,
-    breathing: 14,
-    hrv: 54,
-    quality: "Good",
+    pulse: null,
+    breathing: null,
+    hrv: null,
+    quality: "Poor",
+    qualityScore: 0,
   });
+
+  // Presage SmartSpectra 60s baseline capture hook
+  const capture = useBaselineCapture({
+    stream: activeStream,
+    makeActive: true,
+    cameraLabel: settings.selectedCamera,
+    onComplete: (summary) => {
+      setResultMetrics({
+        pulse: summary.pulseMean,
+        breathing: summary.breathingMean,
+        hrv: summary.hrvRmssd,
+        quality: summary.qualityScore >= 80 ? "Good" : summary.qualityScore >= 60 ? "Fair" : "Poor",
+        qualityScore: summary.qualityScore,
+      });
+      setStep("result");
+    },
+  });
+
+  const restartMessage = capture.isClockPaused ? "Face lost or obscured — measurement paused" : null;
 
   // Media & timer refs
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const captureStartTimeRef = useRef<number>(0);
-  const captureRafRef = useRef<number | null>(null);
   const getReadyTimerRef = useRef<NodeJS.Timeout | null>(null);
   const pausedAtRef = useRef<number | null>(null);
   const modalRef = useRef<HTMLDivElement | null>(null);
   const previousActiveElementRef = useRef<HTMLElement | null>(null);
+  const hasStartedCaptureRef = useRef<boolean>(false);
+  const startCaptureRef = useRef(capture.startCapture);
+  useEffect(() => {
+    startCaptureRef.current = capture.startCapture;
+  }, [capture.startCapture]);
+
+  const [sensorStalledError, setSensorStalledError] = useState<string | null>(null);
+  const sensorWatchdogRef = useRef<NodeJS.Timeout | null>(null);
 
   const isMountedRef = useRef(true);
 
@@ -82,6 +113,7 @@ export const BaselineSheetModal: React.FC = () => {
       });
       mediaStreamRef.current = null;
     }
+    setActiveStream(null);
     if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
@@ -94,7 +126,6 @@ export const BaselineSheetModal: React.FC = () => {
     return () => {
       isMountedRef.current = false;
       stopCamera();
-      if (captureRafRef.current) cancelAnimationFrame(captureRafRef.current);
       if (getReadyTimerRef.current) clearTimeout(getReadyTimerRef.current);
       if (previousActiveElementRef.current && typeof previousActiveElementRef.current.focus === "function") {
         previousActiveElementRef.current.focus();
@@ -103,7 +134,7 @@ export const BaselineSheetModal: React.FC = () => {
   }, [stopCamera]);
 
   // Request camera access
-  const handleStartCamera = async () => {
+  const handleStartCamera = useCallback(async () => {
     try {
       if (window.electronAPI?.requestMediaAccess) {
         const granted = await window.electronAPI.requestMediaAccess("camera");
@@ -119,7 +150,12 @@ export const BaselineSheetModal: React.FC = () => {
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 640, height: 480, facingMode: "user" },
+        video: {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          frameRate: { ideal: 30 },
+          facingMode: "user",
+        },
         audio: false,
       });
 
@@ -129,6 +165,7 @@ export const BaselineSheetModal: React.FC = () => {
       }
 
       mediaStreamRef.current = stream;
+      setActiveStream(stream);
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         videoRef.current.play().catch(() => {});
@@ -145,15 +182,37 @@ export const BaselineSheetModal: React.FC = () => {
         setStep("no-camera");
       }
     }
-  };
+  }, []);
 
-  // Re-attach stream to video element when entering get-ready or capturing
+  // Callback ref to attach stream immediately upon video DOM mount (e.g. after retry remount)
+  const attachVideoElement = useCallback(
+    (el: HTMLVideoElement | null) => {
+      videoRef.current = el;
+      if (el) {
+        const stream = mediaStreamRef.current || activeStream;
+        if (stream) {
+          if (el.srcObject !== stream) {
+            el.srcObject = stream;
+          }
+          el.play().catch(() => {});
+        }
+      }
+    },
+    [activeStream]
+  );
+
+  // Re-attach and ensure stream playback whenever step, capture state, or stream updates
   useEffect(() => {
-    if ((step === "get-ready" || step === "capturing") && videoRef.current && mediaStreamRef.current) {
-      videoRef.current.srcObject = mediaStreamRef.current;
-      videoRef.current.play().catch(() => {});
+    if ((step === "get-ready" || step === "capturing") && videoRef.current) {
+      const stream = mediaStreamRef.current || activeStream;
+      if (stream) {
+        if (videoRef.current.srcObject !== stream) {
+          videoRef.current.srcObject = stream;
+        }
+        videoRef.current.play().catch(() => {});
+      }
     }
-  }, [step]);
+  }, [step, capture.state, activeStream]);
 
   // Step 3: Get Ready Countdown
   useEffect(() => {
@@ -165,7 +224,6 @@ export const BaselineSheetModal: React.FC = () => {
           if (c <= 1) {
             setStep("capturing");
             setSecondsElapsed(0);
-            setTotalPausedSeconds(0);
             captureStartTimeRef.current = Date.now();
             return 0;
           }
@@ -178,56 +236,122 @@ export const BaselineSheetModal: React.FC = () => {
     }
   }, [step, countdown]);
 
-  // Step 4: Real Elapsed Time Progress Loop
+  // Start SmartSpectra session once when entering capturing state
   useEffect(() => {
-    if (step !== "capturing") return;
-
-    let localPausedAccumulator = totalPausedSeconds;
-
-    const tick = () => {
-      if (isPaused) {
-        captureRafRef.current = requestAnimationFrame(tick);
-        return;
+    if (step === "capturing") {
+      if (!hasStartedCaptureRef.current) {
+        hasStartedCaptureRef.current = true;
+        startCaptureRef.current();
       }
+    } else {
+      hasStartedCaptureRef.current = false;
+    }
+  }, [step]);
 
-      const now = Date.now();
-      const rawElapsed = (now - captureStartTimeRef.current) / 1000 - localPausedAccumulator;
-      const currentSeconds = Math.max(0, Math.min(60, rawElapsed));
-      setSecondsElapsed(currentSeconds);
-
-      // Milestone announcements
-      if (Math.floor(currentSeconds) === 12 && currentSeconds - 12 < 0.1) {
-        setAnnouncement("Pulse found: 68 bpm");
-      } else if (Math.floor(currentSeconds) === 30 && currentSeconds - 30 < 0.1) {
-        setAnnouncement("Breathing found: 14 breaths per minute");
-      } else if (Math.floor(currentSeconds) === 35 && currentSeconds - 35 < 0.1) {
-        setAnnouncement("Skin response found");
-      } else if (Math.floor(currentSeconds) === 60) {
-        setAnnouncement("HRV ready");
+  // Watchdog timer: probe native engine if no validation event arrives within 8s
+  useEffect(() => {
+    if (step === "capturing" && capture.state === "positioning" && capture.validationCode === null) {
+      sensorWatchdogRef.current = setTimeout(async () => {
+        if (capture.validationCode === null && isMountedRef.current) {
+          try {
+            const probe = await window.electronAPI?.probePresage?.();
+            if (probe) {
+              if (!probe.sdkLoaded) {
+                setSensorStalledError(`Native SDK failed to load: ${probe.lastLoadError || "Unknown error"}`);
+              } else if (!probe.ipcBound) {
+                setSensorStalledError("Main-process IPC bridge not bound to window.");
+              } else if (!probe.capiExists) {
+                setSensorStalledError(`Native library missing at: ${probe.capiPath}`);
+              } else if (!probe.apiKeyConfigured) {
+                setSensorStalledError("SmartSpectra API key is not configured in .env.");
+              } else {
+                setSensorStalledError("Optical sensor engine unresponsive after 8s. Camera may be held by another app.");
+              }
+            } else {
+              setSensorStalledError("Optical sensor engine did not produce validation within 8 seconds.");
+            }
+          } catch {
+            setSensorStalledError("Failed to probe optical sensor engine.");
+          }
+        }
+      }, 8000);
+    } else {
+      if (sensorWatchdogRef.current) {
+        clearTimeout(sensorWatchdogRef.current);
+        sensorWatchdogRef.current = null;
       }
-
-      if (currentSeconds >= 60) {
-        // Complete!
-        stopCamera();
-        setResultMetrics({
-          pulse: 68,
-          breathing: 14,
-          hrv: 54,
-          quality: "Good",
-        });
-        setStep("result");
-        return;
+      if (capture.validationCode !== null) {
+        setSensorStalledError(null);
       }
-
-      captureRafRef.current = requestAnimationFrame(tick);
-    };
-
-    captureRafRef.current = requestAnimationFrame(tick);
+    }
 
     return () => {
-      if (captureRafRef.current) cancelAnimationFrame(captureRafRef.current);
+      if (sensorWatchdogRef.current) {
+        clearTimeout(sensorWatchdogRef.current);
+        sensorWatchdogRef.current = null;
+      }
     };
-  }, [step, isPaused, totalPausedSeconds, stopCamera]);
+  }, [step, capture.state, capture.validationCode]);
+
+  // Clean retry handler: re-acquires camera if track was ended/interrupted, or re-enters get-ready
+  const handleRetryCapture = useCallback(async () => {
+    setSensorStalledError(null);
+    hasStartedCaptureRef.current = false;
+    await capture.reset();
+
+    const currentTrack = mediaStreamRef.current?.getVideoTracks()[0];
+    if (!currentTrack || currentTrack.readyState === "ended" || !currentTrack.enabled) {
+      await handleStartCamera();
+      return;
+    }
+
+    // Camera track is active: ensure video element has stream attached and playing
+    if (videoRef.current && mediaStreamRef.current) {
+      if (videoRef.current.srcObject !== mediaStreamRef.current) {
+        videoRef.current.srcObject = mediaStreamRef.current;
+      }
+      videoRef.current.play().catch(() => {});
+    }
+
+    // Give user a clean 3-second get-ready window to align and compose themselves
+    setStep("get-ready");
+    setCountdown(3);
+  }, [capture, handleStartCamera]);
+
+  // Sync elapsed seconds and announcements from capture hook
+  useEffect(() => {
+    if (step === "capturing") {
+      const elapsed = 60 - capture.secondsRemaining;
+      setSecondsElapsed(elapsed);
+
+      if (capture.state === "positioning") {
+        setAnnouncement(capture.validationHint || "Position your face in the frame…");
+      } else if (elapsed === 12) {
+        setAnnouncement("Calibrating optical pulse signal…");
+      } else if (elapsed === 30) {
+        setAnnouncement("Calibrating respiratory waveform…");
+      } else if (elapsed === 50) {
+        setAnnouncement("Assessing heart rate variability…");
+      }
+    }
+  }, [step, capture.secondsRemaining, capture.state, capture.validationHint]);
+
+  // Handle capture completion and error transitions
+  useEffect(() => {
+    if (step === "capturing") {
+      if (capture.state === "saved" && capture.summary) {
+        stopCamera();
+        setResultMetrics({
+          pulse: capture.summary.pulseMean,
+          breathing: capture.summary.breathingMean,
+          hrv: capture.summary.hrvRmssd,
+          quality: capture.summary.qualityScore >= 80 ? "Good" : capture.summary.qualityScore >= 60 ? "Fair" : "Poor",
+          qualityScore: capture.summary.qualityScore,
+        });
+        setStep("result");
+      }
+    }
+  }, [step, capture.state, capture.summary, stopCamera]);
 
   // Quality Guard: track paused duration when face is lost
   const handleFaceInFrameChange = useCallback((inFrame: boolean) => {
@@ -236,24 +360,8 @@ export const BaselineSheetModal: React.FC = () => {
       setIsPaused(true);
       pausedAtRef.current = Date.now();
     } else {
-      if (pausedAtRef.current) {
-        const pausedDelta = (Date.now() - pausedAtRef.current) / 1000;
-        pausedAtRef.current = null;
-        setIsPaused(false);
-        setTotalPausedSeconds((prev) => {
-          const next = prev + pausedDelta;
-          if (next > 10) {
-            // Restart capture if lost > 10 seconds total
-            setRestartMessage("Measurement restarted to ensure accurate clinical baseline.");
-            setSecondsElapsed(0);
-            captureStartTimeRef.current = Date.now();
-            return 0;
-          }
-          return next;
-        });
-      } else {
-        setIsPaused(false);
-      }
+      pausedAtRef.current = null;
+      setIsPaused(false);
     }
   }, []);
 
@@ -264,23 +372,11 @@ export const BaselineSheetModal: React.FC = () => {
         handleFaceInFrameChange(custom.detail.inFrame);
       }
     };
-    const handleFastForward = () => {
-      stopCamera();
-      setResultMetrics({
-        pulse: 68,
-        breathing: 14,
-        hrv: 54,
-        quality: "Good",
-      });
-      setStep("result");
-    };
     window.addEventListener("mocktwo-face-status", handleFaceEvent);
-    window.addEventListener("mocktwo-complete-baseline", handleFastForward);
     return () => {
       window.removeEventListener("mocktwo-face-status", handleFaceEvent);
-      window.removeEventListener("mocktwo-complete-baseline", handleFastForward);
     };
-  }, [handleFaceInFrameChange, stopCamera]);
+  }, [handleFaceInFrameChange]);
 
   // Open macOS system settings camera privacy pane
   const handleOpenSystemSettings = () => {
@@ -295,43 +391,39 @@ export const BaselineSheetModal: React.FC = () => {
     if (step === "capturing" && secondsElapsed >= 10) {
       setShowCancelConfirm(true);
     } else {
+      capture.reset();
       stopCamera();
       closeBaselineSheet();
     }
-  }, [step, secondsElapsed, stopCamera, closeBaselineSheet]);
+  }, [step, secondsElapsed, stopCamera, closeBaselineSheet, capture]);
 
   const handleConfirmCancel = () => {
+    capture.reset();
     stopCamera();
     setShowCancelConfirm(false);
     closeBaselineSheet();
   };
 
-  // Save baseline to storage via BiometricsService
+  // Save baseline to storage via BiometricsService (whenever resting pulse was captured)
   const handleSave = async () => {
+    if (resultMetrics.pulse === null) {
+      closeBaselineSheet();
+      return;
+    }
+
     const newBaseline: UserBaseline = {
       restingPulse: resultMetrics.pulse,
-      restingBreathingRate: resultMetrics.breathing,
-      restingHrvRmssd: resultMetrics.hrv,
-      restingBaevsky: 82,
-      restingEdaArousal: 0.22,
-      restingExpressions: {
-        neutral: 0.88,
-        happy: 0.08,
-        surprise: 0.02,
-        contempt: 0.0,
-        fear: 0.01,
-        sad: 0.01,
-        disgust: 0.0,
-        angry: 0.0,
-      },
+      restingBreathingRate: resultMetrics.breathing ?? null,
+      restingHrvRmssd: resultMetrics.hrv ?? null,
       measuredAt: new Date().toISOString(),
       isCalibrated: true,
-      qualityScore: 94,
+      isActive: true,
+      status: "valid",
+      qualityScore: resultMetrics.qualityScore,
       qualityRating: resultMetrics.quality,
-      sdkVersion: "smartspectra-3.2.0-local",
       durationSeconds: 60,
       restingHR: resultMetrics.pulse,
-      restingHRV: resultMetrics.hrv,
+      restingHRV: resultMetrics.hrv ?? null,
     };
 
     await saveBaselineData(newBaseline);
@@ -355,26 +447,33 @@ export const BaselineSheetModal: React.FC = () => {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [showCancelConfirm, handleCancelClick]);
 
-  // Milestone locked status
-  const isPulseLocked = secondsElapsed >= 12;
-  const isBreathingLocked = secondsElapsed >= 30;
-  const isEdaLocked = secondsElapsed >= 35;
-  const isHrvLocked = secondsElapsed >= 60;
+  // Milestone locked status - based purely on genuine SDK signal, never fake secondsElapsed fallbacks
+  const isPulseLocked = capture.currentVitals.pulse !== null;
+  const isBreathingLocked = capture.currentVitals.breathing !== null;
+  const isEdaLocked = capture.currentVitals.eda !== null;
+  const isHrvLocked = capture.currentVitals.hrv !== null;
 
   // Calm copy rotating every ~10s
   const calmCopyIndex = Math.min(
     CALM_MESSAGES.length - 1,
-    Math.floor(secondsElapsed / 10)
+    Math.floor((60 - capture.secondsRemaining) / 10)
   );
   const currentCalmMessage = CALM_MESSAGES[calmCopyIndex];
 
   // Ambient Ring SVG calculations
   const radius = 175;
   const circumference = 2 * Math.PI * radius;
-  const progressRatio = Math.min(1, Math.max(0, secondsElapsed / 60));
+  // Progress animates smoothly only when measuring
+  const progressRatio = capture.state === "measuring"
+    ? Math.min(1, Math.max(0, (60 - capture.secondsRemaining) / 60))
+    : 0;
   const strokeOffset = circumference * (1 - progressRatio);
-  const remainingSeconds = Math.max(0, Math.ceil(60 - secondsElapsed));
-  const remainingText = `0:${remainingSeconds.toString().padStart(2, "0")} left`;
+  const remainingSeconds = capture.state === "measuring" ? capture.secondsRemaining : 60;
+  const remainingText = capture.state === "positioning"
+    ? (capture.validationHint || "Position face in frame…")
+    : capture.isClockPaused
+    ? `Paused (0:${remainingSeconds.toString().padStart(2, "0")} left)`
+    : `0:${remainingSeconds.toString().padStart(2, "0")} left`;
 
   return (
     <div
@@ -878,10 +977,13 @@ export const BaselineSheetModal: React.FC = () => {
                 }}
               >
                 <video
-                  ref={videoRef}
+                  ref={attachVideoElement}
                   autoPlay
                   playsInline
                   muted
+                  onLoadedMetadata={(e) => {
+                    (e.currentTarget as HTMLVideoElement).play().catch(() => {});
+                  }}
                   style={{
                     width: "100%",
                     height: "100%",
@@ -930,38 +1032,217 @@ export const BaselineSheetModal: React.FC = () => {
                 </div>
               </div>
 
-              {/* Readiness Checks Pill Row */}
+              {/* Genuine Guidance Pill */}
               <div
                 style={{
-                  display: "flex",
-                  gap: "10px",
+                  display: "inline-flex",
                   alignItems: "center",
-                  fontSize: "11.5px",
+                  gap: "6px",
+                  padding: "6px 14px",
+                  borderRadius: "var(--radius-full)",
+                  backgroundColor: "var(--bg-control)",
+                  border: "1px solid var(--separator)",
+                  fontSize: "12px",
                   color: "var(--text-secondary)",
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                  <Check size={12} style={{ color: isFaceInFrame ? "var(--accent-green)" : "var(--accent-orange)" }} />
-                  <span>{isFaceInFrame ? "Face detected" : "Looking for face"}</span>
-                </div>
-                <span>•</span>
-                <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                  <Check size={12} style={{ color: "var(--accent-green)" }} />
-                  <span>Good lighting</span>
-                </div>
-                <span>•</span>
-                <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                  <Check size={12} style={{ color: "var(--accent-green)" }} />
-                  <span>Holding still</span>
-                </div>
+                <span>Position your face within the guide • Calibration will start shortly</span>
               </div>
             </div>
           )}
 
           {/* =================================================================== */}
-          {/* STEP 4: THE 60 SECONDS (Smooth Ambient Ring, Signal Milestones)     */}
+          {/* STEP 4A: SDK ERROR OR MISSING API KEY                               */}
           {/* =================================================================== */}
-          {step === "capturing" && (
+          {step === "capturing" && capture.state === "error" && (
+            <div
+              style={{
+                maxWidth: "480px",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                textAlign: "center",
+                padding: "20px",
+              }}
+            >
+              <div
+                style={{
+                  width: "52px",
+                  height: "52px",
+                  borderRadius: "50%",
+                  backgroundColor: "rgba(255, 159, 10, 0.15)",
+                  border: "1px solid rgba(255, 159, 10, 0.3)",
+                  display: "grid",
+                  placeItems: "center",
+                  color: "var(--accent-orange)",
+                  marginBottom: "16px",
+                }}
+              >
+                <AlertCircle size={26} />
+              </div>
+
+              <h3 style={{ fontSize: "18px", fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>
+                {capture.errorMessage?.toLowerCase().includes("api key")
+                  ? "SmartSpectra API Key Required"
+                  : "Optical Sensor Initialization Error"}
+              </h3>
+              <p
+                style={{
+                  fontSize: "13px",
+                  color: "var(--text-secondary)",
+                  lineHeight: 1.5,
+                  marginTop: "10px",
+                  marginBottom: "18px",
+                }}
+              >
+                {capture.errorMessage ||
+                  "To measure optical blood volume pulse, breathing and HRV from video locally on this device, add your SmartSpectra API key to your .env file and restart the application."}
+              </p>
+
+              {capture.errorMessage?.toLowerCase().includes("api key") && (
+                <div
+                  style={{
+                    width: "100%",
+                    padding: "10px 14px",
+                    borderRadius: "var(--radius-sm)",
+                    backgroundColor: "var(--bg-control)",
+                    border: "1px solid var(--separator)",
+                    fontFamily: "var(--font-mono)",
+                    fontSize: "12px",
+                    color: "var(--text-secondary)",
+                    textAlign: "left",
+                    marginBottom: "20px",
+                    wordBreak: "break-all",
+                  }}
+                >
+                  SMARTSPECTRA_API_KEY=your_key_here
+                </div>
+              )}
+
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button
+                  onClick={handleCancelClick}
+                  className="mac-btn focus-ring"
+                  style={{
+                    padding: "7px 18px",
+                    borderRadius: "var(--radius-sm)",
+                    backgroundColor: "var(--bg-control)",
+                    border: "1px solid var(--separator)",
+                    color: "var(--text-primary)",
+                    fontSize: "12px",
+                    fontWeight: 500,
+                    cursor: "pointer",
+                  }}
+                >
+                  Close
+                </button>
+                <button
+                  onClick={handleRetryCapture}
+                  className="mac-btn focus-ring"
+                  style={{
+                    padding: "7px 18px",
+                    borderRadius: "var(--radius-sm)",
+                    backgroundColor: "var(--accent-blue)",
+                    color: "#ffffff",
+                    fontSize: "12px",
+                    fontWeight: 600,
+                    border: "none",
+                    cursor: "pointer",
+                  }}
+                >
+                  Retry
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* =================================================================== */}
+          {/* STEP 4B: INVALID CALIBRATION ATTEMPT                                */}
+          {/* =================================================================== */}
+          {step === "capturing" && capture.state === "invalid" && (
+            <div
+              style={{
+                maxWidth: "480px",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                textAlign: "center",
+                padding: "20px",
+              }}
+            >
+              <div
+                style={{
+                  width: "52px",
+                  height: "52px",
+                  borderRadius: "50%",
+                  backgroundColor: "rgba(255, 69, 58, 0.15)",
+                  border: "1px solid rgba(255, 69, 58, 0.3)",
+                  display: "grid",
+                  placeItems: "center",
+                  color: "var(--accent-red)",
+                  marginBottom: "16px",
+                }}
+              >
+                <UserX size={26} />
+              </div>
+
+              <h3 style={{ fontSize: "18px", fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>
+                Calibration Incomplete
+              </h3>
+              <p
+                style={{
+                  fontSize: "13px",
+                  color: "var(--text-secondary)",
+                  lineHeight: 1.5,
+                  marginTop: "10px",
+                  marginBottom: "20px",
+                }}
+              >
+                {capture.invalidReason ||
+                  "Sufficient optical signal could not be captured. Ensure adequate lighting and remain seated facing the camera."}
+              </p>
+
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button
+                  onClick={handleCancelClick}
+                  className="mac-btn focus-ring"
+                  style={{
+                    padding: "7px 18px",
+                    borderRadius: "var(--radius-sm)",
+                    backgroundColor: "var(--bg-control)",
+                    border: "1px solid var(--separator)",
+                    color: "var(--text-primary)",
+                    fontSize: "12px",
+                    fontWeight: 500,
+                    cursor: "pointer",
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleRetryCapture}
+                  className="mac-btn focus-ring"
+                  style={{
+                    padding: "7px 18px",
+                    borderRadius: "var(--radius-sm)",
+                    backgroundColor: "var(--accent-blue)",
+                    color: "#ffffff",
+                    fontSize: "12px",
+                    fontWeight: 600,
+                    border: "none",
+                    cursor: "pointer",
+                  }}
+                >
+                  Try Again
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* =================================================================== */}
+          {/* STEP 4C: THE 60 SECONDS (Smooth Ambient Ring, Signal Milestones)    */}
+          {/* =================================================================== */}
+          {step === "capturing" && capture.state !== "error" && capture.state !== "invalid" && (
             <div
               style={{
                 display: "flex",
@@ -1002,21 +1283,21 @@ export const BaselineSheetModal: React.FC = () => {
               >
                 {/* Left Milestone Chips: Pulse & Breathing */}
                 <div style={{ display: "flex", flexDirection: "column", gap: "12px", width: "170px" }}>
-                  {/* Pulse Milestone Chip (~12s) */}
+                  {/* Pulse Milestone Chip */}
                   <div
                     style={{
                       padding: "10px 14px",
                       borderRadius: "var(--radius-md)",
                       backgroundColor: isPulseLocked ? "rgba(10, 132, 255, 0.12)" : "var(--bg-control)",
                       border: isPulseLocked ? "1px solid var(--accent-blue)" : "1px solid var(--separator)",
-                      opacity: isPulseLocked ? 1 : 0.45,
+                      opacity: isPulseLocked ? 1 : 0.65,
                       transition: "all 0.3s ease",
                     }}
                   >
                     <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                       <Activity size={13} style={{ color: isPulseLocked ? "var(--accent-blue)" : "var(--text-tertiary)" }} />
                       <span style={{ fontSize: "11px", fontWeight: 650, color: isPulseLocked ? "var(--accent-blue)" : "var(--text-secondary)" }}>
-                        {isPulseLocked ? "Pulse found" : "Detecting pulse…"}
+                        {isPulseLocked ? "Pulse found" : capture.state === "measuring" ? "Detecting pulse…" : "Awaiting face…"}
                       </span>
                     </div>
                     <div
@@ -1028,25 +1309,27 @@ export const BaselineSheetModal: React.FC = () => {
                         fontFamily: "var(--font-mono)",
                       }}
                     >
-                      {isPulseLocked ? "68 bpm" : "—"}
+                      {capture.currentVitals.pulse !== null
+                        ? `${capture.currentVitals.pulse} bpm`
+                        : "—"}
                     </div>
                   </div>
 
-                  {/* Breathing Milestone Chip (~30s) */}
+                  {/* Breathing Milestone Chip */}
                   <div
                     style={{
                       padding: "10px 14px",
                       borderRadius: "var(--radius-md)",
                       backgroundColor: isBreathingLocked ? "rgba(50, 215, 75, 0.12)" : "var(--bg-control)",
                       border: isBreathingLocked ? "1px solid var(--accent-green)" : "1px solid var(--separator)",
-                      opacity: isBreathingLocked ? 1 : 0.45,
+                      opacity: isBreathingLocked ? 1 : 0.65,
                       transition: "all 0.3s ease",
                     }}
                   >
                     <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                       <Wind size={13} style={{ color: isBreathingLocked ? "var(--accent-green)" : "var(--text-tertiary)" }} />
                       <span style={{ fontSize: "11px", fontWeight: 650, color: isBreathingLocked ? "var(--accent-green)" : "var(--text-secondary)" }}>
-                        {isBreathingLocked ? "Breathing found" : "Detecting breath…"}
+                        {isBreathingLocked ? "Breathing found" : capture.state === "measuring" ? "Detecting breath…" : "Awaiting face…"}
                       </span>
                     </div>
                     <div
@@ -1058,7 +1341,9 @@ export const BaselineSheetModal: React.FC = () => {
                         fontFamily: "var(--font-mono)",
                       }}
                     >
-                      {isBreathingLocked ? "14 br/m" : "—"}
+                      {capture.currentVitals.breathing !== null
+                        ? `${capture.currentVitals.breathing} br/m`
+                        : "—"}
                     </div>
                   </div>
                 </div>
@@ -1086,12 +1371,15 @@ export const BaselineSheetModal: React.FC = () => {
                       cy="180"
                       r={radius}
                       fill="none"
-                      stroke="var(--accent-blue)"
+                      stroke={capture.isClockPaused ? "var(--accent-orange)" : "var(--accent-blue)"}
                       strokeWidth="5"
-                      strokeDasharray={circumference}
-                      strokeDashoffset={strokeOffset}
+                      strokeDasharray={capture.state === "positioning" ? "12 8" : circumference}
+                      strokeDashoffset={capture.state === "positioning" ? 0 : strokeOffset}
                       strokeLinecap="round"
-                      style={{ transition: "stroke-dashoffset 0.1s linear" }}
+                      style={{
+                        transition: "stroke-dashoffset 0.2s linear, stroke 0.3s ease",
+                        opacity: capture.state === "positioning" ? 0.6 : 1,
+                      }}
                     />
                   </svg>
 
@@ -1109,45 +1397,125 @@ export const BaselineSheetModal: React.FC = () => {
                     }}
                   >
                     <video
-                      ref={videoRef}
+                      ref={attachVideoElement}
                       autoPlay
                       playsInline
                       muted
+                      onLoadedMetadata={(e) => {
+                        (e.currentTarget as HTMLVideoElement).play().catch(() => {});
+                      }}
                       style={{
                         width: "100%",
                         height: "100%",
                         objectFit: "cover",
                         transform: "scaleX(-1)",
-                        opacity: isPaused ? 0.4 : 1,
+                        opacity: (isPaused || capture.isClockPaused) ? 0.4 : 1,
                         transition: "opacity 0.2s ease",
                       }}
                     />
 
-                    {/* Inline Quality Guard Notice if face lost */}
-                    {isPaused && (
+                    {/* Inline Quality Guard / Guidance Notice */}
+                    {capture.state === "positioning" && (
                       <div
                         style={{
                           position: "absolute",
                           inset: 0,
                           display: "grid",
                           placeItems: "center",
-                          backgroundColor: "rgba(0, 0, 0, 0.5)",
+                          backgroundColor: sensorStalledError
+                            ? "rgba(0, 0, 0, 0.7)"
+                            : capture.validationCode === 0
+                            ? "rgba(0, 0, 0, 0.2)"
+                            : "rgba(0, 0, 0, 0.5)",
                           padding: "16px",
                           textAlign: "center",
+                          zIndex: 5,
+                          pointerEvents: sensorStalledError ? "auto" : "none",
+                        }}
+                      >
+                        {sensorStalledError ? (
+                          <div
+                            style={{
+                              padding: "14px 18px",
+                              borderRadius: "var(--radius-md)",
+                              backgroundColor: "var(--bg-elevated)",
+                              border: "1px solid var(--accent-orange)",
+                              maxWidth: "340px",
+                              boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+                            }}
+                          >
+                            <div style={{ color: "var(--accent-orange)", fontWeight: 700, fontSize: "13px", marginBottom: "6px" }}>
+                              Sensor Initialization Stalled
+                            </div>
+                            <div style={{ color: "var(--text-secondary)", fontSize: "11px", lineHeight: 1.4, marginBottom: "12px" }}>
+                              {sensorStalledError}
+                            </div>
+                            <button
+                              onClick={handleRetryCapture}
+                              className="mac-btn mac-btn-primary focus-ring"
+                              style={{
+                                padding: "5px 14px",
+                                fontSize: "11px",
+                                cursor: "pointer",
+                              }}
+                            >
+                              Retry Sensor Connection
+                            </button>
+                          </div>
+                        ) : (
+                          <div
+                            style={{
+                              padding: "8px 16px",
+                              borderRadius: "var(--radius-sm)",
+                              backgroundColor:
+                                capture.validationCode === 0
+                                  ? "rgba(52, 199, 89, 0.25)"
+                                  : "rgba(255, 159, 10, 0.25)",
+                              border: `1px solid ${
+                                capture.validationCode === 0 ? "var(--accent-green)" : "var(--accent-orange)"
+                              }`,
+                              color:
+                                capture.validationCode === 0 ? "var(--accent-green)" : "var(--accent-orange)",
+                              fontSize: "12px",
+                              fontWeight: 600,
+                              backdropFilter: "blur(6px)",
+                            }}
+                          >
+                            {capture.validationCode === null
+                              ? "Starting optical sensor…"
+                              : capture.validationCode === 0
+                              ? "Face aligned — calibrating in 1.5s..."
+                              : capture.validationHint || "Position your face in the camera to begin"}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {(capture.state === "measuring" && (capture.isClockPaused || isPaused)) && (
+                      <div
+                        style={{
+                          position: "absolute",
+                          inset: 0,
+                          display: "grid",
+                          placeItems: "center",
+                          backgroundColor: "rgba(0, 0, 0, 0.6)",
+                          padding: "16px",
+                          textAlign: "center",
+                          zIndex: 5,
                         }}
                       >
                         <div
                           style={{
                             padding: "6px 14px",
                             borderRadius: "var(--radius-sm)",
-                            backgroundColor: "rgba(255, 159, 10, 0.25)",
+                            backgroundColor: "rgba(255, 159, 10, 0.3)",
                             border: "1px solid var(--accent-orange)",
                             color: "var(--accent-orange)",
                             fontSize: "12px",
                             fontWeight: 600,
                           }}
                         >
-                          Keep your face in the frame
+                          {"Paused — " + (capture.validationHint || "Face lost. Return to frame to resume")}
                         </div>
                       </div>
                     )}
@@ -1160,7 +1528,7 @@ export const BaselineSheetModal: React.FC = () => {
                       bottom: "10px",
                       fontSize: "11px",
                       fontFamily: "var(--font-mono)",
-                      color: "var(--text-tertiary)",
+                      color: capture.isClockPaused ? "var(--accent-orange)" : "var(--text-tertiary)",
                       backgroundColor: "var(--bg-elevated)",
                       padding: "2px 8px",
                       borderRadius: "var(--radius-full)",
@@ -1180,14 +1548,14 @@ export const BaselineSheetModal: React.FC = () => {
                       borderRadius: "var(--radius-md)",
                       backgroundColor: isEdaLocked ? "rgba(255, 159, 10, 0.12)" : "var(--bg-control)",
                       border: isEdaLocked ? "1px solid var(--accent-orange)" : "1px solid var(--separator)",
-                      opacity: isEdaLocked ? 1 : 0.45,
+                      opacity: isEdaLocked ? 1 : 0.65,
                       transition: "all 0.3s ease",
                     }}
                   >
                     <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                       <Zap size={13} style={{ color: isEdaLocked ? "var(--accent-orange)" : "var(--text-tertiary)" }} />
                       <span style={{ fontSize: "11px", fontWeight: 650, color: isEdaLocked ? "var(--accent-orange)" : "var(--text-secondary)" }}>
-                        {isEdaLocked ? "Skin response found" : "Locking signal…"}
+                        {isEdaLocked ? "Skin response found" : capture.state === "measuring" ? "Analyzing arousal…" : "Awaiting face…"}
                       </span>
                     </div>
                     <div
@@ -1196,9 +1564,10 @@ export const BaselineSheetModal: React.FC = () => {
                         fontWeight: 700,
                         color: isEdaLocked ? "var(--text-primary)" : "var(--text-tertiary)",
                         marginTop: "2px",
+                        fontFamily: "var(--font-mono)",
                       }}
                     >
-                      {isEdaLocked ? "Active" : "—"}
+                      {capture.currentVitals.eda !== null ? `${capture.currentVitals.eda.toFixed(1)}` : "—"}
                     </div>
                   </div>
 
@@ -1209,14 +1578,14 @@ export const BaselineSheetModal: React.FC = () => {
                       borderRadius: "var(--radius-md)",
                       backgroundColor: isHrvLocked ? "rgba(10, 132, 255, 0.12)" : "var(--bg-control)",
                       border: isHrvLocked ? "1px solid var(--accent-blue)" : "1px solid var(--separator)",
-                      opacity: isHrvLocked ? 1 : 0.45,
+                      opacity: isHrvLocked ? 1 : 0.65,
                       transition: "all 0.3s ease",
                     }}
                   >
                     <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                       <Heart size={13} style={{ color: isHrvLocked ? "var(--accent-blue)" : "var(--text-tertiary)" }} />
                       <span style={{ fontSize: "11px", fontWeight: 650, color: isHrvLocked ? "var(--accent-blue)" : "var(--text-secondary)" }}>
-                        {isHrvLocked ? "HRV ready" : "Awaiting 60s window"}
+                        {isHrvLocked ? "HRV calculated" : capture.state === "measuring" ? "Awaiting 60s window…" : "Awaiting face…"}
                       </span>
                     </div>
                     <div
@@ -1228,7 +1597,9 @@ export const BaselineSheetModal: React.FC = () => {
                         fontFamily: "var(--font-mono)",
                       }}
                     >
-                      {isHrvLocked ? "54 ms" : "—"}
+                      {capture.currentVitals.hrv !== null
+                        ? `${capture.currentVitals.hrv} ms`
+                        : "—"}
                     </div>
                   </div>
                 </div>
@@ -1395,14 +1766,20 @@ export const BaselineSheetModal: React.FC = () => {
                   </div>
                   <div
                     style={{
-                      fontSize: "22px",
+                      fontSize: resultMetrics.pulse !== null ? "22px" : "15px",
                       fontWeight: 700,
                       color: "var(--text-primary)",
                       marginTop: "4px",
                       fontFamily: "var(--font-mono)",
                     }}
                   >
-                    {resultMetrics.pulse} <span style={{ fontSize: "12px", fontWeight: 500, color: "var(--text-secondary)" }}>bpm</span>
+                    {resultMetrics.pulse !== null ? (
+                      <>
+                        {resultMetrics.pulse} <span style={{ fontSize: "12px", fontWeight: 500, color: "var(--text-secondary)" }}>bpm</span>
+                      </>
+                    ) : (
+                      <span style={{ fontSize: "13px", fontWeight: 500, color: "var(--text-tertiary)" }}>No signal</span>
+                    )}
                   </div>
                 </div>
 
@@ -1420,14 +1797,20 @@ export const BaselineSheetModal: React.FC = () => {
                   </div>
                   <div
                     style={{
-                      fontSize: "22px",
+                      fontSize: resultMetrics.breathing !== null ? "22px" : "15px",
                       fontWeight: 700,
                       color: "var(--text-primary)",
                       marginTop: "4px",
                       fontFamily: "var(--font-mono)",
                     }}
                   >
-                    {resultMetrics.breathing} <span style={{ fontSize: "12px", fontWeight: 500, color: "var(--text-secondary)" }}>br/m</span>
+                    {resultMetrics.breathing !== null ? (
+                      <>
+                        {resultMetrics.breathing} <span style={{ fontSize: "12px", fontWeight: 500, color: "var(--text-secondary)" }}>br/m</span>
+                      </>
+                    ) : (
+                      <span style={{ fontSize: "13px", fontWeight: 500, color: "var(--text-tertiary)" }}>No signal</span>
+                    )}
                   </div>
                 </div>
 
@@ -1445,19 +1828,19 @@ export const BaselineSheetModal: React.FC = () => {
                   </div>
                   <div
                     style={{
-                      fontSize: "22px",
+                      fontSize: resultMetrics.hrv !== null ? "22px" : "15px",
                       fontWeight: 700,
                       color: "var(--text-primary)",
                       marginTop: "4px",
                       fontFamily: "var(--font-mono)",
                     }}
                   >
-                    {resultMetrics.hrv ? (
+                    {resultMetrics.hrv !== null ? (
                       <>
                         {resultMetrics.hrv} <span style={{ fontSize: "12px", fontWeight: 500, color: "var(--text-secondary)" }}>ms</span>
                       </>
                     ) : (
-                      "Not measured"
+                      <span style={{ fontSize: "13px", fontWeight: 500, color: "var(--text-tertiary)" }}>Not measured</span>
                     )}
                   </div>
                 </div>
@@ -1485,78 +1868,71 @@ export const BaselineSheetModal: React.FC = () => {
                 </span>
               </div>
 
+              {/* Mandatory Wellness Disclaimer */}
+              <p
+                style={{
+                  fontSize: "11px",
+                  color: "var(--text-tertiary)",
+                  lineHeight: 1.4,
+                  maxWidth: "420px",
+                  margin: "0 0 20px 0",
+                }}
+              >
+                SmartSpectra metrics are for general wellness and conversational composure training only, and not for medical diagnosis or treatment.
+              </p>
+
               {/* Actions */}
               <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-                {resultMetrics.quality === "Poor" ? (
-                  <>
-                    <button
-                      onClick={handleStartCamera}
-                      className="mac-btn focus-ring"
-                      style={{
-                        padding: "8px 22px",
-                        borderRadius: "var(--radius-sm)",
-                        backgroundColor: "var(--accent-blue)",
-                        color: "#ffffff",
-                        fontSize: "12.5px",
-                        fontWeight: 600,
-                        border: "none",
-                        cursor: "pointer",
-                      }}
-                    >
-                      Retake baseline
-                    </button>
-                    <button
-                      onClick={handleCancelClick}
-                      className="mac-btn focus-ring"
-                      style={{
-                        padding: "8px 18px",
-                        borderRadius: "var(--radius-sm)",
-                        backgroundColor: "var(--bg-control)",
-                        border: "1px solid var(--separator)",
-                        color: "var(--text-secondary)",
-                        fontSize: "12.5px",
-                        cursor: "pointer",
-                      }}
-                    >
-                      Cancel
-                    </button>
-                  </>
+                <button
+                  onClick={handleStartCamera}
+                  className="mac-btn focus-ring"
+                  style={{
+                    padding: "8px 18px",
+                    borderRadius: "var(--radius-sm)",
+                    backgroundColor: "var(--bg-control)",
+                    border: "1px solid var(--separator)",
+                    color: "var(--text-primary)",
+                    fontSize: "12.5px",
+                    fontWeight: 500,
+                    cursor: "pointer",
+                  }}
+                >
+                  Retake baseline
+                </button>
+                {resultMetrics.pulse !== null ? (
+                  <button
+                    onClick={handleSave}
+                    className="mac-btn focus-ring"
+                    style={{
+                      padding: "8px 24px",
+                      borderRadius: "var(--radius-sm)",
+                      backgroundColor: "var(--accent-blue)",
+                      color: "#ffffff",
+                      fontSize: "12.5px",
+                      fontWeight: 600,
+                      border: "none",
+                      cursor: "pointer",
+                      boxShadow: "0 1px 3px rgba(10, 132, 255, 0.4)",
+                    }}
+                  >
+                    {resultMetrics.quality === "Poor" ? "Save baseline anyway" : "Save baseline"}
+                  </button>
                 ) : (
-                  <>
-                    <button
-                      onClick={handleStartCamera}
-                      className="mac-btn focus-ring"
-                      style={{
-                        padding: "8px 18px",
-                        borderRadius: "var(--radius-sm)",
-                        backgroundColor: "var(--bg-control)",
-                        border: "1px solid var(--separator)",
-                        color: "var(--text-primary)",
-                        fontSize: "12.5px",
-                        fontWeight: 500,
-                        cursor: "pointer",
-                      }}
-                    >
-                      Retake
-                    </button>
-                    <button
-                      onClick={handleSave}
-                      className="mac-btn focus-ring"
-                      style={{
-                        padding: "8px 24px",
-                        borderRadius: "var(--radius-sm)",
-                        backgroundColor: "var(--accent-blue)",
-                        color: "#ffffff",
-                        fontSize: "12.5px",
-                        fontWeight: 600,
-                        border: "none",
-                        cursor: "pointer",
-                        boxShadow: "0 1px 3px rgba(10, 132, 255, 0.4)",
-                      }}
-                    >
-                      Save baseline
-                    </button>
-                  </>
+                  <button
+                    onClick={handleCancelClick}
+                    className="mac-btn focus-ring"
+                    style={{
+                      padding: "8px 18px",
+                      borderRadius: "var(--radius-sm)",
+                      backgroundColor: "var(--bg-control)",
+                      border: "1px solid var(--separator)",
+                      color: "var(--text-secondary)",
+                      fontSize: "12.5px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Cancel
+                  </button>
                 )}
               </div>
             </div>

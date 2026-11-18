@@ -37,3 +37,6 @@ out
 *.njsproj
 *.sln
 *.sw?
+
+.agent-decisions.md
+.agent-progress.md
