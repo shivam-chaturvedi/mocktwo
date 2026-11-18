@@ -1006,6 +1006,13 @@ export const RecordingsScreen: React.FC = () => {
                             <div style={{ marginTop: "4px", padding: "4px 8px", borderRadius: "3px", backgroundColor: "var(--bg-control)", fontSize: "11px", color: "var(--accent-teal)" }}>
                               <strong>Reset suggestion:</strong> {moment.suggestion}
                             </div>
+                            {moment.evidence && moment.evidence.length > 0 && (
+                              <div style={{ marginTop: "4px", fontSize: "10px", color: "var(--text-tertiary)", lineHeight: 1.3 }}>
+                                {moment.evidence.map((ev, i) => (
+                                  <div key={i}>• {ev}</div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -1025,6 +1032,13 @@ export const RecordingsScreen: React.FC = () => {
                             <div style={{ fontSize: "11px", color: "var(--text-secondary)", marginTop: "2px" }}>
                               {item.description}
                             </div>
+                            {item.evidence && item.evidence.length > 0 && (
+                              <div style={{ marginTop: "3px", fontSize: "10px", color: "var(--text-tertiary)" }}>
+                                {item.evidence.map((ev, i) => (
+                                  <div key={i}>• {ev}</div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         ))}
                         {coaching?.whereShowedStrain.map((item) => (
@@ -1035,6 +1049,13 @@ export const RecordingsScreen: React.FC = () => {
                             <div style={{ fontSize: "11px", color: "var(--text-secondary)", marginTop: "2px" }}>
                               {item.description}
                             </div>
+                            {item.evidence && item.evidence.length > 0 && (
+                              <div style={{ marginTop: "3px", fontSize: "10px", color: "var(--text-tertiary)" }}>
+                                {item.evidence.map((ev, i) => (
+                                  <div key={i}>• {ev}</div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -1082,6 +1103,13 @@ export const RecordingsScreen: React.FC = () => {
                           <div key={d.id} style={{ padding: "10px 12px", borderRadius: "var(--radius-sm)", backgroundColor: "var(--bg-elevated)", border: "1px solid var(--separator)" }}>
                             <div style={{ fontSize: "12px", fontWeight: 600, color: "var(--accent-blue)" }}>{d.title}</div>
                             <div style={{ fontSize: "11px", color: "var(--text-secondary)", marginTop: "2px", lineHeight: 1.35 }}>{d.description}</div>
+                            {d.evidence && d.evidence.length > 0 && (
+                              <div style={{ marginTop: "4px", fontSize: "10px", color: "var(--text-tertiary)" }}>
+                                {d.evidence.map((ev, i) => (
+                                  <div key={i}>• {ev}</div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>

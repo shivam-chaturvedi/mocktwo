@@ -86,40 +86,43 @@ export const ProgressScreen: React.FC = () => {
       return "Building";
     };
 
+    const delta = scores.length > 1 ? scores[0] - scores[scores.length - 1] : 0;
+    const trendText = scores.length > 1 ? (delta >= 0 ? `+${delta}%` : `${delta}%`) : scores.length === 1 ? "Baseline" : "No data";
+
     return [
       {
         name: "Composure" as const,
         score: avgScore,
-        trend: scores.length > 1 ? "+4%" : "Baseline",
+        trend: trendText,
         level: getLevel(avgScore),
         plainNote: "How much your body stays calm and steady during challenging moments.",
       },
       {
         name: "Recovery" as const,
-        score: Math.max(0, Math.min(100, Math.round(avgScore * 0.96))),
-        trend: scores.length > 1 ? "+3%" : "Baseline",
-        level: getLevel(Math.round(avgScore * 0.96)),
+        score: avgScore,
+        trend: trendText,
+        level: getLevel(avgScore),
         plainNote: "How quickly your pulse returns to your resting baseline after sudden pressure spikes.",
       },
       {
         name: "Pulse control" as const,
-        score: Math.max(0, Math.min(100, Math.round(avgScore * 0.95))),
-        trend: scores.length > 1 ? "+2%" : "Baseline",
-        level: getLevel(Math.round(avgScore * 0.95)),
+        score: avgScore,
+        trend: trendText,
+        level: getLevel(avgScore),
         plainNote: "Keeping your heart rate within your normal resting range when challenged.",
       },
       {
         name: "Autonomic balance" as const,
-        score: Math.max(0, Math.min(100, Math.round(avgScore * 0.92))),
-        trend: scores.length > 1 ? "+3%" : "Baseline",
-        level: getLevel(Math.round(avgScore * 0.92)),
+        score: avgScore,
+        trend: trendText,
+        level: getLevel(avgScore),
         plainNote: "Resting nervous-system balance (HRV RMSSD vs your resting baseline).",
       },
       {
         name: "Expression calm" as const,
-        score: Math.max(0, Math.min(100, Math.round(avgScore * 0.98))),
-        trend: scores.length > 1 ? "+1%" : "Baseline",
-        level: getLevel(Math.round(avgScore * 0.98)),
+        score: avgScore,
+        trend: trendText,
+        level: getLevel(avgScore),
         plainNote: "Maintaining relaxed facial micro-expressions without visible signs of tension.",
       },
     ];

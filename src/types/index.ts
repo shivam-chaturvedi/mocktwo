@@ -163,6 +163,7 @@ export interface PeakStressMoment {
   reaction: string; // SDK physiological signals only (pulse/arousal/expression)
   userAction: string; // What the body did / calm response
   suggestion: string; // Practical reset (breathing, pause, slower start)
+  evidence?: string[];
 }
 
 export interface SessionBiometrics {
@@ -418,6 +419,7 @@ export interface CoachingHeldSteadyItem {
   timestampSeconds: number;
   title: string;
   description: string;
+  evidence?: string[];
 }
 
 export interface CoachingStrainItem {
@@ -425,12 +427,14 @@ export interface CoachingStrainItem {
   timestampSeconds: number;
   title: string;
   description: string;
+  evidence?: string[];
 }
 
 export interface CounterpartHandlingItem {
   area: string;
   assessment: string;
   status: "strong" | "developing" | "strained";
+  evidence?: string[];
 }
 
 export interface PracticeDrill {
@@ -439,6 +443,7 @@ export interface PracticeDrill {
   description: string;
   type: "breathing" | "pause" | "reframing";
   scenarioSuggestionId?: string;
+  evidence?: string[];
 }
 
 // EXACT 5 PRESSURE SKILLS (Derived exclusively from SDK signals)
@@ -448,6 +453,7 @@ export interface PressureSkillItem {
   score: number;
   assessment: string;
   subtext?: string;
+  evidence?: string[];
 }
 
 export interface RecordingPressureCoaching {
