@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 export interface MediaRecorderOptions {
   timesliceMs?: number;
@@ -68,27 +68,27 @@ export function useMediaRecorder() {
           });
         }
 
-        // 2. Clone tracks so recording lifecycle never alters the caller's live preview
-        const clonedTracks: MediaStreamTrack[] = [];
+        // 2. Select tracks to record
+        const tracksToRecord: MediaStreamTrack[] = [];
         const videoTracks = sourceStream.getVideoTracks();
         if (videoTracks.length > 0) {
-          clonedTracks.push(videoTracks[0].clone());
+          tracksToRecord.push(videoTracks[0]);
         }
 
         // Baseline is strictly VIDEO-ONLY; practice sessions record audio
         if (kind !== "baseline") {
           const audioTracks = sourceStream.getAudioTracks();
           for (const aTrack of audioTracks) {
-            clonedTracks.push(aTrack.clone());
+            tracksToRecord.push(aTrack);
           }
         }
 
-        if (clonedTracks.length === 0) {
+        if (tracksToRecord.length === 0) {
           throw new Error("No tracks available to record");
         }
 
-        const clonedStream = new MediaStream(clonedTracks);
-        clonedStreamRef.current = clonedStream;
+        const recordingStream = new MediaStream(tracksToRecord);
+        clonedStreamRef.current = recordingStream;
 
         // 3. Determine best supported WebM mimeType
         const mimeTypes = [
@@ -105,8 +105,8 @@ export function useMediaRecorder() {
         }
 
         const recorder = selectedMimeType
-          ? new MediaRecorder(clonedStream, { mimeType: selectedMimeType })
-          : new MediaRecorder(clonedStream);
+          ? new MediaRecorder(recordingStream, { mimeType: selectedMimeType })
+          : new MediaRecorder(recordingStream);
 
         recorderRef.current = recorder;
 
@@ -263,14 +263,17 @@ export function useMediaRecorder() {
     []
   );
 
-  return {
-    isRecording,
-    recordingId,
-    error,
-    start,
-    stop,
-    abort,
-    appendTranscript,
-    appendVitals,
-  };
+  return useMemo(
+    () => ({
+      isRecording,
+      recordingId,
+      error,
+      start,
+      stop,
+      abort,
+      appendTranscript,
+      appendVitals,
+    }),
+    [isRecording, recordingId, error, start, stop, abort, appendTranscript, appendVitals]
+  );
 }

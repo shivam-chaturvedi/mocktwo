@@ -94,6 +94,14 @@ export const BaselineSheetModal: React.FC = () => {
   const pausedAtRef = useRef<number | null>(null);
   const modalRef = useRef<HTMLDivElement | null>(null);
   const previousActiveElementRef = useRef<HTMLElement | null>(null);
+  const hasStartedCaptureRef = useRef<boolean>(false);
+  const startCaptureRef = useRef(capture.startCapture);
+  useEffect(() => {
+    startCaptureRef.current = capture.startCapture;
+  }, [capture.startCapture]);
+
+  const [sensorStalledError, setSensorStalledError] = useState<string | null>(null);
+  const sensorWatchdogRef = useRef<NodeJS.Timeout | null>(null);
 
   const isMountedRef = useRef(true);
 
@@ -126,7 +134,7 @@ export const BaselineSheetModal: React.FC = () => {
   }, [stopCamera]);
 
   // Request camera access
-  const handleStartCamera = async () => {
+  const handleStartCamera = useCallback(async () => {
     try {
       if (window.electronAPI?.requestMediaAccess) {
         const granted = await window.electronAPI.requestMediaAccess("camera");
@@ -174,15 +182,37 @@ export const BaselineSheetModal: React.FC = () => {
         setStep("no-camera");
       }
     }
-  };
+  }, []);
 
-  // Re-attach stream to video element when entering get-ready or capturing
+  // Callback ref to attach stream immediately upon video DOM mount (e.g. after retry remount)
+  const attachVideoElement = useCallback(
+    (el: HTMLVideoElement | null) => {
+      videoRef.current = el;
+      if (el) {
+        const stream = mediaStreamRef.current || activeStream;
+        if (stream) {
+          if (el.srcObject !== stream) {
+            el.srcObject = stream;
+          }
+          el.play().catch(() => {});
+        }
+      }
+    },
+    [activeStream]
+  );
+
+  // Re-attach and ensure stream playback whenever step, capture state, or stream updates
   useEffect(() => {
-    if ((step === "get-ready" || step === "capturing") && videoRef.current && mediaStreamRef.current) {
-      videoRef.current.srcObject = mediaStreamRef.current;
-      videoRef.current.play().catch(() => {});
+    if ((step === "get-ready" || step === "capturing") && videoRef.current) {
+      const stream = mediaStreamRef.current || activeStream;
+      if (stream) {
+        if (videoRef.current.srcObject !== stream) {
+          videoRef.current.srcObject = stream;
+        }
+        videoRef.current.play().catch(() => {});
+      }
     }
-  }, [step]);
+  }, [step, capture.state, activeStream]);
 
   // Step 3: Get Ready Countdown
   useEffect(() => {
@@ -206,12 +236,87 @@ export const BaselineSheetModal: React.FC = () => {
     }
   }, [step, countdown]);
 
-  // Start SmartSpectra session when entering capturing state
+  // Start SmartSpectra session once when entering capturing state
   useEffect(() => {
     if (step === "capturing") {
-      capture.startCapture();
+      if (!hasStartedCaptureRef.current) {
+        hasStartedCaptureRef.current = true;
+        startCaptureRef.current();
+      }
+    } else {
+      hasStartedCaptureRef.current = false;
     }
-  }, [step, capture]);
+  }, [step]);
+
+  // Watchdog timer: probe native engine if no validation event arrives within 8s
+  useEffect(() => {
+    if (step === "capturing" && capture.state === "positioning" && capture.validationCode === null) {
+      sensorWatchdogRef.current = setTimeout(async () => {
+        if (capture.validationCode === null && isMountedRef.current) {
+          try {
+            const probe = await window.electronAPI?.probePresage?.();
+            if (probe) {
+              if (!probe.sdkLoaded) {
+                setSensorStalledError(`Native SDK failed to load: ${probe.lastLoadError || "Unknown error"}`);
+              } else if (!probe.ipcBound) {
+                setSensorStalledError("Main-process IPC bridge not bound to window.");
+              } else if (!probe.capiExists) {
+                setSensorStalledError(`Native library missing at: ${probe.capiPath}`);
+              } else if (!probe.apiKeyConfigured) {
+                setSensorStalledError("SmartSpectra API key is not configured in .env.");
+              } else {
+                setSensorStalledError("Optical sensor engine unresponsive after 8s. Camera may be held by another app.");
+              }
+            } else {
+              setSensorStalledError("Optical sensor engine did not produce validation within 8 seconds.");
+            }
+          } catch {
+            setSensorStalledError("Failed to probe optical sensor engine.");
+          }
+        }
+      }, 8000);
+    } else {
+      if (sensorWatchdogRef.current) {
+        clearTimeout(sensorWatchdogRef.current);
+        sensorWatchdogRef.current = null;
+      }
+      if (capture.validationCode !== null) {
+        setSensorStalledError(null);
+      }
+    }
+
+    return () => {
+      if (sensorWatchdogRef.current) {
+        clearTimeout(sensorWatchdogRef.current);
+        sensorWatchdogRef.current = null;
+      }
+    };
+  }, [step, capture.state, capture.validationCode]);
+
+  // Clean retry handler: re-acquires camera if track was ended/interrupted, or re-enters get-ready
+  const handleRetryCapture = useCallback(async () => {
+    setSensorStalledError(null);
+    hasStartedCaptureRef.current = false;
+    await capture.reset();
+
+    const currentTrack = mediaStreamRef.current?.getVideoTracks()[0];
+    if (!currentTrack || currentTrack.readyState === "ended" || !currentTrack.enabled) {
+      await handleStartCamera();
+      return;
+    }
+
+    // Camera track is active: ensure video element has stream attached and playing
+    if (videoRef.current && mediaStreamRef.current) {
+      if (videoRef.current.srcObject !== mediaStreamRef.current) {
+        videoRef.current.srcObject = mediaStreamRef.current;
+      }
+      videoRef.current.play().catch(() => {});
+    }
+
+    // Give user a clean 3-second get-ready window to align and compose themselves
+    setStep("get-ready");
+    setCountdown(3);
+  }, [capture, handleStartCamera]);
 
   // Sync elapsed seconds and announcements from capture hook
   useEffect(() => {
@@ -299,15 +404,15 @@ export const BaselineSheetModal: React.FC = () => {
     closeBaselineSheet();
   };
 
-  // Save baseline to storage via BiometricsService (only if quality is acceptable and has pulse)
+  // Save baseline to storage via BiometricsService (whenever resting pulse was captured)
   const handleSave = async () => {
-    if (resultMetrics.quality === "Poor") {
+    if (resultMetrics.pulse === null) {
       closeBaselineSheet();
       return;
     }
 
     const newBaseline: UserBaseline = {
-      restingPulse: resultMetrics.pulse ?? null,
+      restingPulse: resultMetrics.pulse,
       restingBreathingRate: resultMetrics.breathing ?? null,
       restingHrvRmssd: resultMetrics.hrv ?? null,
       measuredAt: new Date().toISOString(),
@@ -317,7 +422,7 @@ export const BaselineSheetModal: React.FC = () => {
       qualityScore: resultMetrics.qualityScore,
       qualityRating: resultMetrics.quality,
       durationSeconds: 60,
-      restingHR: resultMetrics.pulse ?? null,
+      restingHR: resultMetrics.pulse,
       restingHRV: resultMetrics.hrv ?? null,
     };
 
@@ -872,10 +977,13 @@ export const BaselineSheetModal: React.FC = () => {
                 }}
               >
                 <video
-                  ref={videoRef}
+                  ref={attachVideoElement}
                   autoPlay
                   playsInline
                   muted
+                  onLoadedMetadata={(e) => {
+                    (e.currentTarget as HTMLVideoElement).play().catch(() => {});
+                  }}
                   style={{
                     width: "100%",
                     height: "100%",
@@ -974,7 +1082,9 @@ export const BaselineSheetModal: React.FC = () => {
               </div>
 
               <h3 style={{ fontSize: "18px", fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>
-                SmartSpectra API Key Required
+                {capture.errorMessage?.toLowerCase().includes("api key")
+                  ? "SmartSpectra API Key Required"
+                  : "Optical Sensor Initialization Error"}
               </h3>
               <p
                 style={{
@@ -989,23 +1099,25 @@ export const BaselineSheetModal: React.FC = () => {
                   "To measure optical blood volume pulse, breathing and HRV from video locally on this device, add your SmartSpectra API key to your .env file and restart the application."}
               </p>
 
-              <div
-                style={{
-                  width: "100%",
-                  padding: "10px 14px",
-                  borderRadius: "var(--radius-sm)",
-                  backgroundColor: "var(--bg-control)",
-                  border: "1px solid var(--separator)",
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "12px",
-                  color: "var(--text-secondary)",
-                  textAlign: "left",
-                  marginBottom: "20px",
-                  wordBreak: "break-all",
-                }}
-              >
-                SMARTSPECTRA_API_KEY=your_key_here
-              </div>
+              {capture.errorMessage?.toLowerCase().includes("api key") && (
+                <div
+                  style={{
+                    width: "100%",
+                    padding: "10px 14px",
+                    borderRadius: "var(--radius-sm)",
+                    backgroundColor: "var(--bg-control)",
+                    border: "1px solid var(--separator)",
+                    fontFamily: "var(--font-mono)",
+                    fontSize: "12px",
+                    color: "var(--text-secondary)",
+                    textAlign: "left",
+                    marginBottom: "20px",
+                    wordBreak: "break-all",
+                  }}
+                >
+                  SMARTSPECTRA_API_KEY=your_key_here
+                </div>
+              )}
 
               <div style={{ display: "flex", gap: "10px" }}>
                 <button
@@ -1025,7 +1137,7 @@ export const BaselineSheetModal: React.FC = () => {
                   Close
                 </button>
                 <button
-                  onClick={() => capture.startCapture()}
+                  onClick={handleRetryCapture}
                   className="mac-btn focus-ring"
                   style={{
                     padding: "7px 18px",
@@ -1108,10 +1220,7 @@ export const BaselineSheetModal: React.FC = () => {
                   Cancel
                 </button>
                 <button
-                  onClick={() => {
-                    capture.reset();
-                    capture.startCapture();
-                  }}
+                  onClick={handleRetryCapture}
                   className="mac-btn focus-ring"
                   style={{
                     padding: "7px 18px",
@@ -1288,10 +1397,13 @@ export const BaselineSheetModal: React.FC = () => {
                     }}
                   >
                     <video
-                      ref={videoRef}
+                      ref={attachVideoElement}
                       autoPlay
                       playsInline
                       muted
+                      onLoadedMetadata={(e) => {
+                        (e.currentTarget as HTMLVideoElement).play().catch(() => {});
+                      }}
                       style={{
                         width: "100%",
                         height: "100%",
@@ -1303,32 +1415,79 @@ export const BaselineSheetModal: React.FC = () => {
                     />
 
                     {/* Inline Quality Guard / Guidance Notice */}
-                    {(capture.state === "positioning" && capture.validationCode !== 0) && (
+                    {capture.state === "positioning" && (
                       <div
                         style={{
                           position: "absolute",
                           inset: 0,
                           display: "grid",
                           placeItems: "center",
-                          backgroundColor: "rgba(0, 0, 0, 0.5)",
+                          backgroundColor: sensorStalledError
+                            ? "rgba(0, 0, 0, 0.7)"
+                            : capture.validationCode === 0
+                            ? "rgba(0, 0, 0, 0.2)"
+                            : "rgba(0, 0, 0, 0.5)",
                           padding: "16px",
                           textAlign: "center",
                           zIndex: 5,
+                          pointerEvents: sensorStalledError ? "auto" : "none",
                         }}
                       >
-                        <div
-                          style={{
-                            padding: "6px 14px",
-                            borderRadius: "var(--radius-sm)",
-                            backgroundColor: "rgba(255, 159, 10, 0.25)",
-                            border: "1px solid var(--accent-orange)",
-                            color: "var(--accent-orange)",
-                            fontSize: "12px",
-                            fontWeight: 600,
-                          }}
-                        >
-                          {capture.validationHint || "Position your face in the camera to begin"}
-                        </div>
+                        {sensorStalledError ? (
+                          <div
+                            style={{
+                              padding: "14px 18px",
+                              borderRadius: "var(--radius-md)",
+                              backgroundColor: "var(--bg-elevated)",
+                              border: "1px solid var(--accent-orange)",
+                              maxWidth: "340px",
+                              boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+                            }}
+                          >
+                            <div style={{ color: "var(--accent-orange)", fontWeight: 700, fontSize: "13px", marginBottom: "6px" }}>
+                              Sensor Initialization Stalled
+                            </div>
+                            <div style={{ color: "var(--text-secondary)", fontSize: "11px", lineHeight: 1.4, marginBottom: "12px" }}>
+                              {sensorStalledError}
+                            </div>
+                            <button
+                              onClick={handleRetryCapture}
+                              className="mac-btn mac-btn-primary focus-ring"
+                              style={{
+                                padding: "5px 14px",
+                                fontSize: "11px",
+                                cursor: "pointer",
+                              }}
+                            >
+                              Retry Sensor Connection
+                            </button>
+                          </div>
+                        ) : (
+                          <div
+                            style={{
+                              padding: "8px 16px",
+                              borderRadius: "var(--radius-sm)",
+                              backgroundColor:
+                                capture.validationCode === 0
+                                  ? "rgba(52, 199, 89, 0.25)"
+                                  : "rgba(255, 159, 10, 0.25)",
+                              border: `1px solid ${
+                                capture.validationCode === 0 ? "var(--accent-green)" : "var(--accent-orange)"
+                              }`,
+                              color:
+                                capture.validationCode === 0 ? "var(--accent-green)" : "var(--accent-orange)",
+                              fontSize: "12px",
+                              fontWeight: 600,
+                              backdropFilter: "blur(6px)",
+                            }}
+                          >
+                            {capture.validationCode === null
+                              ? "Starting optical sensor…"
+                              : capture.validationCode === 0
+                              ? "Face aligned — calibrating in 1.5s..."
+                              : capture.validationHint || "Position your face in the camera to begin"}
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -1724,76 +1883,56 @@ export const BaselineSheetModal: React.FC = () => {
 
               {/* Actions */}
               <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-                {resultMetrics.quality === "Poor" ? (
-                  <>
-                    <button
-                      onClick={handleStartCamera}
-                      className="mac-btn focus-ring"
-                      style={{
-                        padding: "8px 22px",
-                        borderRadius: "var(--radius-sm)",
-                        backgroundColor: "var(--accent-blue)",
-                        color: "#ffffff",
-                        fontSize: "12.5px",
-                        fontWeight: 600,
-                        border: "none",
-                        cursor: "pointer",
-                      }}
-                    >
-                      Retake baseline
-                    </button>
-                    <button
-                      onClick={handleCancelClick}
-                      className="mac-btn focus-ring"
-                      style={{
-                        padding: "8px 18px",
-                        borderRadius: "var(--radius-sm)",
-                        backgroundColor: "var(--bg-control)",
-                        border: "1px solid var(--separator)",
-                        color: "var(--text-secondary)",
-                        fontSize: "12.5px",
-                        cursor: "pointer",
-                      }}
-                    >
-                      Cancel
-                    </button>
-                  </>
+                <button
+                  onClick={handleStartCamera}
+                  className="mac-btn focus-ring"
+                  style={{
+                    padding: "8px 18px",
+                    borderRadius: "var(--radius-sm)",
+                    backgroundColor: "var(--bg-control)",
+                    border: "1px solid var(--separator)",
+                    color: "var(--text-primary)",
+                    fontSize: "12.5px",
+                    fontWeight: 500,
+                    cursor: "pointer",
+                  }}
+                >
+                  Retake baseline
+                </button>
+                {resultMetrics.pulse !== null ? (
+                  <button
+                    onClick={handleSave}
+                    className="mac-btn focus-ring"
+                    style={{
+                      padding: "8px 24px",
+                      borderRadius: "var(--radius-sm)",
+                      backgroundColor: "var(--accent-blue)",
+                      color: "#ffffff",
+                      fontSize: "12.5px",
+                      fontWeight: 600,
+                      border: "none",
+                      cursor: "pointer",
+                      boxShadow: "0 1px 3px rgba(10, 132, 255, 0.4)",
+                    }}
+                  >
+                    {resultMetrics.quality === "Poor" ? "Save baseline anyway" : "Save baseline"}
+                  </button>
                 ) : (
-                  <>
-                    <button
-                      onClick={handleStartCamera}
-                      className="mac-btn focus-ring"
-                      style={{
-                        padding: "8px 18px",
-                        borderRadius: "var(--radius-sm)",
-                        backgroundColor: "var(--bg-control)",
-                        border: "1px solid var(--separator)",
-                        color: "var(--text-primary)",
-                        fontSize: "12.5px",
-                        fontWeight: 500,
-                        cursor: "pointer",
-                      }}
-                    >
-                      Retake
-                    </button>
-                    <button
-                      onClick={handleSave}
-                      className="mac-btn focus-ring"
-                      style={{
-                        padding: "8px 24px",
-                        borderRadius: "var(--radius-sm)",
-                        backgroundColor: "var(--accent-blue)",
-                        color: "#ffffff",
-                        fontSize: "12.5px",
-                        fontWeight: 600,
-                        border: "none",
-                        cursor: "pointer",
-                        boxShadow: "0 1px 3px rgba(10, 132, 255, 0.4)",
-                      }}
-                    >
-                      Save baseline
-                    </button>
-                  </>
+                  <button
+                    onClick={handleCancelClick}
+                    className="mac-btn focus-ring"
+                    style={{
+                      padding: "8px 18px",
+                      borderRadius: "var(--radius-sm)",
+                      backgroundColor: "var(--bg-control)",
+                      border: "1px solid var(--separator)",
+                      color: "var(--text-secondary)",
+                      fontSize: "12.5px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Cancel
+                  </button>
                 )}
               </div>
             </div>

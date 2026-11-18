@@ -10,9 +10,9 @@ import { type ComposureTier, type NervousnessLevel, getComposureTier } from "../
 export interface TelemetrySample {
   timestampOffsetMs: number;
   pulseBpm: number | null;
-  hrvRmssd?: number | null;
-  breathingRate?: number | null;
-  confidence?: number | null;
+  hrvRmssd: number | null;
+  breathingRate: number | null;
+  confidence: number | null;
   isClean: boolean;
 }
 

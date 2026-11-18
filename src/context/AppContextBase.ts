@@ -57,7 +57,7 @@ export interface AppContextType {
   
   // Live simulation session
   activeSessionId: string | null;
-  beginSimulation: (overridePersona?: Persona) => void;
+  beginSimulation: (overridePersona?: Persona, overrideDurationMinutes?: number) => void;
   finishSimulation: (durationSeconds: number) => void;
   completeProcessingSession: () => Promise<Recording | null>;
   

@@ -18,6 +18,7 @@ import {
   Clock,
   FileText,
   Trash2,
+  Info,
 } from "lucide-react";
 import {
   getComposureTier,
@@ -26,6 +27,7 @@ import {
 } from "../types";
 import { WELLNESS_DISCLAIMER } from "../services/biometrics";
 import { serviceRegistry } from "../services/api";
+import { ComposureExplainerModal } from "../components/common/ComposureExplainerModal";
 
 export const RecordingsScreen: React.FC = () => {
   const {
@@ -54,6 +56,7 @@ export const RecordingsScreen: React.FC = () => {
   const [isInspectorOpen, setIsInspectorOpen] = useState(true);
   const [inspectorTab, setInspectorTab] = useState<"coaching" | "analytics">("coaching");
   const [noteInput, setNoteInput] = useState("");
+  const [showExplainer, setShowExplainer] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [hasVideoError, setHasVideoError] = useState(false);
 
@@ -957,8 +960,32 @@ export const RecordingsScreen: React.FC = () => {
                               · {activeRecording.nervousnessLevel || "Mild"}
                             </span>
                           </div>
-                          <div style={{ fontSize: "14px", fontWeight: 650, color: "var(--text-primary)", marginTop: "2px" }}>
-                            mocktwo Composure Index
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "2px" }}>
+                            <div style={{ fontSize: "14px", fontWeight: 650, color: "var(--text-primary)" }}>
+                              mocktwo Composure Index
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setShowExplainer(true)}
+                              aria-label="Learn how composure score is calculated and what Steady means"
+                              title="What is composure score and how is it calculated?"
+                              className="mac-btn focus-ring"
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                width: "16px",
+                                height: "16px",
+                                padding: 0,
+                                borderRadius: "50%",
+                                border: "1px solid var(--separator)",
+                                backgroundColor: "rgba(255, 255, 255, 0.06)",
+                                color: "var(--text-secondary)",
+                                cursor: "pointer",
+                              }}
+                            >
+                              <Info size={10} />
+                            </button>
                           </div>
                           <div style={{ fontSize: "11px", color: "var(--text-tertiary)", marginTop: "2px" }}>
                             Based on {signalsCount} of 5 signals {isPartial ? "(Partial)" : ""}
@@ -1136,6 +1163,136 @@ export const RecordingsScreen: React.FC = () => {
                     />
                   ) : (
                     <>
+                      {/* Composure, Nervousness & Pressure Hero Card */}
+                      <div
+                        style={{
+                          padding: "16px",
+                          borderRadius: "var(--radius-lg)",
+                          backgroundColor: "var(--bg-elevated)",
+                          border: "1px solid var(--separator)",
+                          boxShadow: "var(--shadow-card)",
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+                          <ScoreRing score={score || 0} size={76} strokeWidth={5.5} />
+                          <div style={{ flex: 1 }}>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                <span
+                                  style={{
+                                    fontSize: "11px",
+                                    fontWeight: 700,
+                                    color:
+                                      tier === "Unshakeable"
+                                        ? "var(--accent-purple)"
+                                        : tier === "Composed"
+                                        ? "var(--accent-green)"
+                                        : "var(--accent-blue)",
+                                    textTransform: "uppercase",
+                                    letterSpacing: "0.04em",
+                                  }}
+                                >
+                                  {tier}
+                                </span>
+                                <span
+                                  style={{
+                                    fontSize: "11px",
+                                    padding: "2px 7px",
+                                    borderRadius: "var(--radius-xs)",
+                                    backgroundColor: "var(--bg-control)",
+                                    color:
+                                      activeRecording.nervousnessLevel === "Calm"
+                                        ? "var(--accent-green)"
+                                        : activeRecording.nervousnessLevel === "Mild"
+                                        ? "var(--accent-blue)"
+                                        : activeRecording.nervousnessLevel === "Moderate"
+                                        ? "var(--accent-orange)"
+                                        : "var(--accent-red)",
+                                    fontWeight: 650,
+                                  }}
+                                >
+                                  {activeRecording.nervousnessLevel || (score !== undefined ? (score >= 88 ? "Calm" : score >= 76 ? "Mild" : score >= 60 ? "Moderate" : "High") : "Mild")}
+                                </span>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => setShowExplainer(true)}
+                                aria-label="Learn how composure score, nervousness, and pressure are calculated"
+                                title="How do we calculate composure, nervousness, and pressure?"
+                                className="mac-btn focus-ring"
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  width: "18px",
+                                  height: "18px",
+                                  padding: 0,
+                                  borderRadius: "50%",
+                                  border: "1px solid var(--separator)",
+                                  backgroundColor: "rgba(255, 255, 255, 0.06)",
+                                  color: "var(--text-secondary)",
+                                  cursor: "pointer",
+                                }}
+                              >
+                                <Info size={11} />
+                              </button>
+                            </div>
+
+                            <div style={{ fontSize: "14px", fontWeight: 650, color: "var(--text-primary)", marginTop: "4px" }}>
+                              mocktwo Composure &amp; Nervousness Index
+                            </div>
+
+                            <div style={{ fontSize: "11px", color: "var(--text-tertiary)", marginTop: "2px" }}>
+                              Based on {signalsCount} of 5 biometric signals {isPartial ? "(Partial read)" : ""}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Nervousness and Pressure Breakdown Row */}
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: "1fr 1fr 1fr",
+                            gap: "8px",
+                            marginTop: "14px",
+                            paddingTop: "12px",
+                            borderTop: "1px solid var(--separator)",
+                          }}
+                        >
+                          <div style={{ padding: "8px 10px", borderRadius: "var(--radius-sm)", backgroundColor: "var(--bg-control)" }}>
+                            <span style={{ fontSize: "10px", color: "var(--text-tertiary)", textTransform: "uppercase", display: "block", fontWeight: 600 }}>
+                              Nervousness
+                            </span>
+                            <span style={{ fontSize: "13px", fontWeight: 650, color: "var(--text-primary)" }}>
+                              {activeRecording.nervousnessLevel || (score !== undefined ? (score >= 88 ? "Calm" : score >= 76 ? "Mild" : score >= 60 ? "Moderate" : "High") : "Mild")}
+                            </span>
+                          </div>
+
+                          <div style={{ padding: "8px 10px", borderRadius: "var(--radius-sm)", backgroundColor: "var(--bg-control)" }}>
+                            <span style={{ fontSize: "10px", color: "var(--text-tertiary)", textTransform: "uppercase", display: "block", fontWeight: 600 }}>
+                              Pressure Spike
+                            </span>
+                            <span style={{ fontSize: "13px", fontWeight: 650, color: "var(--accent-orange)" }}>
+                              {biometrics?.pulse?.deltaVsBaseline !== undefined
+                                ? `+${biometrics.pulse.deltaVsBaseline} bpm`
+                                : ((activeRecording as any).avgPulse && baseline?.restingPulse)
+                                ? `+${Math.max(0, (activeRecording as any).avgPulse - baseline.restingPulse)} bpm`
+                                : "Controlled"}
+                            </span>
+                          </div>
+
+                          <div style={{ padding: "8px 10px", borderRadius: "var(--radius-sm)", backgroundColor: "var(--bg-control)" }}>
+                            <span style={{ fontSize: "10px", color: "var(--text-tertiary)", textTransform: "uppercase", display: "block", fontWeight: 600 }}>
+                              Recovery
+                            </span>
+                            <span style={{ fontSize: "13px", fontWeight: 650, color: "var(--accent-green)" }}>
+                              ~{biometrics?.recoverySecondsApprox || (activeRecording as any).recoverySeconds || 14}s
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
                       {/* Top: Pressure Timeline (Pulse + EDA + Talking Bands + Out-of-Range Band) */}
                     <PressureTimelineChart
                       biometrics={activeRecording.sessionBiometrics}
@@ -1525,6 +1682,11 @@ export const RecordingsScreen: React.FC = () => {
           ) : null}
         </div>
       </div>
+
+      <ComposureExplainerModal
+        isOpen={showExplainer}
+        onClose={() => setShowExplainer(false)}
+      />
     </div>
   );
 };

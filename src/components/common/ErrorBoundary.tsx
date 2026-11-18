@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { AlertCircle, RotateCcw, Copy, Check } from "lucide-react";
+import { releaseAllMediaResources } from "../../utils/mediaLifecycle";
 
 interface Props {
   children: ReactNode;
@@ -32,6 +33,13 @@ export class ErrorBoundary extends Component<Props, State> {
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error("ErrorBoundary caught an unhandled error:", error, errorInfo);
+    // Definitively release any active camera, microphone, or audio hardware resources
+    try {
+      releaseAllMediaResources();
+    } catch (cleanupErr) {
+      console.warn("Error releasing media resources in ErrorBoundary:", cleanupErr);
+    }
+
     try {
       const electronAPI = (window as unknown as {
         electronAPI?: { logError?: (payload: Record<string, unknown>) => void };

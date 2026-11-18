@@ -53,8 +53,15 @@ const CATEGORY_OPTIONS: readonly CategoryOption[] = [
 
 const LENGTH_OPTIONS = [
   { label: "1 min", value: 1 },
+  { label: "2 min", value: 2 },
   { label: "3 min", value: 3 },
+  { label: "4 min", value: 4 },
   { label: "5 min", value: 5 },
+  { label: "6 min", value: 6 },
+  { label: "7 min", value: 7 },
+  { label: "8 min", value: 8 },
+  { label: "9 min", value: 9 },
+  { label: "10 min", value: 10 },
 ];
 
 // Session-level persistent draft text across modal open/close
@@ -81,7 +88,7 @@ export const QuickPracticeModal: React.FC = () => {
   const [draftText, setDraftText] = useState(sessionPersistentDraft);
   const [selectedPersonaId, setSelectedPersonaId] = useState<string>("auto");
   const [selectedCategory, setSelectedCategory] = useState<string>(() => quickPracticeInitialCategory || "Auto");
-  const [selectedLength, setSelectedLength] = useState<number>(1);
+  const [selectedLength, setSelectedLength] = useState<number>(3);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Scenarios mode state

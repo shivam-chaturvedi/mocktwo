@@ -9,10 +9,12 @@ import {
   Activity,
   Users,
   ShieldCheck,
+  Info,
 } from "lucide-react";
 import { getComposureTier } from "../types";
 import { WELLNESS_DISCLAIMER } from "../services/biometrics";
 import { EmptyState } from "../components/common/EmptyState";
+import { ComposureExplainerModal } from "../components/common/ComposureExplainerModal";
 
 export const ProgressScreen: React.FC = () => {
   const {
@@ -27,11 +29,31 @@ export const ProgressScreen: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<"overview" | "skills" | "breakdown">("overview");
   const [timeRange, setTimeRange] = useState<"7D" | "30D" | "90D" | "All">("30D");
+  const [showExplainer, setShowExplainer] = useState(false);
 
-  const completedRecordings = useMemo(
-    () => recordings.filter((r) => r.status === "Completed"),
-    [recordings]
-  );
+  const completedRecordings = useMemo(() => {
+    const now = Date.now();
+    return (recordings || []).filter((r) => {
+      const status = (r.status || "").toLowerCase();
+      const isCompleted =
+        status === "completed" ||
+        (Boolean(r.durationSeconds) &&
+          (r.durationSeconds as number) >= 30 &&
+          status !== "abandoned" &&
+          status !== "interrupted");
+      if (!isCompleted) return false;
+      if (timeRange === "All") return true;
+
+      const rawDate = (r as any).startedAt || r.date || (r as any).createdAt;
+      if (!rawDate) return true;
+      const recTime = new Date(rawDate).getTime();
+      if (isNaN(recTime)) return true;
+
+      const days = timeRange === "7D" ? 7 : timeRange === "30D" ? 30 : 90;
+      const diffMs = now - recTime;
+      return diffMs <= days * 24 * 60 * 60 * 1000;
+    });
+  }, [recordings, timeRange]);
 
   const avgComposure = useMemo(() => {
     if (completedRecordings.length === 0) return user.averageComposure || 0;
@@ -56,32 +78,65 @@ export const ProgressScreen: React.FC = () => {
 
   const avgRecoverySeconds = useMemo(() => {
     const valid = completedRecordings
-      .map((r) => r.sessionBiometrics?.recoverySecondsApprox)
-      .filter((s): s is number => typeof s === "number" && !isNaN(s));
-    if (valid.length === 0) return 18;
+      .map((r) => (r as any).recoverySeconds ?? r.sessionBiometrics?.recoverySecondsApprox)
+      .filter((s): s is number => typeof s === "number" && !isNaN(s) && s > 0);
+    if (valid.length === 0) return null;
     const result = Math.round(valid.reduce((acc, s) => acc + s, 0) / valid.length);
-    return isNaN(result) ? 18 : result;
+    return isNaN(result) ? null : result;
   }, [completedRecordings]);
 
   const avgPulseBpm = useMemo(() => {
     const valid = completedRecordings
-      .map((r) => r.sessionBiometrics?.pulse?.avg)
-      .filter((p): p is number => typeof p === "number" && !isNaN(p));
-    if (valid.length === 0) return baselinePulse;
+      .map((r) => (r as any).avgPulse ?? r.sessionBiometrics?.pulse?.avg)
+      .filter((p): p is number => typeof p === "number" && !isNaN(p) && p > 0);
+    if (valid.length === 0) return null;
     const result = Math.round(valid.reduce((acc, p) => acc + p, 0) / valid.length);
-    return isNaN(result) ? baselinePulse : result;
+    return isNaN(result) ? null : result;
+  }, [completedRecordings]);
+
+  // Real pulse & HRV trend data from completed sessions
+  const recentPulseSessions = useMemo(() => {
+    return completedRecordings
+      .filter((r) => ((r as any).avgPulse || r.sessionBiometrics?.pulse?.avg))
+      .slice(0, 8)
+      .reverse()
+      .map((r, idx) => {
+        const val = Math.round((r as any).avgPulse || r.sessionBiometrics?.pulse?.avg || 0);
+        const diff = val - baselinePulse;
+        return {
+          sessionIdx: idx + 1,
+          val,
+          diff,
+          title: r.scenarioTitle || `Session #${idx + 1}`,
+        };
+      });
   }, [completedRecordings, baselinePulse]);
+
+  const recentHrvSessions = useMemo(() => {
+    return completedRecordings
+      .filter((r) => (r.durationSeconds || 0) >= 60 && ((r as any).avgHrvRmssd || r.sessionBiometrics?.hrv?.rmssd))
+      .slice(0, 8)
+      .reverse()
+      .map((r, idx) => {
+        const val = Math.round((r as any).avgHrvRmssd || r.sessionBiometrics?.hrv?.rmssd || 0);
+        return {
+          sessionIdx: idx + 1,
+          val,
+          title: r.scenarioTitle || `Session #${idx + 1}`,
+        };
+      });
+  }, [completedRecordings]);
 
   // Dynamically derived Pressure Skills from real completed recordings
   const pressureSkills = useMemo(() => {
     const scores = completedRecordings
       .map((r) => r.composureScore)
       .filter((s): s is number => typeof s === "number" && !isNaN(s));
-    const avgScore = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
+    const avgScore = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : avgComposure;
 
     const getLevel = (sc: number): "Unshakeable" | "Composed" | "Steady" | "Building" => {
-      if (sc >= 90) return "Unshakeable";
-      if (sc >= 80) return "Composed";
+      if (sc >= 93) return "Unshakeable";
+      if (sc >= 83) return "Composed";
       if (sc >= 70) return "Steady";
       return "Building";
     };
@@ -99,16 +154,16 @@ export const ProgressScreen: React.FC = () => {
       },
       {
         name: "Recovery" as const,
-        score: avgScore,
+        score: avgRecoverySeconds !== null ? Math.max(40, Math.min(100, Math.round(100 - Math.max(0, avgRecoverySeconds - 12) * 2.0))) : avgScore,
         trend: trendText,
-        level: getLevel(avgScore),
+        level: getLevel(avgRecoverySeconds !== null ? Math.max(40, Math.min(100, Math.round(100 - Math.max(0, avgRecoverySeconds - 12) * 2.0))) : avgScore),
         plainNote: "How quickly your pulse returns to your resting baseline after sudden pressure spikes.",
       },
       {
         name: "Pulse control" as const,
-        score: avgScore,
+        score: avgPulseBpm !== null ? Math.max(40, Math.min(100, Math.round(100 - Math.max(0, avgPulseBpm - baselinePulse) * 3.0))) : avgScore,
         trend: trendText,
-        level: getLevel(avgScore),
+        level: getLevel(avgPulseBpm !== null ? Math.max(40, Math.min(100, Math.round(100 - Math.max(0, avgPulseBpm - baselinePulse) * 3.0))) : avgScore),
         plainNote: "Keeping your heart rate within your normal resting range when challenged.",
       },
       {
@@ -126,7 +181,7 @@ export const ProgressScreen: React.FC = () => {
         plainNote: "Maintaining relaxed facial micro-expressions without visible signs of tension.",
       },
     ];
-  }, [completedRecordings]);
+  }, [completedRecordings, avgComposure, avgRecoverySeconds, avgPulseBpm, baselinePulse]);
 
   // Dynamically derived Category Performance from completed recordings
   const categoryPerformance = useMemo(() => {
@@ -355,17 +410,41 @@ export const ProgressScreen: React.FC = () => {
                 <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
                   <ScoreRing score={avgComposure} size={92} strokeWidth={8} />
                   <div>
-                    <span
-                      style={{
-                        fontSize: "11px",
-                        textTransform: "uppercase",
-                        letterSpacing: "0.06em",
-                        color: "var(--text-tertiary)",
-                        fontWeight: 600,
-                      }}
-                    >
-                      Overall Composure
-                    </span>
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      <span
+                        style={{
+                          fontSize: "11px",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.06em",
+                          color: "var(--text-tertiary)",
+                          fontWeight: 600,
+                        }}
+                      >
+                        Overall Composure
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setShowExplainer(true)}
+                        aria-label="Learn how Composure is calculated and what Steady means"
+                        title="What is Composure and how is it calculated?"
+                        className="mac-btn focus-ring"
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          width: "16px",
+                          height: "16px",
+                          padding: 0,
+                          borderRadius: "50%",
+                          border: "1px solid var(--separator)",
+                          backgroundColor: "rgba(255, 255, 255, 0.06)",
+                          color: "var(--text-secondary)",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <Info size={10} />
+                      </button>
+                    </div>
                     <h3
                       style={{
                         fontSize: "20px",
@@ -381,6 +460,8 @@ export const ProgressScreen: React.FC = () => {
                         ? "Flawless autonomic recovery during confrontations."
                         : currentTier === "Composed"
                         ? "Steady pulse control across objections and tough Q&A."
+                        : currentTier === "Steady"
+                        ? "Controlled and grounded with reliable recovery back to baseline."
                         : "Good baseline composure with mild pulse elevation under sudden challenge."}
                     </p>
                     <div
@@ -421,13 +502,13 @@ export const ProgressScreen: React.FC = () => {
                     <div style={{ padding: "8px 10px", borderRadius: "var(--radius-sm)", backgroundColor: "var(--bg-control)" }}>
                       <span style={{ fontSize: "10.5px", color: "var(--text-tertiary)", display: "block" }}>Avg Recovery</span>
                       <span className="tabular-nums" style={{ fontSize: "14px", fontWeight: 650, color: "var(--accent-green)" }}>
-                        {avgRecoverySeconds}s
+                        {avgRecoverySeconds !== null ? `${avgRecoverySeconds}s` : "—"}
                       </span>
                     </div>
                     <div style={{ padding: "8px 10px", borderRadius: "var(--radius-sm)", backgroundColor: "var(--bg-control)" }}>
                       <span style={{ fontSize: "10.5px", color: "var(--text-tertiary)", display: "block" }}>Avg Pulse</span>
                       <span className="tabular-nums" style={{ fontSize: "14px", fontWeight: 650, color: "var(--accent-blue)" }}>
-                        {avgPulseBpm} bpm
+                        {avgPulseBpm !== null ? `${avgPulseBpm} bpm` : "—"}
                       </span>
                     </div>
                   </div>
@@ -451,24 +532,27 @@ export const ProgressScreen: React.FC = () => {
                           Rest: {baselinePulse} bpm
                         </span>
                       </div>
-                      <div style={{ display: "flex", alignItems: "flex-end", gap: "6px", height: "32px" }}>
-                        {[76, 74, 75, 72, 73, 71, 70, 72].map((val, idx) => {
-                          const diff = val - baselinePulse;
-                          return (
+                      {recentPulseSessions.length > 0 ? (
+                        <div style={{ display: "flex", alignItems: "flex-end", gap: "6px", height: "32px" }}>
+                          {recentPulseSessions.map((item, idx) => (
                             <div key={idx} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: "2px" }}>
                               <div
-                                title={`Session #${idx + 1}: ${val} bpm (+${diff} vs resting)`}
+                                title={`${item.title}: ${item.val} bpm (${item.diff >= 0 ? `+${item.diff}` : item.diff} vs resting)`}
                                 style={{
                                   width: "100%",
-                                  height: `${Math.max(8, (val - 60) * 2)}px`,
-                                  backgroundColor: diff <= 4 ? "var(--accent-green)" : "var(--accent-blue)",
+                                  height: `${Math.max(8, Math.min(32, (item.val - 50) * 1.2))}px`,
+                                  backgroundColor: item.diff <= 5 ? "var(--accent-green)" : "var(--accent-blue)",
                                   borderRadius: "2px",
                                 }}
                               />
                             </div>
-                          );
-                        })}
-                      </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div style={{ height: "32px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", color: "var(--text-tertiary)" }}>
+                          No pulse data recorded
+                        </div>
+                      )}
                     </div>
 
                     {/* Trend 2: HRV vs Baseline */}
@@ -488,21 +572,27 @@ export const ProgressScreen: React.FC = () => {
                           Rest: {baselineHrv} ms
                         </span>
                       </div>
-                      <div style={{ display: "flex", alignItems: "flex-end", gap: "6px", height: "32px" }}>
-                        {[40, 42, 45, 46, 48].map((val, idx) => (
-                          <div key={idx} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: "2px" }}>
-                            <div
-                              title={`60s+ session #${idx + 1}: ${val} ms RMSSD`}
-                              style={{
-                                width: "100%",
-                                height: `${Math.max(8, (val - 30) * 1.5)}px`,
-                                backgroundColor: "var(--accent-purple)",
-                                borderRadius: "2px",
-                              }}
-                            />
-                          </div>
-                        ))}
-                      </div>
+                      {recentHrvSessions.length > 0 ? (
+                        <div style={{ display: "flex", alignItems: "flex-end", gap: "6px", height: "32px" }}>
+                          {recentHrvSessions.map((item, idx) => (
+                            <div key={idx} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: "2px" }}>
+                              <div
+                                title={`${item.title}: ${item.val} ms RMSSD`}
+                                style={{
+                                  width: "100%",
+                                  height: `${Math.max(8, Math.min(32, item.val * 0.6))}px`,
+                                  backgroundColor: "var(--accent-purple)",
+                                  borderRadius: "2px",
+                                }}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div style={{ height: "32px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", color: "var(--text-tertiary)" }}>
+                          Recorded for sessions ≥60s
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -842,6 +932,11 @@ export const ProgressScreen: React.FC = () => {
           </div>
         </div>
       </div>
+
+      <ComposureExplainerModal
+        isOpen={showExplainer}
+        onClose={() => setShowExplainer(false)}
+      />
     </div>
   );
 };

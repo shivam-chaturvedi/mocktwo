@@ -296,11 +296,21 @@ class StorageManager {
   // ---------------------------------------------------------------------------
   // Startup Reconciliation & Crash Recovery
   // ---------------------------------------------------------------------------
-  async reconcileOnStartup() {
+  async reconcileOnStartup(onInterruptedTavus) {
     try {
       // 1. Mark interrupted in-flight rows in SQLite
       const interruptedRows = await this.execute("recordings:reconcile-in-flight").catch(() => []);
       console.log(`[StorageManager] Reconciled ${interruptedRows?.length || 0} in-flight recording rows on startup.`);
+
+      if (Array.isArray(interruptedRows) && typeof onInterruptedTavus === "function") {
+        for (const row of interruptedRows) {
+          if (row && row.tavus_conversation_id) {
+            try {
+              onInterruptedTavus(row.tavus_conversation_id);
+            } catch {}
+          }
+        }
+      }
 
       // 2. Scan folders for orphaned .partial files
       const subFolders = ["sessions", "baselines"];

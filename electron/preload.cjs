@@ -3,59 +3,33 @@ const { contextBridge, ipcRenderer } = require("electron");
 // Presage SmartSpectra preload bridge (contextIsolation & sandbox compliant)
 try {
   require("@smartspectra/node-sdk/preload");
-} catch (_err) {
-  // In sandboxed Electron preload, bare specifiers to node_modules may fail to resolve.
-  // We provide the exact standard bridge expected by @smartspectra/node-sdk/renderer.
-  const ATTACH_CHANNEL = "smartspectra:attach";
-  let ssPort = null;
-  let ssMessageListener = null;
-
-  const onPortMessage = (event) => {
-    if (ssMessageListener) ssMessageListener(event.data);
-  };
-
-  contextBridge.exposeInMainWorld("__smartspectraBridge", {
-    diagnostics: false,
-    attach() {
-      if (ssPort) return;
-      const channel = new MessageChannel();
-      ssPort = channel.port1;
-      ssPort.onmessage = onPortMessage;
-      ipcRenderer.postMessage(ATTACH_CHANNEL, null, [channel.port2]);
-      ssPort.start();
-    },
-    postMessage(message) {
-      if (!ssPort) throw new Error("@smartspectra/node-sdk/preload: postMessage before attach()");
-      try {
-        ssPort.postMessage(message);
-      } catch (err) {
-        console.error(`[smartspectra/preload] port.postMessage failed for ${message && message.kind}:`, err);
-        throw err;
-      }
-    },
-    onMessage(callback) {
-      ssMessageListener = typeof callback === "function" ? callback : null;
-    },
-    close() {
-      if (ssPort) {
-        try { ssPort.close(); } catch { /* already closed */ }
-        ssPort = null;
-      }
-      ssMessageListener = null;
-    },
-  });
+} catch {
+  try {
+    const path = require("path");
+    require(path.join(__dirname, "../node_modules/@smartspectra/node-sdk/js/preload/index.js"));
+  } catch (_e) {
+    // If already exposed by session.setPreloads, ignore
+  }
 }
 
 contextBridge.exposeInMainWorld("electronAPI", {
   platform: process.platform,
 
   getPresageConfig: () => ipcRenderer.invoke("presage:get-config"),
+  probePresage: () => ipcRenderer.invoke("presage:probe"),
 
   onMenuAction: (callback) => {
     if (typeof callback !== "function") return () => {};
     const handler = (_event, action) => callback(action);
     ipcRenderer.on("menu-action", handler);
     return () => ipcRenderer.removeListener("menu-action", handler);
+  },
+
+  onAppWillClose: (callback) => {
+    if (typeof callback !== "function") return () => {};
+    const handler = () => callback();
+    ipcRenderer.on("app:will-close", handler);
+    return () => ipcRenderer.removeListener("app:will-close", handler);
   },
 
   sendWindowAction: (action) => {
@@ -97,6 +71,14 @@ contextBridge.exposeInMainWorld("electronAPI", {
   personaPreviewPrompt: (draft) => ipcRenderer.invoke("tavus:preview-prompt", draft),
   tavusListFaces: (options) => ipcRenderer.invoke("tavus:list-faces", options),
   tavusListVoices: (options) => ipcRenderer.invoke("tavus:list-voices", options),
+
+  // Tavus CVI Live Conversation
+  tavus: {
+    createConversation: (payload) => ipcRenderer.invoke("tavus:conversation:create", payload),
+    endConversation: (conversationId) => ipcRenderer.invoke("tavus:conversation:end", conversationId),
+  },
+  createConversation: (payload) => ipcRenderer.invoke("tavus:conversation:create", payload),
+  endConversation: (conversationId) => ipcRenderer.invoke("tavus:conversation:end", conversationId),
 
   // Storage API bridge (SQLite worker backed)
   storage: {

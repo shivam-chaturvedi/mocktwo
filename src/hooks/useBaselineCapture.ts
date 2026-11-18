@@ -16,6 +16,26 @@ import {
   type ValidationEvent,
 } from "../services/vitals/metrics";
 import { ValidationCode } from "@smartspectra/node-sdk/renderer";
+import { VALIDATION_HINTS, type ValidationStatusCode } from "../types";
+
+const VALIDATION_CODE_MAP: Record<number, ValidationStatusCode> = {
+  0: "OK",
+  1: "NO_FACE_FOUND",
+  2: "MULTIPLE_FACES_FOUND",
+  3: "FACE_NOT_CENTERED",
+  4: "FACE_TOO_CLOSE",
+  5: "TOO_DARK",
+  6: "TOO_BRIGHT",
+  7: "CHEST_NOT_VISIBLE",
+  10: "CAMERA_TUNING",
+  11: "FRAME_RATE_TOO_LOW",
+  12: "EXCESSIVE_MOTION",
+  13: "FACE_TOO_CLOSE",
+  14: "FACE_TOO_FAR",
+  15: "FACE_TOO_HIGH",
+  16: "FACE_TOO_LOW",
+  17: "FACE_NOT_FORWARD",
+};
 
 export type BaselineState =
   | "idle"
@@ -67,7 +87,9 @@ export function useBaselineCapture(options: UseBaselineCaptureOptions) {
   const totalTimerRef = useRef<NodeJS.Timeout | null>(null);
   const pausedTimeMsRef = useRef(0);
   const measuringStartTimeRef = useRef(0);
+  const measuringStartTimestampUsRef = useRef(0);
   const isOkRef = useRef(false);
+  const isStartingRef = useRef(false);
 
   // Helper to safely clean up all active timers and sessions
   const cleanup = useCallback(async () => {
@@ -109,14 +131,24 @@ export function useBaselineCapture(options: UseBaselineCaptureOptions) {
     setState("processing");
     await cleanup();
 
-    const measuringDurationMs = measuringStartTimeRef.current > 0
-      ? Date.now() - measuringStartTimeRef.current
-      : 60000;
+    // DATA CORRECTNESS: compute duration strictly from valid non-paused measuring time
+    const validDurationMs = Math.max(
+      1000,
+      (Date.now() - measuringStartTimeRef.current) - pausedTimeMsRef.current
+    );
+
+    // Only summarize samples and validation events captured during the active measuring window
+    const measuringSamples = samplesRef.current.filter(
+      (s) => s.timestampUs >= measuringStartTimestampUsRef.current
+    );
+    const measuringValidation = validationEventsRef.current.filter(
+      (v) => v.timestampUs >= measuringStartTimestampUsRef.current
+    );
 
     const baselineSummary = summarizeBaseline(
-      samplesRef.current,
-      validationEventsRef.current,
-      measuringDurationMs
+      measuringSamples.length > 0 ? measuringSamples : samplesRef.current,
+      measuringValidation.length > 0 ? measuringValidation : validationEventsRef.current,
+      validDurationMs
     );
 
     setSummary(baselineSummary);
@@ -165,6 +197,7 @@ export function useBaselineCapture(options: UseBaselineCaptureOptions) {
     setState("measuring");
     setSecondsRemaining(60);
     measuringStartTimeRef.current = Date.now();
+    measuringStartTimestampUsRef.current = Date.now() * 1000;
     pausedTimeMsRef.current = 0;
 
     // Start 1-second interval ticker for the 60s measuring countdown
@@ -213,101 +246,131 @@ export function useBaselineCapture(options: UseBaselineCaptureOptions) {
    * Starts the calm baseline capture flow
    */
   const startCapture = useCallback(async () => {
-    await cleanup();
-    setErrorMessage(null);
-    setInvalidReason(null);
-    setSummary(null);
-    samplesRef.current = [];
-    validationEventsRef.current = [];
-    setSecondsRemaining(60);
-    setIsClockPaused(false);
+    if (
+      isStartingRef.current ||
+      stateRef.current === "checking" ||
+      stateRef.current === "positioning" ||
+      stateRef.current === "measuring"
+    ) {
+      return;
+    }
+    isStartingRef.current = true;
 
-    setState("checking");
-
-    // 1. Verify API Key
-    let presageConfig = { configured: false, apiKey: "", telemetry: false };
     try {
-      if (window.electronAPI?.getPresageConfig) {
-        presageConfig = await window.electronAPI.getPresageConfig();
+      await cleanup();
+      setErrorMessage(null);
+      setInvalidReason(null);
+      setSummary(null);
+      samplesRef.current = [];
+      validationEventsRef.current = [];
+      setSecondsRemaining(60);
+      setIsClockPaused(false);
+
+      setState("checking");
+
+      // 1. Verify API Key securely through main-process IPC
+      let presageConfig = { configured: false, apiKey: "", telemetry: false };
+      try {
+        if (window.electronAPI?.getPresageConfig) {
+          presageConfig = await window.electronAPI.getPresageConfig();
+        }
+      } catch (err: any) {
+        console.warn("[useBaselineCapture] Failed to query Presage config via IPC:", err);
       }
-    } catch (err: any) {
-      console.warn("[useBaselineCapture] Failed to query Presage config:", err);
-    }
 
-    if (!presageConfig.configured || !presageConfig.apiKey) {
-      setState("error");
-      setErrorMessage("SmartSpectra API key is not configured. Add SMARTSPECTRA_API_KEY to your .env file.");
-      return;
-    }
+      if (!presageConfig.configured || !presageConfig.apiKey) {
+        setState("error");
+        setErrorMessage("SmartSpectra API key is not configured. Add SMARTSPECTRA_API_KEY to your .env file.");
+        return;
+      }
 
-    // 2. Verify Camera Stream
-    if (!stream || stream.getVideoTracks().length === 0 || !stream.getVideoTracks()[0].enabled) {
-      setState("error");
-      setErrorMessage("No active video stream available. Please grant camera permissions.");
-      return;
-    }
+      // 2. Verify Camera Stream
+      if (!stream || stream.getVideoTracks().length === 0) {
+        setState("error");
+        setErrorMessage("No active video stream available. Please grant camera permissions.");
+        return;
+      }
 
-    // 3. Initialize Presage Session and enter positioning state
-    setState("positioning");
+      const videoTrack = stream.getVideoTracks()[0];
+      if (videoTrack.readyState === "ended" || !videoTrack.enabled) {
+        setState("error");
+        setErrorMessage("Camera stream track is ended or inactive. Please restart camera.");
+        return;
+      }
 
-    try {
-      const session = createVitalsSession({
-        apiKey: presageConfig.apiKey,
-        stream,
-        enableTelemetry: presageConfig.telemetry,
-        onStatus: (_status) => {
-          // Status updates (kStarting, kRunning, etc.)
-        },
-        onValidation: (code, timestampUs, hint) => {
-          validationEventsRef.current.push({ code, timestampUs, hint });
-          setValidationCode(code);
-          setValidationHint(hint || null);
+      // 3. Initialize Presage Session and enter positioning state
+      setState("positioning");
 
-          const isOk = code === ValidationCode.kOk;
-          isOkRef.current = isOk;
+      try {
+        const session = createVitalsSession({
+          apiKey: presageConfig.apiKey,
+          stream,
+          enableTelemetry: presageConfig.telemetry,
+          onStatus: (_status) => {
+            // Status updates (kStarting, kRunning, etc.)
+          },
+          onValidation: (code, timestampUs, hint) => {
+            validationEventsRef.current.push({ code, timestampUs, hint });
+            setValidationCode(code);
 
-          if (stateRef.current === "positioning") {
-            if (isOk) {
-              if (!continuousOkTimerRef.current) {
-                // Wait for 3 continuous seconds of good positioning
-                continuousOkTimerRef.current = setTimeout(() => {
-                  if (stateRef.current === "positioning" && isOkRef.current) {
-                    beginMeasuring();
-                  }
-                }, 3000);
-              }
-            } else {
-              if (continuousOkTimerRef.current) {
-                clearTimeout(continuousOkTimerRef.current);
-                continuousOkTimerRef.current = null;
+            const isOk = code === ValidationCode.kOk;
+            isOkRef.current = isOk;
+
+            const statusCode = VALIDATION_CODE_MAP[code] || "OK";
+            const effectiveHint =
+              hint && hint.trim().length > 0
+                ? hint
+                : isOk
+                ? "Face aligned — calibrating in 1.5s..."
+                : VALIDATION_HINTS[statusCode] || "Position your face in the camera to begin";
+
+            setValidationHint(effectiveHint);
+
+            if (stateRef.current === "positioning") {
+              if (isOk) {
+                if (!continuousOkTimerRef.current) {
+                  // Wait for 1.5 continuous seconds of good positioning
+                  continuousOkTimerRef.current = setTimeout(() => {
+                    if (stateRef.current === "positioning" && isOkRef.current) {
+                      beginMeasuring();
+                    }
+                  }, 1500);
+                }
+              } else {
+                if (continuousOkTimerRef.current) {
+                  clearTimeout(continuousOkTimerRef.current);
+                  continuousOkTimerRef.current = null;
+                }
               }
             }
-          }
-        },
-        onError: (code, msg, retryable) => {
-          console.error(`[useBaselineCapture] SDK error ${code}: ${msg} (retryable: ${retryable})`);
-          setState("error");
-          setErrorMessage(msg || `SmartSpectra error code ${code}`);
-          cleanup();
-        },
-        onSample: (sample) => {
-          samplesRef.current.push(sample);
-          setCurrentVitals({
-            pulse: sample.pulse ?? null,
-            breathing: sample.breathingRate ?? null,
-            hrv: sample.hrvRmssd ?? null,
-            eda: sample.eda ?? null,
-          });
-        },
-      });
+          },
+          onError: (code, msg, retryable) => {
+            console.error(`[useBaselineCapture] SDK error ${code}: ${msg} (retryable: ${retryable})`);
+            setState("error");
+            setErrorMessage(msg || `SmartSpectra error code ${code}`);
+            cleanup();
+          },
+          onSample: (sample) => {
+            samplesRef.current.push(sample);
+            setCurrentVitals({
+              pulse: sample.pulse ?? null,
+              breathing: sample.breathingRate ?? null,
+              hrv: sample.hrvRmssd ?? null,
+              eda: sample.eda ?? null,
+            });
+          },
+        });
 
-      sessionRef.current = session;
-      await session.start();
-    } catch (err: any) {
-      console.error("[useBaselineCapture] Failed to start SDK session:", err);
-      setState("error");
-      setErrorMessage(err.message || "Failed to initialize SmartSpectra SDK session");
-      await cleanup();
+        sessionRef.current = session;
+        await session.start();
+      } catch (err: any) {
+        console.error("[useBaselineCapture] Failed to start SDK session:", err);
+        setState("error");
+        setErrorMessage(err.message || "Failed to initialize SmartSpectra SDK session");
+        await cleanup();
+      }
+    } finally {
+      isStartingRef.current = false;
     }
   }, [cleanup, stream, beginMeasuring]);
 
@@ -315,6 +378,7 @@ export function useBaselineCapture(options: UseBaselineCaptureOptions) {
    * Resets the calibration to idle
    */
   const reset = useCallback(async () => {
+    isStartingRef.current = false;
     await cleanup();
     setState("idle");
     setErrorMessage(null);

@@ -49,7 +49,10 @@ export const CameraOffWarningModal: React.FC<CameraOffWarningModalProps> = ({
         placeItems: "center",
         padding: "20px",
       }}
-      onClick={onKeepOn}
+      onClick={(e) => {
+        e.stopPropagation();
+        onKeepOn();
+      }}
     >
       <div
         className="glass-surface animate-sheet-in"
@@ -113,14 +116,20 @@ export const CameraOffWarningModal: React.FC<CameraOffWarningModalProps> = ({
             ref={keepOnBtnRef}
             variant="primary"
             size="sm"
-            onClick={onKeepOn}
+            onClick={(e) => {
+              e.stopPropagation();
+              onKeepOn();
+            }}
           >
             Keep camera on
           </Button>
           <Button
             variant="danger"
             size="sm"
-            onClick={onTurnOffAnyway}
+            onClick={(e) => {
+              e.stopPropagation();
+              onTurnOffAnyway();
+            }}
           >
             Turn off anyway
           </Button>

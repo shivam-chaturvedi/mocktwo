@@ -69,6 +69,8 @@ test("StageCompositor: Initializes canvas stream, mixes audio graph, updates cap
       save: () => {},
       restore: () => {},
       clip: () => {},
+      translate: () => {},
+      scale: () => {},
       createLinearGradient: () => ({ addColorStop: () => {} }),
     }),
     captureStream: () => ({
@@ -118,6 +120,7 @@ test("StageCompositor: Initializes canvas stream, mixes audio graph, updates cap
   (globalThis as any).document = {
     createElement: (tag: string) => {
       if (tag === "canvas") return mockCanvas;
+      if (tag === "video") return { play: async () => {}, srcObject: null };
       return {};
     },
   };

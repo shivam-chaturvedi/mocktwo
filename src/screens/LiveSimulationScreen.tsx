@@ -71,10 +71,13 @@ export const LiveSimulationScreen: React.FC = () => {
     );
   }, [activeSessionPersona, selectedScenario]);
 
-  // Scenario duration: configured minutes converted to seconds
+  // Scenario duration: configured minutes converted to seconds (1 to 10 min, default 3 min)
   const totalSessionSeconds = useMemo(() => {
-    const minutes = Number(selectedScenario.durationMinutes) || 3;
-    return Math.max(60, minutes * 60);
+    const rawMinutes = Number(selectedScenario.durationMinutes);
+    const validMinutes = typeof rawMinutes === "number" && !isNaN(rawMinutes) && rawMinutes >= 1 && rawMinutes <= 10
+      ? Math.round(rawMinutes)
+      : 3;
+    return validMinutes * 60;
   }, [selectedScenario.durationMinutes]);
 
   const [secondsElapsed, setSecondsElapsed] = useState(0);
@@ -115,7 +118,8 @@ export const LiveSimulationScreen: React.FC = () => {
   const sessionStartTimeRef = useRef<number | null>(null);
   const turnSeqRef = useRef(0);
 
-  const pipVideoRef = useRef<HTMLVideoElement | null>(null);
+  const gateVideoRef = useRef<HTMLVideoElement | null>(null);
+  const livePipVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -183,13 +187,7 @@ export const LiveSimulationScreen: React.FC = () => {
         vitalsSessionRef.current = null;
       }
 
-      // 3. Clean up composite recorder
-      if (compositeSessionRef.current) {
-        compositeSessionRef.current.destroy();
-        compositeSessionRef.current = null;
-      }
-
-      // 4. End Tavus CVI call and clean up call object
+      // 3. End Tavus CVI call and clean up call object
       const convId = tavusConversationIdRef.current;
       if (convId && window.electronAPI?.tavus?.endConversation) {
         try {
@@ -203,7 +201,7 @@ export const LiveSimulationScreen: React.FC = () => {
         cviSessionRef.current = null;
       }
 
-      // 5. Compare with active calm baseline
+      // 4. Compare with active calm baseline
       const base = activeBaselineRef.current;
       const baselineRef: BaselineReference | null =
         base && (base.pulseMean || base.restingPulse)
@@ -218,7 +216,8 @@ export const LiveSimulationScreen: React.FC = () => {
       const cleanSamplesCount = allVitalsSamplesRef.current.filter((s) => s.isClean && s.pulseBpm !== null).length;
       const measuredSec = metrics.avgPulse ? Math.min(elapsed, Math.max(1, Math.round(cleanSamplesCount * 0.5))) : 0;
 
-      // 6. Finalize recording with real metrics and tavus_conversation_id
+      // 5. Finalize recording with real metrics and tavus_conversation_id FIRST
+      // This guarantees MediaRecorder writes all pending chunks before the stream is closed
       try {
         await recorderRef.current.stop({
           scenarioId: selectedScenario.id,
@@ -243,6 +242,12 @@ export const LiveSimulationScreen: React.FC = () => {
           isPartialScore: !metrics.avgHrvRmssd,
         });
       } catch {}
+
+      // 6. Clean up composite recorder AFTER media recorder has stopped
+      if (compositeSessionRef.current) {
+        compositeSessionRef.current.destroy();
+        compositeSessionRef.current = null;
+      }
 
       // 7. Physically stop and release local camera and microphone hardware tracks
       if (userStreamRef.current) {
@@ -402,7 +407,8 @@ export const LiveSimulationScreen: React.FC = () => {
       // Step A: Setup Stage Compositor (Full Call Stage Video + Mixed Audio)
       const userMic = userStreamRef.current.getAudioTracks()[0] || null;
       const stageCompositor = new StageCompositor({
-        userVideoElement: pipVideoRef.current,
+        userStream: userStreamRef.current,
+        getUserVideoElement: () => livePipVideoRef.current,
         remoteVideoElement: remoteVideoRef.current,
         userMicTrack: userMic,
         isUserCameraActive: () => !cameraOffRef.current && Boolean(userStreamRef.current?.getVideoTracks().some(t => t.enabled && t.readyState === "live")),
@@ -495,6 +501,7 @@ export const LiveSimulationScreen: React.FC = () => {
       const convResult = await createFn({
         scenarioId: selectedScenario.id,
         personaId: currentPersona.id,
+        scenario: selectedScenario,
       });
 
       if (!convResult || !convResult.ok || !convResult.conversationUrl) {
@@ -628,11 +635,12 @@ export const LiveSimulationScreen: React.FC = () => {
       });
       setUserStream(new MediaStream(userStreamRef.current.getTracks()));
     }
-    if (pipVideoRef.current) {
-      pipVideoRef.current.srcObject = null;
+    if (livePipVideoRef.current) {
+      livePipVideoRef.current.srcObject = null;
     }
     setCameraOff(true);
     cameraOffRef.current = true;
+    compositeSessionRef.current?.setUserStream(null);
     setLiveValidation({
       code: "NO_FACE_FOUND",
       hint: "Camera is turned off",
@@ -657,6 +665,7 @@ export const LiveSimulationScreen: React.FC = () => {
         });
         const freshTrack = freshStream.getVideoTracks()[0];
         if (freshTrack) {
+          let updated: MediaStream;
           if (userStreamRef.current) {
             // Remove any ended tracks
             userStreamRef.current.getVideoTracks().forEach((t) => {
@@ -664,21 +673,17 @@ export const LiveSimulationScreen: React.FC = () => {
               userStreamRef.current?.removeTrack(t);
             });
             userStreamRef.current.addTrack(freshTrack);
-            const updated = new MediaStream(userStreamRef.current.getTracks());
-            setUserStream(updated);
-            if (pipVideoRef.current) {
-              pipVideoRef.current.srcObject = updated;
-              pipVideoRef.current.play().catch(() => {});
-            }
+            updated = new MediaStream(userStreamRef.current.getTracks());
           } else {
-            const newStream = new MediaStream([freshTrack]);
-            userStreamRef.current = newStream;
-            setUserStream(newStream);
-            if (pipVideoRef.current) {
-              pipVideoRef.current.srcObject = newStream;
-              pipVideoRef.current.play().catch(() => {});
-            }
+            updated = new MediaStream([freshTrack]);
+            userStreamRef.current = updated;
           }
+          setUserStream(updated);
+          if (livePipVideoRef.current) {
+            livePipVideoRef.current.srcObject = updated;
+            livePipVideoRef.current.play().catch(() => {});
+          }
+          compositeSessionRef.current?.setUserStream(updated);
           // 2. Unmute in Daily call
           cviSessionRef.current?.setLocalVideo(true);
           // 3. Resume SmartSpectra
@@ -725,7 +730,8 @@ export const LiveSimulationScreen: React.FC = () => {
       const clampedElapsed = Math.min(totalSessionSeconds, elapsed);
       setSecondsElapsed(clampedElapsed);
 
-      if (clampedElapsed >= totalSessionSeconds && !hasFinishedRef.current) {
+      // Provide a 15-second conversational grace period past target duration so calls don't cut off mid-speech
+      if (elapsed >= totalSessionSeconds + 15 && !hasFinishedRef.current) {
         clearInterval(timer);
         endAndFinalizeSession(totalSessionSeconds, "duration_limit");
       }
@@ -1319,7 +1325,7 @@ export const LiveSimulationScreen: React.FC = () => {
           ) : (
             <video
               ref={(el) => {
-                pipVideoRef.current = el;
+                livePipVideoRef.current = el;
                 if (el && userStream && el.srcObject !== userStream) {
                   el.srcObject = userStream;
                   el.play().catch(() => {});
@@ -1634,7 +1640,7 @@ export const LiveSimulationScreen: React.FC = () => {
               Position your face in view
             </h2>
             <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginTop: "6px", marginBottom: "20px" }}>
-              Rehearsal with <strong>{currentPersona.name}</strong> • {selectedScenario.title}
+              Rehearsal with <strong>{currentPersona.name}</strong> • {selectedScenario.title} • {Math.round(totalSessionSeconds / 60)} min
             </p>
 
             {/* Video Framing Box */}
@@ -1653,7 +1659,7 @@ export const LiveSimulationScreen: React.FC = () => {
               {userStream ? (
                 <video
                   ref={(el) => {
-                    pipVideoRef.current = el;
+                    gateVideoRef.current = el;
                     if (el && userStream && el.srcObject !== userStream) {
                       el.srcObject = userStream;
                       el.play().catch(() => {});

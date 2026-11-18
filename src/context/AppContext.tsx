@@ -590,7 +590,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // Live Simulation
   const beginSimulation = useCallback(
-    async (overridePersona?: Persona) => {
+    async (overridePersona?: Persona, overrideDurationMinutes?: number) => {
       if (!serviceRegistry.session.isAvailable()) {
         showToast(serviceRegistry.session.getUnavailableReason());
         return;
@@ -599,6 +599,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (chosen) {
         setActiveSessionPersona(chosen);
       }
+      const finalDuration =
+        typeof overrideDurationMinutes === "number" &&
+        overrideDurationMinutes >= 1 &&
+        overrideDurationMinutes <= 10
+          ? overrideDurationMinutes
+          : 3;
+
+      setSelectedScenario((prev) => ({
+        ...prev,
+        durationMinutes: finalDuration,
+      }));
+
       setIsBriefingOpen(false);
       try {
         const { sessionId } = await serviceRegistry.session.startSession(

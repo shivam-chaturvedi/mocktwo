@@ -23,6 +23,8 @@ import {
   ShieldCheck,
   Camera,
   AlertCircle,
+  Clock,
+  ChevronDown,
 } from "lucide-react";
 
 export const BriefingSheet: React.FC = () => {
@@ -48,6 +50,15 @@ export const BriefingSheet: React.FC = () => {
   const [isCrossfading, setIsCrossfading] = useState(false);
   const [showBaselineGateModal, setShowBaselineGateModal] = useState(false);
   const [showCameraOffModal, setShowCameraOffModal] = useState(false);
+  const [selectedDuration, setSelectedDuration] = useState<number>(3);
+
+  // Sync selected duration when scenario opens, defaulting to 3 minutes
+  useEffect(() => {
+    if (selectedScenario) {
+      const d = selectedScenario.durationMinutes;
+      setSelectedDuration(typeof d === "number" && d >= 1 && d <= 10 ? d : 3);
+    }
+  }, [selectedScenario]);
   const crossfadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -103,13 +114,15 @@ export const BriefingSheet: React.FC = () => {
 
   // Attach live stream to mirror video element and ensure autoplay
   useEffect(() => {
-    if (videoRef.current && stream) {
+    if (cameraOff && videoRef.current) {
+      videoRef.current.srcObject = null;
+    } else if (videoRef.current && stream && !cameraOff) {
       if (videoRef.current.srcObject !== stream) {
         videoRef.current.srcObject = stream;
       }
       videoRef.current.play().catch(() => {});
     }
-  }, [stream]);
+  }, [stream, cameraOff]);
 
   useEffect(() => {
     return () => {
@@ -171,11 +184,11 @@ export const BriefingSheet: React.FC = () => {
         setCountdown(null);
         setIsStarting(false);
         stopAllTracks();
-        beginSimulation(effectivePersona);
+        beginSimulation(effectivePersona, selectedDuration);
       }, 650);
       return () => clearTimeout(timer);
     }
-  }, [countdown, beginSimulation, effectivePersona, stopAllTracks]);
+  }, [countdown, beginSimulation, effectivePersona, selectedDuration, stopAllTracks]);
 
   if (!isBriefingOpen || !selectedScenario) return null;
 
@@ -899,9 +912,51 @@ export const BriefingSheet: React.FC = () => {
             backgroundColor: "rgba(42, 42, 44, 0.4)",
           }}
         >
-          <span style={{ fontSize: "12.5px", color: "var(--text-tertiary)" }}>
-            Session length: {selectedScenario.durationMinutes || 3} minutes
-          </span>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <span style={{ fontSize: "12.5px", color: "var(--text-secondary)", fontWeight: 500, display: "flex", alignItems: "center", gap: "6px" }}>
+              <Clock size={13} style={{ color: "var(--text-tertiary)" }} />
+              Session length:
+            </span>
+            <div style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
+              <select
+                id="briefing-session-duration-select"
+                aria-label="Session length"
+                value={selectedDuration}
+                disabled={countdown !== null || isStarting}
+                onChange={(e) => setSelectedDuration(Number(e.target.value))}
+                style={{
+                  padding: "5px 28px 5px 10px",
+                  backgroundColor: "var(--bg-control)",
+                  border: "1px solid var(--separator)",
+                  borderRadius: "var(--radius-sm)",
+                  color: "var(--text-primary)",
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  cursor: countdown !== null || isStarting ? "not-allowed" : "pointer",
+                  appearance: "none",
+                  WebkitAppearance: "none",
+                  outline: "none",
+                  boxShadow: "0 1px 3px rgba(0, 0, 0, 0.2)",
+                  transition: "all 0.12s ease",
+                }}
+              >
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((min) => (
+                  <option key={min} value={min}>
+                    {min} {min === 1 ? "minute" : "minutes"}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown
+                size={12}
+                style={{
+                  position: "absolute",
+                  right: "8px",
+                  pointerEvents: "none",
+                  color: "var(--text-tertiary)",
+                }}
+              />
+            </div>
+          </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <Button

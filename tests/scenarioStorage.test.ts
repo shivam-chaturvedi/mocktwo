@@ -131,6 +131,14 @@ describe("Milestone S1: Migration V3 & SQLite Scenario Storage", () => {
     assert.equal(scenarios[0].title, "Initial Seed Scenario");
     assert.equal(scenarios[0].hidden, false);
 
+    const single = await send("scenarios:get", "sc-seed-1");
+    assert.ok(single);
+    assert.equal(single.title, "Initial Seed Scenario");
+    assert.equal(single.personaName, "Dr. Marcus Vance");
+
+    const nonExistent = await send("scenarios:get", "sc-non-existent");
+    assert.equal(nonExistent, null);
+
     // 3. Verify backup file was created in backups/
     const backupDir = path.join(TEST_DIR, "backups");
     assert.ok(fs.existsSync(backupDir), "backup directory exists");

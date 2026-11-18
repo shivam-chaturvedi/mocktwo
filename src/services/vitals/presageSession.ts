@@ -1,19 +1,24 @@
 /**
- * Thin wrapper around @smartspectra/node-sdk/renderer for host-controlled MediaStream sessions.
+ * Presage SmartSpectra Vitals Telemetry Engine
  * 
- * Completely decoupled from React, SQLite, and UI screens so it can be reused for
- * live practice sessions later with identical behavior.
+ * Module-level long-lived singleton around @smartspectra/node-sdk/renderer.
+ * - Instantiates exactly ONE SmartSpectraSDK instance lazily for the renderer process.
+ * - Serializes start/stop/reset operations via an asynchronous promise queue.
+ * - Reuses the instance across retries, calling reset() instead of reconstructing on failure.
+ * - Only destroys the SDK instance on window unload (beforeunload).
+ * - Decodes Protobuf telemetry without repeating stale readings.
+ * - Tracks the latest validation code directly on each sample point for accurate quality gating.
  */
 
 import {
   SmartSpectraSDK,
-  breathingMetrics,
   cardioMetrics,
   faceMetrics,
-  edaMetrics,
+  MetricType,
 } from "@smartspectra/node-sdk/renderer";
 import { decodeMetrics } from "@smartspectra/node-sdk/messages";
 import type { VitalsSamplePoint } from "./metrics";
+import { registerCleanupHandler } from "../../utils/mediaLifecycle";
 
 export interface VitalsSessionConfig {
   apiKey: string;
@@ -29,62 +34,99 @@ export interface VitalsSessionConfig {
 export interface VitalsSession {
   start: () => Promise<void>;
   stop: () => Promise<void>;
+  reset: () => Promise<void>;
   destroy: () => Promise<void>;
   getStatus: () => number;
 }
 
-export function createVitalsSession(config: VitalsSessionConfig): VitalsSession {
-  const {
-    apiKey,
-    stream,
-    enableTelemetry = false,
-    requestedMetrics = [
-      ...breathingMetrics,
-      ...cardioMetrics,
-      ...faceMetrics,
-      ...edaMetrics,
-    ],
-    onSample,
-    onValidation,
-    onStatus,
-    onError,
-  } = config;
+// Module-level singleton state
+let sharedSdk: SmartSpectraSDK | null = null;
+let currentApiKey: string | null = null;
+let opQueue: Promise<void> = Promise.resolve();
 
-  let sdk: SmartSpectraSDK | null = null;
-  let isDestroyed = false;
-  let timeOriginUs: number | null = null;
-  const processedTimestamps = new Set<number>();
+// Active callbacks for the currently running session
+interface ActiveCallbacks {
+  onSample?: (sample: VitalsSamplePoint) => void;
+  onValidation?: (code: number, timestampUs: number, hint?: string) => void;
+  onStatus?: (status: number) => void;
+  onError?: (code: number, message: string, retryable: boolean) => void;
+}
 
-  sdk = new SmartSpectraSDK({
+let activeCallbacks: ActiveCallbacks = {};
+let latestValidationCode: number | null = null;
+let timeOriginUs: number | null = null;
+const processedTimestamps = new Set<number>();
+
+function enqueueOperation<T>(op: () => Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    opQueue = opQueue
+      .then(async () => {
+        try {
+          const result = await op();
+          resolve(result);
+        } catch (err) {
+          reject(err);
+        }
+      })
+      .catch((err) => {
+        reject(err);
+      });
+  });
+}
+
+function ensureSharedSdk(apiKey: string, enableTelemetry = false, requestedMetrics?: number[]): SmartSpectraSDK {
+  if (sharedSdk && currentApiKey === apiKey) {
+    return sharedSdk;
+  }
+
+  if (sharedSdk && currentApiKey !== apiKey) {
+    try {
+      sharedSdk.destroy();
+    } catch {}
+    sharedSdk = null;
+  }
+
+  currentApiKey = apiKey;
+  // Request core cardio, breathing rate, and non-heavy facial metrics (blink/talking).
+  // Note: We use MetricType.BREATHING_RATE directly rather than breathingMetrics ([0, 1, 2])
+  // because metrics 0 and 1 (chest/abdomen traces) require chest framing, whereas Hotel Coach
+  // measures facial rPPG respiratory rate and instructs the user to frame their face.
+  const defaultMetrics = [
+    MetricType.BREATHING_RATE,
+    ...cardioMetrics,
+    faceMetrics[1], // BLINKING: 12
+    faceMetrics[2], // TALKING: 13
+  ];
+
+  sharedSdk = new SmartSpectraSDK({
     apiKey,
     enableTelemetry,
-    requestedMetrics,
+    requestedMetrics: requestedMetrics || defaultMetrics,
+    sendTimeoutMs: 10000, // 10 second timeout per specification
   });
 
-  // Supply host-owned MediaStream so camera is never opened twice
-  sdk.useMediaStream(stream);
-
-  // Wire event handlers
-  sdk.on("processingStatus", (status: number) => {
-    if (!isDestroyed && onStatus) {
-      onStatus(status);
+  // Wire event handlers ONCE on the shared SDK instance
+  sharedSdk.on("processingStatus", (status: number) => {
+    if (activeCallbacks.onStatus) {
+      activeCallbacks.onStatus(status);
     }
   });
 
-  sdk.on("validationStatus", (code: number, timestampUs: number, hint?: string) => {
-    if (!isDestroyed && onValidation) {
-      onValidation(code, timestampUs, hint);
+  sharedSdk.on("validationStatus", (code: number, timestampUs: number, hint?: string) => {
+    latestValidationCode = code;
+    if (activeCallbacks.onValidation) {
+      activeCallbacks.onValidation(code, timestampUs, hint);
     }
   });
 
-  sdk.on("error", (code: number, message: string, retryable: boolean) => {
-    if (!isDestroyed && onError) {
-      onError(code, message, retryable);
+  sharedSdk.on("error", (code: number, message: string, retryable: boolean) => {
+    if (activeCallbacks.onError) {
+      activeCallbacks.onError(code, message, retryable);
     }
   });
 
-  sdk.on("metrics", (buf: Uint8Array | ArrayBuffer, timestampUs: number) => {
-    if (isDestroyed || !onSample) return;
+  sharedSdk.on("metrics", (buf: Uint8Array | ArrayBuffer, timestampUs: number) => {
+    if (!activeCallbacks.onSample) return;
 
     if (timeOriginUs === null) {
       timeOriginUs = timestampUs;
@@ -94,7 +136,6 @@ export function createVitalsSession(config: VitalsSessionConfig): VitalsSession 
       const decoded = decodeMetrics(buf) as any;
       if (!decoded) return;
 
-      // Collect all distinct timestamps across all arrays
       const pulseArray = decoded.cardio?.pulseRate || [];
       const hrvArray = decoded.cardio?.hrv || [];
       const breathingArray = decoded.breathing?.rate || [];
@@ -103,9 +144,8 @@ export function createVitalsSession(config: VitalsSessionConfig): VitalsSession 
       const talkingArray = decoded.face?.talking || [];
       const expressionArray = decoded.face?.expression || [];
 
-      // Extract new timestamps to process
+      // Collect all distinct timestamps across all arrays
       const batchTimestamps = new Set<number>();
-
       for (const p of pulseArray) if (p.timestamp != null) batchTimestamps.add(Number(p.timestamp));
       for (const h of hrvArray) if (h.timestamp != null) batchTimestamps.add(Number(h.timestamp));
       for (const b of breathingArray) if (b.timestamp != null) batchTimestamps.add(Number(b.timestamp));
@@ -114,12 +154,11 @@ export function createVitalsSession(config: VitalsSessionConfig): VitalsSession 
       for (const t of talkingArray) if (t.timestamp != null) batchTimestamps.add(Number(t.timestamp));
       for (const ex of expressionArray) if (ex.timestamp != null) batchTimestamps.add(Number(ex.timestamp));
 
-      // If array items don't have explicit item timestamps, use event timestamp
       if (batchTimestamps.size === 0) {
         batchTimestamps.add(timestampUs);
       }
 
-      // Index arrays by timestamp for O(1) lookup
+      // Index arrays by timestamp for exact O(1) matching
       const pulseByTs = new Map<number, any>();
       for (const p of pulseArray) if (p.timestamp != null) pulseByTs.set(Number(p.timestamp), p);
 
@@ -141,14 +180,13 @@ export function createVitalsSession(config: VitalsSessionConfig): VitalsSession 
       const expressionByTs = new Map<number, any>();
       for (const ex of expressionArray) if (ex.timestamp != null) expressionByTs.set(Number(ex.timestamp), ex);
 
-      // Sort chronological
       const sortedTs = Array.from(batchTimestamps).sort((a, b) => a - b);
 
       for (const ts of sortedTs) {
         if (processedTimestamps.has(ts)) continue;
         processedTimestamps.add(ts);
 
-        // Keep set size under control
+        // Keep set size bounded
         if (processedTimestamps.size > 10000) {
           const arr = Array.from(processedTimestamps);
           for (let i = 0; i < 5000; i++) {
@@ -156,13 +194,19 @@ export function createVitalsSession(config: VitalsSessionConfig): VitalsSession 
           }
         }
 
-        const p = pulseByTs.get(ts) || pulseArray[pulseArray.length - 1];
-        const h = hrvByTs.get(ts) || hrvArray[hrvArray.length - 1];
-        const b = breathingByTs.get(ts) || breathingArray[breathingArray.length - 1];
-        const eda = edaByTs.get(ts) || edaArray[edaArray.length - 1];
-        const bl = blinkByTs.get(ts) || blinkArray[blinkArray.length - 1];
-        const tk = talkingByTs.get(ts) || talkingArray[talkingArray.length - 1];
-        const ex = expressionByTs.get(ts) || expressionArray[expressionArray.length - 1];
+        const p = pulseByTs.get(ts) || null;
+        const h = hrvByTs.get(ts) || null;
+        const b = breathingByTs.get(ts) || null;
+        const eda = edaByTs.get(ts) || null;
+        const bl = blinkByTs.get(ts) || null;
+        const tk = talkingByTs.get(ts) || null;
+        const ex = expressionByTs.get(ts) || null;
+
+        // DATA CORRECTNESS: Only emit a sample if this timestamp actually has fresh data.
+        // Never fall back to the last array element to prevent repeating stale values.
+        if (!p && !h && !b && !eda && !bl && !tk && !ex) {
+          continue;
+        }
 
         let expressionScores: Record<string, number> | null = null;
         if (ex && ex.scores && Array.isArray(ex.scores)) {
@@ -194,44 +238,120 @@ export function createVitalsSession(config: VitalsSessionConfig): VitalsSession 
           blinkDetected: bl?.detected != null ? Boolean(bl.detected) : false,
           talkingDetected: tk?.detected != null ? Boolean(tk.detected) : false,
           expressions: expressionScores,
+          validationCode: latestValidationCode,
         };
 
-        onSample(samplePoint);
+        activeCallbacks.onSample(samplePoint);
       }
     } catch (err) {
       console.error("[presageSession] Error decoding Metrics protobuf:", err);
     }
   });
 
+  return sharedSdk;
+}
+
+/**
+ * Definitively destroys the long-lived singleton SDK instance and releases C-API resources.
+ */
+export function destroySharedSdk(): void {
+  if (sharedSdk) {
+    try {
+      sharedSdk.destroy();
+    } catch (err) {
+      console.warn("[presageSession] Error destroying sharedSdk:", err);
+    }
+    sharedSdk = null;
+  }
+}
+
+// Register with global lifecycle manager so SDK is destroyed on exit, crash, or reload
+registerCleanupHandler(() => {
+  destroySharedSdk();
+});
+
+/**
+ * Creates or retrieves the long-lived engine interface for a session.
+ */
+export function createVitalsSession(config: VitalsSessionConfig): VitalsSession {
+  const {
+    apiKey,
+    stream,
+    enableTelemetry = false,
+    requestedMetrics,
+    onSample,
+    onValidation,
+    onStatus,
+    onError,
+  } = config;
+
   return {
     start: async () => {
-      if (isDestroyed || !sdk) {
-        throw new Error("Cannot start destroyed VitalsSession");
-      }
-      await sdk.start();
-    },
-    stop: async () => {
-      if (!sdk) return;
-      try {
-        await sdk.stop();
-      } catch (err) {
-        console.warn("[presageSession] Error stopping SDK:", err);
-      }
-    },
-    destroy: async () => {
-      if (isDestroyed) return;
-      isDestroyed = true;
-      if (sdk) {
+      return enqueueOperation(async () => {
+        const sdk = ensureSharedSdk(apiKey, enableTelemetry, requestedMetrics);
+
+        // Update active listener dispatchers for this session
+        activeCallbacks = {
+          onSample,
+          onValidation,
+          onStatus,
+          onError,
+        };
+        latestValidationCode = null;
+        timeOriginUs = null;
+        processedTimestamps.clear();
+
+        sdk.useMediaStream(stream);
         try {
-          sdk.destroy();
-        } catch {
-          // Ignore destroy errors on teardown
+          await sdk.start();
+        } catch (err) {
+          // On start failure, reset the engine rather than discarding it
+          try {
+            await sdk.reset();
+          } catch {}
+          throw err;
         }
-        sdk = null;
-      }
+      });
     },
+
+    stop: async () => {
+      return enqueueOperation(async () => {
+        if (!sharedSdk) return;
+        try {
+          await sharedSdk.stop();
+        } catch (err) {
+          console.warn("[presageSession] Error during sdk.stop():", err);
+        } finally {
+          activeCallbacks = {};
+        }
+      });
+    },
+
+    reset: async () => {
+      return enqueueOperation(async () => {
+        if (!sharedSdk) return;
+        try {
+          await sharedSdk.reset();
+        } finally {
+          activeCallbacks = {};
+        }
+      });
+    },
+
+    destroy: async () => {
+      // Per architectural rule: do not destroy the shared SDK on per-session completion.
+      // Reset state and unbind active callbacks instead so next session reuses the instance.
+      return enqueueOperation(async () => {
+        if (!sharedSdk) return;
+        try {
+          await sharedSdk.stop();
+        } catch {}
+        activeCallbacks = {};
+      });
+    },
+
     getStatus: () => {
-      return sdk ? sdk.processingStatus : 1; // 1 = kIdle
+      return sharedSdk ? sharedSdk.processingStatus : 1; // 1 = kIdle
     },
   };
 }

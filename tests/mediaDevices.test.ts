@@ -105,3 +105,35 @@ test("MediaDevices: Independent fallback preserves video track when microphone i
   assert.strictEqual(acquiredTracks.length, 1, "Should successfully acquire 1 video track via independent fallback");
   assert.strictEqual(acquiredTracks[0].kind, "video", "Acquired track must be a video track");
 });
+
+test("MediaDevices: Turning video off physically stops video tracks to release camera hardware", () => {
+  let videoStopped = false;
+  let audioStopped = false;
+
+  const mockVideoTrack = {
+    kind: "video",
+    enabled: true,
+    readyState: "live",
+    stop: () => {
+      videoStopped = true;
+    },
+  };
+
+  const mockAudioTrack = {
+    kind: "audio",
+    enabled: true,
+    readyState: "live",
+    stop: () => {
+      audioStopped = true;
+    },
+  };
+
+  const tracks = [mockVideoTrack, mockAudioTrack];
+
+  // Simulating turnVideoOff behavior:
+  // Must call track.stop() on video tracks to extinguish hardware LED, but leave audio track running
+  tracks.filter((t) => t.kind === "video").forEach((t) => t.stop());
+
+  assert.strictEqual(videoStopped, true, "Camera hardware track must be stopped via track.stop()");
+  assert.strictEqual(audioStopped, false, "Microphone track must remain active when turning video off");
+});

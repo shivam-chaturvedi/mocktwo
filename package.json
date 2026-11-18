@@ -46,7 +46,10 @@
         "NSMicrophoneUsageDescription": "mocktwo uses your microphone for real-time speech and tone analysis during rehearsal simulations. Audio is processed locally on your device."
       },
       "extraResources": [
-        { "from": "node_modules/@smartspectra/node-sdk-darwin-${arch}/", "to": "smartspectra" }
+        {
+          "from": "node_modules/@smartspectra/node-sdk-darwin-${arch}/",
+          "to": "smartspectra"
+        }
       ]
     },
     "win": {
@@ -54,7 +57,10 @@
         "nsis"
       ],
       "extraResources": [
-        { "from": "node_modules/@smartspectra/node-sdk-win32-${arch}/", "to": "smartspectra" }
+        {
+          "from": "node_modules/@smartspectra/node-sdk-win32-${arch}/",
+          "to": "smartspectra"
+        }
       ]
     },
     "linux": {
@@ -62,7 +68,10 @@
         "AppImage"
       ],
       "extraResources": [
-        { "from": "node_modules/@smartspectra/node-sdk-linux-${arch}/", "to": "smartspectra" }
+        {
+          "from": "node_modules/@smartspectra/node-sdk-linux-${arch}/",
+          "to": "smartspectra"
+        }
       ]
     },
     "nsis": {
@@ -73,6 +82,7 @@
     }
   },
   "dependencies": {
+    "@daily-co/daily-js": "^0.95.0",
     "@smartspectra/node-sdk": "^3.5.0",
     "better-sqlite3": "^13.2.0",
     "dotenv": "^18.0.10",

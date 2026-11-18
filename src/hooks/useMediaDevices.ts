@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { registerMediaStream, unregisterMediaStream } from "../utils/mediaLifecycle";
 
 export interface MediaDeviceOption {
   deviceId: string;
@@ -42,6 +43,8 @@ export function useMediaDevices({
   const [isLoading, setIsLoading] = useState(false);
   const [micMuted, setMicMuted] = useState(false);
   const [videoOff, setVideoOff] = useState(false);
+  const videoOffRef = useRef(videoOff);
+  videoOffRef.current = videoOff;
   const [audioLevel, setAudioLevel] = useState(0);
 
   const activeStreamRef = useRef<MediaStream | null>(null);
@@ -88,10 +91,103 @@ export function useMediaDevices({
           t.stop();
         } catch {}
       });
+      unregisterMediaStream(activeStreamRef.current);
       activeStreamRef.current = null;
     }
     setStream(null);
   }, [stopAudioAnalysis]);
+
+  /**
+   * Physically stops all video tracks to extinguish camera sensor hardware
+   * and the macOS green indicator light.
+   */
+  const turnVideoOff = useCallback(() => {
+    if (activeStreamRef.current) {
+      activeStreamRef.current.getVideoTracks().forEach((t) => {
+        try {
+          t.stop();
+        } catch {}
+        activeStreamRef.current?.removeTrack(t);
+      });
+      const remainingTracks = activeStreamRef.current.getTracks();
+      const updated = remainingTracks.length > 0 ? new MediaStream(remainingTracks) : null;
+      if (updated) {
+        registerMediaStream(updated);
+      }
+      activeStreamRef.current = updated;
+      setStream(updated);
+    }
+    setVideoOff(true);
+    videoOffRef.current = true;
+  }, []);
+
+  /**
+   * Re-acquires physical camera hardware and adds the live track back to the active stream.
+   */
+  const turnVideoOn = useCallback(async () => {
+    if (!navigator.mediaDevices?.getUserMedia) return;
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      if (typeof window !== "undefined" && window.electronAPI?.requestMediaAccess) {
+        try {
+          await window.electronAPI.requestMediaAccess("camera");
+        } catch {}
+      }
+
+      const pre = await enumerate();
+      const resolvedCamId = resolve(selectedCameraId, pre.cams);
+      const vConstraints: boolean | MediaTrackConstraints = resolvedCamId ? { deviceId: { ideal: resolvedCamId } } : true;
+
+      let freshVideoTrack: MediaStreamTrack | null = null;
+      try {
+        const vStream = await navigator.mediaDevices.getUserMedia({ video: vConstraints, audio: false });
+        freshVideoTrack = vStream.getVideoTracks()[0] ?? null;
+      } catch {
+        try {
+          const fallbackV = await navigator.mediaDevices.getUserMedia({
+            video: { width: 1280, height: 720, facingMode: "user" },
+            audio: false,
+          });
+          freshVideoTrack = fallbackV.getVideoTracks()[0] ?? null;
+        } catch {
+          const fallbackSimple = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+          freshVideoTrack = fallbackSimple.getVideoTracks()[0] ?? null;
+        }
+      }
+
+      if (freshVideoTrack) {
+        if (activeStreamRef.current) {
+          activeStreamRef.current.addTrack(freshVideoTrack);
+          const updated = new MediaStream(activeStreamRef.current.getTracks());
+          registerMediaStream(updated);
+          setStream(updated);
+        } else {
+          const newStream = new MediaStream([freshVideoTrack]);
+          activeStreamRef.current = newStream;
+          registerMediaStream(newStream);
+          setStream(newStream);
+        }
+        setVideoOff(false);
+        videoOffRef.current = false;
+        setPermissionError(null);
+      }
+    } catch (err: any) {
+      console.warn("[useMediaDevices] Failed to turn video on:", err);
+      setError(err?.name || "CameraReacquireError");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [enumerate, selectedCameraId]);
+
+  const toggleVideo = useCallback(async () => {
+    if (!videoOffRef.current) {
+      turnVideoOff();
+    } else {
+      await turnVideoOn();
+    }
+  }, [turnVideoOff, turnVideoOn]);
 
   useEffect(() => {
     if (!enabled || !navigator.mediaDevices) {
@@ -125,24 +221,26 @@ export function useMediaDevices({
       let videoError: string | null = null;
       let audioError: string | null = null;
 
-      // 2. Independent Video Acquisition
-      try {
-        const vConstraints: boolean | MediaTrackConstraints = resolvedCamId ? { deviceId: { ideal: resolvedCamId } } : true;
-        const vStream = await navigator.mediaDevices.getUserMedia({ video: vConstraints, audio: false });
-        videoTrack = vStream.getVideoTracks()[0] ?? null;
-      } catch {
+      // 2. Independent Video Acquisition ONLY if camera is NOT turned off
+      if (!videoOffRef.current) {
         try {
-          const fallbackV = await navigator.mediaDevices.getUserMedia({
-            video: { width: 640, height: 480, facingMode: "user" },
-            audio: false,
-          });
-          videoTrack = fallbackV.getVideoTracks()[0] ?? null;
+          const vConstraints: boolean | MediaTrackConstraints = resolvedCamId ? { deviceId: { ideal: resolvedCamId } } : true;
+          const vStream = await navigator.mediaDevices.getUserMedia({ video: vConstraints, audio: false });
+          videoTrack = vStream.getVideoTracks()[0] ?? null;
         } catch {
           try {
-            const fallbackSimple = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-            videoTrack = fallbackSimple.getVideoTracks()[0] ?? null;
-          } catch (fallbackVErr) {
-            videoError = (fallbackVErr as DOMException)?.name || "VideoAcquisitionError";
+            const fallbackV = await navigator.mediaDevices.getUserMedia({
+              video: { width: 640, height: 480, facingMode: "user" },
+              audio: false,
+            });
+            videoTrack = fallbackV.getVideoTracks()[0] ?? null;
+          } catch {
+            try {
+              const fallbackSimple = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+              videoTrack = fallbackSimple.getVideoTracks()[0] ?? null;
+            } catch (fallbackVErr) {
+              videoError = (fallbackVErr as DOMException)?.name || "VideoAcquisitionError";
+            }
           }
         }
       }
@@ -180,10 +278,11 @@ export function useMediaDevices({
         const s = new MediaStream(tracks);
         acquiredStream = s;
         activeStreamRef.current = s;
+        registerMediaStream(s);
         setStream(s);
 
         // Surface permission error only if the respective track failed due to permission denial
-        if (!videoTrack && (videoError === "NotAllowedError" || videoError === "PermissionDeniedError")) {
+        if (!videoTrack && !videoOffRef.current && (videoError === "NotAllowedError" || videoError === "PermissionDeniedError")) {
           setPermissionError("camera");
         } else if (!audioTrack && (audioError === "NotAllowedError" || audioError === "PermissionDeniedError")) {
           setPermissionError("microphone");
@@ -244,6 +343,9 @@ export function useMediaDevices({
           t.stop();
         } catch {}
       });
+      if (acquiredStream) {
+        unregisterMediaStream(acquiredStream);
+      }
       if (activeStreamRef.current === acquiredStream) {
         activeStreamRef.current = null;
       }
@@ -251,15 +353,12 @@ export function useMediaDevices({
     };
   }, [enabled, selectedCameraId, selectedMicrophoneId, enumerate, stopAllTracks, stopAudioAnalysis]);
 
-  // Apply track enabled state without recreating the stream
+  // Apply audio mute state without recreating the stream
   useEffect(() => {
     stream?.getAudioTracks().forEach((t) => {
       t.enabled = !micMuted;
     });
-    stream?.getVideoTracks().forEach((t) => {
-      t.enabled = !videoOff;
-    });
-  }, [stream, micMuted, videoOff]);
+  }, [stream, micMuted]);
 
   // Listen to physical USB device changes
   useEffect(() => {
@@ -285,7 +384,9 @@ export function useMediaDevices({
     audioLevel,
     toggleMic: () => setMicMuted((v) => !v),
     toggleMute: () => setMicMuted((v) => !v),
-    toggleVideo: () => setVideoOff((v) => !v),
+    turnVideoOff,
+    turnVideoOn,
+    toggleVideo,
     stopAllTracks,
   };
 }

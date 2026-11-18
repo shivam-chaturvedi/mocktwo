@@ -11,7 +11,9 @@
 
 export interface StageCompositorOptions {
   remoteVideoElement: HTMLVideoElement | null;
-  userVideoElement: HTMLVideoElement | null;
+  userVideoElement?: HTMLVideoElement | null;
+  getUserVideoElement?: () => HTMLVideoElement | null;
+  userStream?: MediaStream | null;
   userMicTrack: MediaStreamTrack | null;
   remoteAudioTrack?: MediaStreamTrack | null;
   isUserCameraActive: () => boolean;
@@ -38,6 +40,8 @@ export class StageCompositor {
 
   private remoteVideo: HTMLVideoElement | null = null;
   private userVideo: HTMLVideoElement | null = null;
+  private internalUserVideo: HTMLVideoElement | null = null;
+  private getUserVideoElement?: () => HTMLVideoElement | null;
   private isUserCameraActive: () => boolean;
   private personaName: string;
   private userInitials: string;
@@ -53,11 +57,27 @@ export class StageCompositor {
 
   constructor(options: StageCompositorOptions) {
     this.remoteVideo = options.remoteVideoElement;
-    this.userVideo = options.userVideoElement;
+    this.userVideo = options.userVideoElement || null;
+    this.getUserVideoElement = options.getUserVideoElement;
     this.isUserCameraActive = options.isUserCameraActive;
     this.personaName = options.personaName || "AI Counterpart";
     this.userInitials = options.userInitials || "YOU";
     this.getElapsedSeconds = options.getElapsedSeconds || (() => 0);
+
+    // Setup dedicated offscreen video element for user stream if provided
+    if (typeof document !== "undefined" && typeof document.createElement === "function") {
+      try {
+        const v = document.createElement("video");
+        v.muted = true;
+        v.playsInline = true;
+        v.autoplay = true;
+        if (options.userStream && options.userStream.getVideoTracks().some((t) => t.readyState === "live")) {
+          v.srcObject = options.userStream;
+          v.play().catch(() => {});
+        }
+        this.internalUserVideo = v;
+      } catch {}
+    }
 
     const width = 1280;
     const height = 720;
@@ -117,6 +137,17 @@ export class StageCompositor {
 
   getStream(): MediaStream {
     return this.stream;
+  }
+
+  setUserStream(stream: MediaStream | null): void {
+    if (this.internalUserVideo) {
+      if (stream && stream.getVideoTracks().some((t) => t.readyState === "live" && t.enabled)) {
+        this.internalUserVideo.srcObject = stream;
+        this.internalUserVideo.play().catch(() => {});
+      } else {
+        this.internalUserVideo.srcObject = null;
+      }
+    }
   }
 
   setMicMuted(muted: boolean): void {
@@ -279,12 +310,17 @@ export class StageCompositor {
     const pipY = height - pipH - 24;
     const pipRadius = 12;
 
-    const hasUserCam =
-      this.isUserCameraActive() &&
-      this.userVideo &&
-      this.userVideo.readyState >= 2 &&
-      !this.userVideo.paused &&
-      this.userVideo.videoWidth > 0;
+    const dynamicVideo = this.getUserVideoElement ? this.getUserVideoElement() : null;
+    const candidateVideo =
+      dynamicVideo && dynamicVideo.readyState >= 2 && dynamicVideo.videoWidth > 0 && !dynamicVideo.paused
+        ? dynamicVideo
+        : this.internalUserVideo && this.internalUserVideo.readyState >= 2 && this.internalUserVideo.videoWidth > 0
+        ? this.internalUserVideo
+        : this.userVideo && this.userVideo.readyState >= 2 && this.userVideo.videoWidth > 0 && !this.userVideo.paused
+        ? this.userVideo
+        : null;
+
+    const hasUserCam = this.isUserCameraActive() && Boolean(candidateVideo);
 
     ctx.save();
 
@@ -300,13 +336,18 @@ export class StageCompositor {
 
     ctx.clip();
 
-    if (hasUserCam && this.userVideo) {
+    // Always translate to PiP coordinates
+    ctx.translate(pipX, pipY);
+
+    if (hasUserCam && candidateVideo) {
       // Mirror self-view like native camera
-      ctx.translate(pipX + pipW, pipY);
+      ctx.translate(pipW, 0);
       ctx.scale(-1, 1);
       try {
-        ctx.drawImage(this.userVideo, 0, 0, pipW, pipH);
+        ctx.drawImage(candidateVideo, 0, 0, pipW, pipH);
       } catch {
+        ctx.scale(-1, 1);
+        ctx.translate(-pipW, 0);
         this.drawPipPlaceholder(ctx, pipW, pipH);
       }
     } else {
@@ -425,6 +466,13 @@ export class StageCompositor {
     if (this.captionTimeout) {
       clearTimeout(this.captionTimeout);
       this.captionTimeout = null;
+    }
+
+    if (this.internalUserVideo) {
+      try {
+        this.internalUserVideo.srcObject = null;
+      } catch {}
+      this.internalUserVideo = null;
     }
 
     if (this.stream) {
