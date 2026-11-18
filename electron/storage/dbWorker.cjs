@@ -853,6 +853,129 @@ function runMigrations() {
     currentVersion = 6;
   }
 
+  if (currentVersion < 7) {
+    try {
+      const backupDir = path.join(path.dirname(dbPath), "backups");
+      if (!fs.existsSync(backupDir)) {
+        fs.mkdirSync(backupDir, { recursive: true });
+      }
+      const backupPath = path.join(backupDir, `mocktwo-v6-${Date.now()}.db`);
+      if (typeof db.backup === "function") {
+        db.backup(backupPath).catch((err) => console.error("Failed to backup db before v7 migration:", err));
+      }
+    } catch (err) {
+      console.error("Failed to backup db before v7 migration:", err);
+    }
+
+    const migrateV7 = db.transaction(() => {
+      // 1. Add tavus_conversation_id column to recordings
+      const rCols = db.prepare("PRAGMA table_info(recordings)").all().map((c) => c.name);
+      if (!rCols.includes("tavus_conversation_id")) {
+        db.exec("ALTER TABLE recordings ADD COLUMN tavus_conversation_id TEXT;");
+      }
+
+      // 2. Data cleanup: remove fabricated canned transcript rows and invalidate affected recordings
+      const CANNED_1 = Buffer.from("SSB1bmRlcnN0YW5kIHlvdXIgcGVyc3BlY3RpdmUsIGxldCdzIGV4cGxvcmUgb3B0aW9ucy4=", "base64").toString("utf8");
+      const CANNED_2 = Buffer.from("TGV0J3MgcmV2aWV3IHRoZSB0ZXJtcyBhbmQgU0xBIGNvbW1pdG1lbnRzLg==", "base64").toString("utf8");
+
+      const affectedRows = db.prepare("SELECT DISTINCT recording_id FROM transcript_segments WHERE text IN (?, ?)").all(CANNED_1, CANNED_2);
+      const affectedRecordings = affectedRows.map((r) => r.recording_id);
+
+      db.prepare("DELETE FROM transcript_segments WHERE text IN (?, ?)").run(CANNED_1, CANNED_2);
+
+      for (const recId of affectedRecordings) {
+        const remainingCount = db.prepare("SELECT count(*) as c FROM transcript_segments WHERE recording_id = ?").get(recId).c;
+        if (remainingCount === 0) {
+          db.prepare(
+            "UPDATE recordings SET status = ?, end_reason = ?, self_reflection_notes = COALESCE(self_reflection_notes || CHAR(10), '') || ? WHERE id = ?"
+          ).run("invalidated", "purged_fabricated_facade", "[INVALIDATED: Canned facade transcript purged.]", recId);
+        }
+      }
+
+      db.prepare("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)").run(7, new Date().toISOString());
+    });
+
+    migrateV7();
+    currentVersion = 7;
+  }
+
+  if (currentVersion < 8) {
+    try {
+      const backupDir = path.join(path.dirname(dbPath), "backups");
+      if (!fs.existsSync(backupDir)) {
+        fs.mkdirSync(backupDir, { recursive: true });
+      }
+      const backupPath = path.join(backupDir, `mocktwo-v7-${Date.now()}.db`);
+      if (typeof db.backup === "function") {
+        db.backup(backupPath).catch((err) => console.error("Failed to backup db before v8 migration:", err));
+      }
+    } catch (err) {
+      console.error("Failed to backup db before v8 migration:", err);
+    }
+
+    const migrateV8 = db.transaction(() => {
+      // 1. Add session summary and coaching columns
+      const rCols = db.prepare("PRAGMA table_info(recordings)").all().map((c) => c.name);
+      const addCol = (col, type) => {
+        if (!rCols.includes(col)) {
+          db.exec(`ALTER TABLE recordings ADD COLUMN ${col} ${type};`);
+        }
+      };
+
+      addCol("measured_seconds", "INTEGER");
+      addCol("coverage_ratio", "REAL");
+      addCol("video_off_seconds", "INTEGER DEFAULT 0");
+      addCol("readiness_status", "TEXT");
+      addCol("nervousness_level", "TEXT");
+      addCol("pressure_skills", "TEXT");
+      addCol("pressure_coaching", "TEXT");
+      addCol("signals_available_count", "INTEGER");
+      addCol("is_partial_score", "INTEGER DEFAULT 0");
+
+      // 2. Data cleanup: remove 0s ghost sessions that have 0 transcripts and 0 duration
+      const ghosts = db.prepare("SELECT id FROM recordings WHERE duration_seconds = 0 AND status = 'interrupted' AND id NOT IN (SELECT DISTINCT recording_id FROM transcript_segments)").all();
+      const delStmt = db.prepare("DELETE FROM recordings WHERE id = ?");
+      for (const g of ghosts) {
+        delStmt.run(g.id);
+        try {
+          const folder = path.join(path.dirname(dbPath), "recordings", "sessions", g.id);
+          if (fs.existsSync(folder)) {
+            fs.rmSync(folder, { recursive: true, force: true });
+          }
+        } catch {}
+      }
+
+      db.prepare("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)").run(8, new Date().toISOString());
+    });
+
+    migrateV8();
+    currentVersion = 8;
+  }
+
+  // Migration V9: Add recordings.layout ('stage_v1' | 'camera_only')
+  if (currentVersion < 9) {
+    try {
+      const backupPath = `${dbPath}.backup-v8-${Date.now()}`;
+      if (typeof db.backup === "function") {
+        db.backup(backupPath).catch((err) => console.error("Failed to backup db before v9 migration:", err));
+      }
+    } catch (err) {
+      console.error("Failed to backup db before v9 migration:", err);
+    }
+
+    const migrateV9 = db.transaction(() => {
+      const rCols = db.prepare("PRAGMA table_info(recordings)").all().map((c) => c.name);
+      if (!rCols.includes("layout")) {
+        db.exec("ALTER TABLE recordings ADD COLUMN layout TEXT DEFAULT 'stage_v1';");
+      }
+      db.exec("UPDATE recordings SET layout = 'camera_only' WHERE layout IS NULL OR id IN ('session-1794941699660', 'session-1794944491711');");
+      db.prepare("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)").run(9, new Date().toISOString());
+    });
+
+    migrateV9();
+    currentVersion = 9;
+  }
+
   // Ensure non-partial unique indexes exist on builtin_key for ON CONFLICT target compatibility
   try {
     const scenarioIdx = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'idx_scenarios_builtin_key'").get();
@@ -1242,6 +1365,17 @@ parentPort.on("message", ({ id, type, payload }) => {
         break;
       }
 
+      case "scenarios:get": {
+        const targetId = typeof payload === "string" ? payload.trim() : (payload && payload.id);
+        if (!targetId) {
+          result = null;
+          break;
+        }
+        const r = db.prepare("SELECT * FROM scenarios WHERE id = ?").get(targetId);
+        result = r ? rowToScenario(r) : null;
+        break;
+      }
+
       case "scenarios:save-studio": {
         const sc = payload;
         const personaId = sc && sc.personaId;
@@ -1496,8 +1630,8 @@ parentPort.on("message", ({ id, type, payload }) => {
           INSERT INTO recordings (
             id, scenario_id, scenario_title, persona_id, persona_name, persona_avatar_url,
             baseline_id, interaction_type, started_at, local_date, timezone,
-            planned_duration_seconds, duration_seconds, status, video_path, user_notes, created_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            planned_duration_seconds, duration_seconds, status, video_path, tavus_conversation_id, user_notes, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           id,
           p.scenarioId || null,
@@ -1514,6 +1648,7 @@ parentPort.on("message", ({ id, type, payload }) => {
           0,
           "recording",
           p.videoPath || null,
+          p.tavusConversationId || null,
           "[]",
           now
         );
@@ -1581,11 +1716,22 @@ parentPort.on("message", ({ id, type, payload }) => {
             video_path = COALESCE(?, video_path),
             file_size_bytes = COALESCE(?, file_size_bytes),
             mime_type = COALESCE(?, mime_type),
+            layout = COALESCE(?, layout),
+            tavus_conversation_id = COALESCE(?, tavus_conversation_id),
             composure_score = ?,
             avg_pulse = ?,
             peak_pulse = ?,
             avg_hrv_rmssd = ?,
             recovery_seconds = ?,
+            measured_seconds = ?,
+            coverage_ratio = ?,
+            video_off_seconds = ?,
+            readiness_status = ?,
+            nervousness_level = ?,
+            pressure_skills = ?,
+            pressure_coaching = ?,
+            signals_available_count = ?,
+            is_partial_score = ?,
             self_reflection_notes = COALESCE(?, self_reflection_notes)
           WHERE id = ?
         `).run(
@@ -1597,11 +1743,22 @@ parentPort.on("message", ({ id, type, payload }) => {
           p.videoPath || null,
           p.fileSizeBytes || null,
           p.mimeType || null,
+          p.layout || null,
+          p.tavusConversationId || null,
           p.composureScore ?? null,
           p.avgPulse ?? null,
           p.peakPulse ?? null,
           p.avgHrvRmssd ?? null,
           p.recoverySeconds ?? null,
+          p.measuredSeconds ?? null,
+          p.coverageRatio ?? null,
+          p.videoOffSeconds ?? 0,
+          p.readinessStatus || null,
+          p.nervousnessLevel || null,
+          p.pressureSkills ? JSON.stringify(p.pressureSkills) : null,
+          p.pressureCoaching ? JSON.stringify(p.pressureCoaching) : null,
+          p.signalsAvailableCount ?? null,
+          p.isPartialScore ? 1 : 0,
           p.selfReflectionNotes || null,
           id
         );
@@ -1611,7 +1768,7 @@ parentPort.on("message", ({ id, type, payload }) => {
 
       case "recordings:reconcile-in-flight": {
         const now = new Date().toISOString();
-        const rows = db.prepare("SELECT id, video_path FROM recordings WHERE status = 'recording'").all();
+        const rows = db.prepare("SELECT id, video_path, tavus_conversation_id FROM recordings WHERE status = 'recording'").all();
         db.prepare(`
           UPDATE recordings SET
             status = 'interrupted',
@@ -1642,8 +1799,11 @@ parentPort.on("message", ({ id, type, payload }) => {
                  baseline_id, interaction_type, started_at, ended_at, local_date, timezone,
                  duration_seconds, duration_minutes, status, end_reason, video_path, audio_path,
                  file_size_bytes, mime_type, composure_score, avg_pulse, peak_pulse, avg_hrv_rmssd,
-                 recovery_seconds, user_notes, self_reflection_notes, created_at
+                 recovery_seconds, measured_seconds, coverage_ratio, video_off_seconds, readiness_status,
+                 nervousness_level, pressure_skills, pressure_coaching, signals_available_count,
+                 is_partial_score, tavus_conversation_id, layout, user_notes, self_reflection_notes, created_at
           FROM recordings
+          WHERE NOT (status = 'interrupted' AND duration_seconds = 0)
           ORDER BY started_at DESC
           LIMIT ? OFFSET ?
         `).all(cleanLimit, cleanOffset);
@@ -1674,6 +1834,17 @@ parentPort.on("message", ({ id, type, payload }) => {
           peakPulse: r.peak_pulse ?? undefined,
           avgHrvRmssd: r.avg_hrv_rmssd ?? undefined,
           recoverySeconds: r.recovery_seconds ?? undefined,
+          measuredSeconds: r.measured_seconds ?? undefined,
+          coverageRatio: r.coverage_ratio ?? undefined,
+          videoOffSeconds: r.video_off_seconds ?? 0,
+          readinessStatus: r.readiness_status || undefined,
+          nervousnessLevel: r.nervousness_level || undefined,
+          pressureSkills: r.pressure_skills ? JSON.parse(r.pressure_skills) : undefined,
+          pressureCoaching: r.pressure_coaching ? JSON.parse(r.pressure_coaching) : undefined,
+          signalsAvailableCount: r.signals_available_count ?? undefined,
+          isPartialScore: Boolean(r.is_partial_score),
+          tavusConversationId: r.tavus_conversation_id || undefined,
+          layout: r.layout || "stage_v1",
           transcript: [],
           userNotes: JSON.parse(r.user_notes || "[]"),
           selfReflectionNotes: r.self_reflection_notes || undefined,
@@ -1726,6 +1897,17 @@ parentPort.on("message", ({ id, type, payload }) => {
             peakPulse: r.peak_pulse ?? undefined,
             avgHrvRmssd: r.avg_hrv_rmssd ?? undefined,
             recoverySeconds: r.recovery_seconds ?? undefined,
+            measuredSeconds: r.measured_seconds ?? undefined,
+            coverageRatio: r.coverage_ratio ?? undefined,
+            videoOffSeconds: r.video_off_seconds ?? 0,
+            readinessStatus: r.readiness_status || undefined,
+            nervousnessLevel: r.nervousness_level || undefined,
+            pressureSkills: r.pressure_skills ? JSON.parse(r.pressure_skills) : undefined,
+            pressureCoaching: r.pressure_coaching ? JSON.parse(r.pressure_coaching) : undefined,
+            signalsAvailableCount: r.signals_available_count ?? undefined,
+            isPartialScore: Boolean(r.is_partial_score),
+            tavusConversationId: r.tavus_conversation_id || undefined,
+            layout: r.layout || "stage_v1",
             transcript: transcriptSegments,
             transcriptSegments,
             userNotes: notes,

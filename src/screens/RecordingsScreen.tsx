@@ -25,6 +25,7 @@ import {
   type Recording,
 } from "../types";
 import { WELLNESS_DISCLAIMER } from "../services/biometrics";
+import { serviceRegistry } from "../services/api";
 
 export const RecordingsScreen: React.FC = () => {
   const {
@@ -57,9 +58,30 @@ export const RecordingsScreen: React.FC = () => {
   const [hasVideoError, setHasVideoError] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const playTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const activeRecording = selectedRecording || (recordings.length > 0 ? recordings[0] : null);
+  const [fullRecording, setFullRecording] = useState<Recording | null>(null);
+  const baseRecording = selectedRecording || (recordings.length > 0 ? recordings[0] : null);
+  const activeRecordingId = baseRecording?.id;
+
+  useEffect(() => {
+    let isMounted = true;
+    if (!activeRecordingId) {
+      setFullRecording(null);
+      return;
+    }
+
+    serviceRegistry.recordings.getRecording(activeRecordingId).then((full: Recording | null) => {
+      if (isMounted && full) {
+        setFullRecording(full);
+      }
+    }).catch((err: unknown) => {
+      console.warn("[RecordingsScreen] Failed to fetch full recording detail:", err);
+    });
+
+    return () => { isMounted = false; };
+  }, [activeRecordingId]);
+
+  const activeRecording = (fullRecording && fullRecording.id === activeRecordingId) ? fullRecording : baseRecording;
 
   const lastRecordingIdRef = useRef<string | null>(activeRecording?.id || null);
   useEffect(() => {
@@ -84,7 +106,6 @@ export const RecordingsScreen: React.FC = () => {
   };
 
   const activeRecordingDuration = activeRecording?.durationSeconds || 0;
-  const activeRecordingId = activeRecording?.id;
 
   // Reset player when recording changes
   useEffect(() => {
@@ -113,26 +134,6 @@ export const RecordingsScreen: React.FC = () => {
       videoRef.current.playbackRate = playbackSpeed;
     }
   }, [playbackSpeed]);
-
-  // Fallback timer only if video is not available or errored
-  useEffect(() => {
-    if (isPlaying && hasVideoError && activeRecordingId) {
-      playTimerRef.current = setInterval(() => {
-        setPlaybackTime((prev) => {
-          if (prev >= activeRecordingDuration) {
-            setIsPlaying(false);
-            return activeRecordingDuration;
-          }
-          return prev + 1;
-        });
-      }, 1000 / playbackSpeed);
-    } else {
-      if (playTimerRef.current) clearInterval(playTimerRef.current);
-    }
-    return () => {
-      if (playTimerRef.current) clearInterval(playTimerRef.current);
-    };
-  }, [isPlaying, hasVideoError, playbackSpeed, activeRecordingId, activeRecordingDuration]);
 
   const handleSeek = (newTimeSec: number) => {
     const clamped = Math.max(0, Math.min(activeRecordingDuration, newTimeSec));
@@ -551,9 +552,10 @@ export const RecordingsScreen: React.FC = () => {
               <div
                 style={{
                   width: "100%",
-                  height: "220px",
+                  aspectRatio: "16 / 9",
+                  maxHeight: "320px",
                   borderRadius: "var(--radius-lg)",
-                  backgroundColor: "var(--bg-window)",
+                  backgroundColor: "#000000",
                   border: "1px solid var(--separator)",
                   position: "relative",
                   overflow: "hidden",
@@ -564,25 +566,46 @@ export const RecordingsScreen: React.FC = () => {
                 }}
               >
                 {activeRecording?.id && !hasVideoError ? (
-                  <video
-                    ref={videoRef}
-                    src={`mocktwo-asset://recordings/sessions/${activeRecording.id}/video.webm`}
-                    playsInline
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                      objectFit: "cover",
-                    }}
-                    onTimeUpdate={() => {
-                      if (videoRef.current) {
-                        setPlaybackTime(Math.floor(videoRef.current.currentTime));
-                      }
-                    }}
-                    onEnded={() => setIsPlaying(false)}
-                    onPlay={() => setIsPlaying(true)}
-                    onPause={() => setIsPlaying(false)}
-                    onError={() => setHasVideoError(true)}
-                  />
+                  <>
+                    <video
+                      ref={videoRef}
+                      src={`mocktwo-asset://recordings/sessions/${activeRecording.id}/video.webm`}
+                      playsInline
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "contain",
+                      }}
+                      onTimeUpdate={() => {
+                        if (videoRef.current) {
+                          setPlaybackTime(Math.floor(videoRef.current.currentTime));
+                        }
+                      }}
+                      onEnded={() => setIsPlaying(false)}
+                      onPlay={() => setIsPlaying(true)}
+                      onPause={() => setIsPlaying(false)}
+                      onError={() => setHasVideoError(true)}
+                    />
+                    {/* Layout Format Badge */}
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: 10,
+                        left: 10,
+                        fontSize: "11px",
+                        fontWeight: 500,
+                        padding: "3px 8px",
+                        borderRadius: "10px",
+                        backgroundColor: "rgba(0, 0, 0, 0.7)",
+                        color: activeRecording.layout === "camera_only" ? "rgba(255, 255, 255, 0.65)" : "#30d158",
+                        border: "1px solid rgba(255, 255, 255, 0.15)",
+                        backdropFilter: "blur(6px)",
+                        pointerEvents: "none",
+                      }}
+                    >
+                      {activeRecording.layout === "camera_only" ? "Camera only (older recording)" : "Stage recording"}
+                    </div>
+                  </>
                 ) : (
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
                     <LazyAvatarImage
@@ -594,7 +617,12 @@ export const RecordingsScreen: React.FC = () => {
                       {personaName}
                     </div>
                     <div style={{ fontSize: "11px", color: "var(--text-secondary)", marginTop: "2px" }}>
-                      {activeRecording?.videoPath ? "Video recorded" : "Audio-only session"} · {biometrics?.coverageRatio || `${activeRecording.durationSeconds}s`}
+                      {activeRecording?.videoPath
+                        ? activeRecording.layout === "camera_only"
+                          ? "Camera only (older recording)"
+                          : "Stage recorded"
+                        : "Audio-only session"}{" "}
+                      · {biometrics?.coverageRatio || `${activeRecording.durationSeconds}s`}
                     </div>
                   </div>
                 )}

@@ -487,6 +487,7 @@ export interface Recording {
   videoPath?: string;
   videoUrl?: string;
   mediaType?: "video" | "audio-only";
+  layout?: "stage_v1" | "camera_only";
   transcript: TranscriptUtterance[];
   sessionBiometrics?: SessionBiometrics;
   pressureCoaching?: RecordingPressureCoaching;

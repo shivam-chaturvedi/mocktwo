@@ -22,6 +22,7 @@ import type {
   UserBaseline,
 } from "../../types";
 import { LEGACY_CAMERA, LEGACY_MIC, LEGACY_SPEAKER } from "../../constants/legacyDevices.ts";
+import { generateCoaching } from "../../utils/coachingEngine.ts";
 
 export class SqliteProfileService implements ProfileService {
   async getProfile(): Promise<UserProfile | null> {
@@ -246,7 +247,114 @@ export class SqliteRecordingService implements RecordingService {
   async getRecording(id: string): Promise<Recording | null> {
     if (window.electronAPI?.storage) {
       try {
-        return await window.electronAPI.storage.getRecording(id);
+        const raw = await window.electronAPI.storage.getRecording(id);
+        if (!raw) return null;
+
+        // Build sessionBiometrics if raw vitals samples exist
+        let sessionBiometrics = raw.sessionBiometrics;
+        if (!sessionBiometrics && Array.isArray(raw.vitalsSamples) && raw.vitalsSamples.length > 0) {
+          const cleanPulseSamples = raw.vitalsSamples.filter(
+            (s: any) => (s.is_clean || s.isClean) && s.pulse_bpm != null && s.pulse_bpm >= 40 && s.pulse_bpm <= 110
+          );
+          const hasCleanPulse = cleanPulseSamples.length > 0;
+
+          sessionBiometrics = {
+            pulse: {
+              rate: raw.vitalsSamples
+                .filter((s: any) => s.pulse_bpm != null)
+                .map((s: any) => ({
+                  t: Math.round((s.timestamp_offset_ms || s.timestampOffsetMs || 0) / 1000),
+                  value: s.pulse_bpm > 110 ? "outOfRange" : s.pulse_bpm,
+                  confidence: s.confidence || 0,
+                  stable: Boolean(s.is_clean || s.isClean),
+                })),
+              avg: raw.avgPulse,
+              peak: raw.peakPulse,
+              baselineValue: 68,
+              deltaVsBaseline: raw.avgPulse ? raw.avgPulse - 68 : undefined,
+              state: hasCleanPulse ? "measured" : "unavailable",
+              confidence: hasCleanPulse ? 90 : 0,
+              windowSeconds: 12,
+              rangeBpm: "40–110 bpm",
+              hasOutOfRange: raw.vitalsSamples.some((s: any) => (s.pulse_bpm || s.pulseBpm) > 110),
+            },
+            waveform: { samples: [], state: hasCleanPulse ? "measured" : "unavailable" },
+            hrv: {
+              trace: raw.vitalsSamples
+                .filter((s: any) => (s.hrv_rmssd != null || s.hrvRmssd != null))
+                .map((s: any) => ({
+                  t: Math.round((s.timestamp_offset_ms || s.timestampOffsetMs || 0) / 1000),
+                  value: s.hrv_rmssd ?? s.hrvRmssd,
+                })),
+              rmssd: raw.avgHrvRmssd,
+              state: raw.avgHrvRmssd ? "measured" : "notEnoughTime",
+              confidence: raw.avgHrvRmssd ? 85 : 0,
+              windowSeconds: 60,
+            },
+            breathing: {
+              rate: raw.vitalsSamples
+                .filter((s: any) => (s.breathing_rate != null || s.breathingRate != null))
+                .map((s: any) => ({
+                  t: Math.round((s.timestamp_offset_ms || s.timestampOffsetMs || 0) / 1000),
+                  value: s.breathing_rate ?? s.breathingRate,
+                })),
+              state: "unavailable",
+              confidence: 0,
+              windowSeconds: 30,
+              rangeBpm: "5–40 br/min",
+            },
+            eda: { trace: [], state: "unavailable", startSeconds: 35 },
+            face: {
+              trace: [],
+              expressionAverages: { neutral: 0, happy: 0, angry: 0, contempt: 0, disgust: 0, fear: 0, sad: 0, surprise: 0 },
+              blinkRatePerMin: 0,
+              speakingSharePct: 0,
+              state: "unavailable",
+            },
+            validationEvents: [],
+            cleanMeasuredSeconds: raw.measuredSeconds || (hasCleanPulse ? Math.round(cleanPulseSamples.length * 0.5) : 0),
+            totalDurationSeconds: raw.durationSeconds || 0,
+            coverageRatio: raw.coverageRatio || `${raw.measuredSeconds || 0} of ${raw.durationSeconds || 0} s measured cleanly`,
+            readinessStatus: raw.readinessStatus || (raw.durationSeconds >= 60 ? "Full read" : "Too short"),
+            signalsAvailableCount: raw.signalsAvailableCount ?? (hasCleanPulse ? 3 : 0),
+            isPartialScore: Boolean(raw.isPartialScore),
+            nervousnessLevel: raw.nervousnessLevel || "Mild",
+            peakStressMoments: [],
+          };
+        }
+
+        // Generate coaching if not saved in DB
+        let pressureCoaching = raw.pressureCoaching;
+        const transcriptItems = raw.transcript || raw.transcriptSegments || [];
+        if (!pressureCoaching && (transcriptItems.length > 0 || (raw.vitalsSamples && raw.vitalsSamples.length > 0))) {
+          const telemetrySamples = (raw.vitalsSamples || []).map((s: any) => ({
+            timestampOffsetMs: s.timestamp_offset_ms || s.timestampOffsetMs || 0,
+            pulseBpm: s.pulse_bpm ?? s.pulseBpm ?? null,
+            hrvRmssd: s.hrv_rmssd ?? s.hrvRmssd ?? null,
+            breathingRate: s.breathing_rate ?? s.breathingRate ?? null,
+            confidence: s.confidence ?? null,
+            isClean: Boolean(s.is_clean ?? s.isClean),
+          }));
+
+          pressureCoaching = generateCoaching({
+            transcript: transcriptItems,
+            vitalsSamples: telemetrySamples,
+            durationSeconds: raw.durationSeconds || 0,
+            baseline: { restingPulse: 68 },
+            composureScore: raw.composureScore,
+            avgPulse: raw.avgPulse,
+            peakPulse: raw.peakPulse,
+            recoverySeconds: raw.recoverySeconds,
+            nervousnessLevel: raw.nervousnessLevel,
+          });
+        }
+
+        return {
+          ...raw,
+          sessionBiometrics,
+          pressureCoaching,
+          transcript: transcriptItems,
+        };
       } catch (err) {
         console.warn("[SqliteRecordingService] getRecording failed:", err);
       }
@@ -441,7 +549,11 @@ export class SqliteSessionService implements SessionService {
       },
     };
 
-    await this.recordingService.saveRecording(newRecording);
+    // If the recording was already saved & finalized via recording:finalize IPC, preserve its real metrics
+    const existing = await this.recordingService.getRecording(recordingId);
+    if (!existing) {
+      await this.recordingService.saveRecording(newRecording);
+    }
     return { recordingId };
   }
 }

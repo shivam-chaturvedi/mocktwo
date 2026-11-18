@@ -28,7 +28,7 @@ import {
 import { VALIDATION_HINTS, type ValidationStatusCode } from "../types";
 import { CameraOffWarningModal } from "../components/common/CameraOffWarningModal";
 import { CviSession, type CviUtterance, type CviUtteranceStreaming, type CviSpeakingEvent } from "../services/tavus/cviSession";
-import { createCompositeMediaStream, type CompositeRecorderSession } from "../utils/compositeRecorder";
+import { StageCompositor } from "../services/recording/stageCompositor";
 
 const VALIDATION_CODE_MAP: Record<number, ValidationStatusCode> = {
   0: "OK",
@@ -86,7 +86,8 @@ export const LiveSimulationScreen: React.FC = () => {
   }, [cameraOff]);
   const [sessionPhase, setSessionPhase] = useState<"gate" | "connecting" | "live" | "ended">("gate");
   const [showCameraOffModal, setShowCameraOffModal] = useState(false);
-  const compositeSessionRef = useRef<CompositeRecorderSession | null>(null);
+  const compositeSessionRef = useRef<StageCompositor | null>(null);
+  const captionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isSpeakerActive, setIsSpeakerActive] = useState(true);
   const [showEndModal, setShowEndModal] = useState(false);
   const [showObjectivesPanel, setShowObjectivesPanel] = useState(false);
@@ -227,6 +228,7 @@ export const LiveSimulationScreen: React.FC = () => {
           durationSeconds: elapsed,
           status: elapsed >= 30 ? "completed" : "interrupted",
           endReason,
+          layout: "stage_v1",
           tavusConversationId: convId || undefined,
           composureScore: metrics.composureScore ?? undefined,
           avgPulse: metrics.avgPulse ?? undefined,
@@ -397,21 +399,26 @@ export const LiveSimulationScreen: React.FC = () => {
     hasFinishedRef.current = false;
 
     try {
-      // Step A: Setup Composite Video & Mixed Audio Recorder
+      // Step A: Setup Stage Compositor (Full Call Stage Video + Mixed Audio)
       const userMic = userStreamRef.current.getAudioTracks()[0] || null;
-      const composite = createCompositeMediaStream({
+      const stageCompositor = new StageCompositor({
         userVideoElement: pipVideoRef.current,
         remoteVideoElement: remoteVideoRef.current,
         userMicTrack: userMic,
         isUserCameraActive: () => !cameraOffRef.current && Boolean(userStreamRef.current?.getVideoTracks().some(t => t.enabled && t.readyState === "live")),
         personaName: currentPersona.name,
+        userInitials: user?.name ? user.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase() : "YOU",
+        getElapsedSeconds: () => (startTimeRef.current ? Math.floor((performance.now() - startTimeRef.current) / 1000) : 0),
       });
-      compositeSessionRef.current = composite;
+      if (micMuted) {
+        stageCompositor.setMicMuted(true);
+      }
+      compositeSessionRef.current = stageCompositor;
 
       allVitalsSamplesRef.current = [];
       pendingVitalsBatchRef.current = [];
 
-      await recorderRef.current.start(composite.stream, {
+      await recorderRef.current.start(stageCompositor.getStream(), {
         id: sessionId,
         kind: "sessions",
         scenarioId: selectedScenario.id,
@@ -528,6 +535,9 @@ export const LiveSimulationScreen: React.FC = () => {
           const seq = turnSeqRef.current++;
           const durationMs = utterance.duration ? Math.round(utterance.duration * 1000) : 3000;
           const startMs = Math.max(0, nowMs - durationMs);
+          const speakerName = (utterance.role === "persona" ? currentPersona.name : (user?.name || "You")) || "Speaker";
+
+          compositeSessionRef.current?.setCaption(speakerName, utterance.text);
 
           recorderRef.current.appendTranscript([
             {
@@ -539,9 +549,19 @@ export const LiveSimulationScreen: React.FC = () => {
             },
           ]).catch(() => {});
 
-          setStreamingCaption(null);
+          setStreamingCaption({
+            role: utterance.role,
+            text: utterance.text,
+          });
+
+          if (captionTimeoutRef.current) clearTimeout(captionTimeoutRef.current);
+          captionTimeoutRef.current = setTimeout(() => {
+            setStreamingCaption(null);
+          }, 4500);
         },
         onUtteranceStreaming: (streaming: CviUtteranceStreaming) => {
+          const speakerName = (streaming.role === "persona" ? currentPersona.name : (user?.name || "You")) || "Speaker";
+          compositeSessionRef.current?.setCaption(speakerName, streaming.text);
           setStreamingCaption({
             role: streaming.role,
             text: streaming.text,
@@ -684,6 +704,7 @@ export const LiveSimulationScreen: React.FC = () => {
           t.enabled = !next;
         });
       }
+      compositeSessionRef.current?.setMicMuted(next);
       cviSessionRef.current?.setLocalAudio(!next);
       return next;
     });
